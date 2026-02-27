@@ -89,6 +89,9 @@ pub fn run() {
             commands::pack::import_pack,
             commands::pack::delete_pack,
             commands::pack::read_pack,
+            commands::pack::install_pack_from_git,
+            commands::pack::check_pack_updates,
+            commands::pack::update_pack,
             // Template commands
             commands::template::list_templates,
             commands::template::save_template,

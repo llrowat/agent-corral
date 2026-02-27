@@ -98,7 +98,26 @@ export interface PackSummary {
   agentCount: number;
   hasConfig: boolean;
   filePath: string;
-  source: "local" | "library";
+  source: "local" | "library" | "git";
+  gitSource: GitSource | null;
+}
+
+export interface GitSource {
+  repoUrl: string;
+  branch: string | null;
+  installedCommit: string;
+  installedAt: string;
+}
+
+export interface PackUpdateCheck {
+  packId: string;
+  name: string;
+  currentVersion: string;
+  latestVersion: string | null;
+  installedCommit: string;
+  latestCommit: string;
+  updateAvailable: boolean;
+  filePath: string;
 }
 
 export type ImportMode = "addOnly" | "overwrite";

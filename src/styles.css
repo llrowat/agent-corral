@@ -1063,6 +1063,114 @@ code {
   text-transform: uppercase;
 }
 
+/* -- Git Pack Source Info -- */
+.pack-git-info {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-bottom: 8px;
+}
+
+.pack-git-url {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pack-git-branch {
+  padding: 1px 6px;
+  background: rgba(108, 122, 255, 0.1);
+  color: var(--accent);
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.pack-git-commit {
+  color: var(--text-muted);
+}
+
+.pack-source-badge {
+  padding: 1px 6px;
+  background: rgba(108, 122, 255, 0.1);
+  color: var(--accent);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+
+.pack-version-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pack-update-banner {
+  padding: 6px 10px;
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--warning);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.pack-card-update {
+  border-color: var(--warning);
+}
+
+.btn-update {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.btn-update:hover {
+  background: rgba(251, 191, 36, 0.2);
+}
+
+/* -- Git Install Info -- */
+.git-install-info {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.git-install-info h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.git-install-info ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.git-install-info li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding-left: 16px;
+  position: relative;
+}
+
+.git-install-info li::before {
+  content: "\2022";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
 /* -- Export Form -- */
 .export-form {
   max-width: 600px;

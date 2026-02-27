@@ -1,15 +1,21 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Repo, PackSummary, ImportPreview, Agent } from "@/types";
+import type {
+  Repo,
+  PackSummary,
+  ImportPreview,
+  Agent,
+  PackUpdateCheck,
+} from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
   repo?: Repo | null;
 }
 
-type View = "list" | "export" | "import-preview";
+type View = "list" | "export" | "import-preview" | "git-install";
 
 export function PacksPage({ repo }: Props) {
-  const [activeTab, setActiveTab] = useState<"my" | "library">("my");
+  const [activeTab, setActiveTab] = useState<"my" | "library" | "git">("my");
   const [packs, setPacks] = useState<PackSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("list");
@@ -18,6 +24,7 @@ export function PacksPage({ repo }: Props) {
   const [exportName, setExportName] = useState("");
   const [exportDesc, setExportDesc] = useState("");
   const [exportAuthor, setExportAuthor] = useState("");
+  const [exportVersion, setExportVersion] = useState("1.0.0");
   const [exportIncludeConfig, setExportIncludeConfig] = useState(true);
   const [exportAgents, setExportAgents] = useState<Agent[]>([]);
   const [exportSelectedIds, setExportSelectedIds] = useState<string[]>([]);
@@ -25,8 +32,20 @@ export function PacksPage({ repo }: Props) {
 
   // Import wizard state
   const [importPackPath, setImportPackPath] = useState("");
-  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(
+    null
+  );
   const [importing, setImporting] = useState(false);
+
+  // Git install state
+  const [gitUrl, setGitUrl] = useState("");
+  const [gitBranch, setGitBranch] = useState("");
+  const [installing, setInstalling] = useState(false);
+
+  // Update state
+  const [updates, setUpdates] = useState<PackUpdateCheck[]>([]);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updatingPack, setUpdatingPack] = useState<string | null>(null);
 
   const loadPacks = useCallback(async () => {
     try {
@@ -45,8 +64,16 @@ export function PacksPage({ repo }: Props) {
   }, [loadPacks]);
 
   const myPacks = packs.filter((p) => p.source === "local");
-  const libraryPacks = packs.filter((p) => p.source === "library");
-  const displayedPacks = activeTab === "my" ? myPacks : libraryPacks;
+  const libraryPacks = packs.filter(
+    (p) => p.source === "library" || p.source === "git"
+  );
+  const gitPacks = packs.filter((p) => p.source === "git");
+  const displayedPacks =
+    activeTab === "my"
+      ? myPacks
+      : activeTab === "git"
+        ? gitPacks
+        : libraryPacks;
 
   const startExport = async () => {
     if (!repo) {
@@ -60,6 +87,7 @@ export function PacksPage({ repo }: Props) {
       setExportName("");
       setExportDesc("");
       setExportAuthor("");
+      setExportVersion("1.0.0");
       setExportIncludeConfig(true);
       setView("export");
     } catch (e) {
@@ -77,7 +105,8 @@ export function PacksPage({ repo }: Props) {
         exportDesc.trim(),
         exportAuthor.trim() || null,
         exportIncludeConfig,
-        exportSelectedIds
+        exportSelectedIds,
+        exportVersion.trim() || undefined
       );
       alert(`Pack exported to: ${path}`);
       setView("list");
@@ -86,6 +115,63 @@ export function PacksPage({ repo }: Props) {
       alert(`Export failed: ${e}`);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleGitInstall = async () => {
+    if (!gitUrl.trim()) return;
+    setInstalling(true);
+    try {
+      const installed = await api.installPackFromGit(
+        gitUrl.trim(),
+        gitBranch.trim() || undefined
+      );
+      alert(
+        `Installed ${installed.length} pack(s): ${installed.map((p) => p.name).join(", ")}`
+      );
+      setView("list");
+      setGitUrl("");
+      setGitBranch("");
+      setActiveTab("git");
+      await loadPacks();
+    } catch (e) {
+      alert(`Install failed: ${e}`);
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    setCheckingUpdates(true);
+    try {
+      const result = await api.checkPackUpdates();
+      setUpdates(result);
+      const available = result.filter((u) => u.updateAvailable);
+      if (available.length === 0) {
+        alert("All packs are up to date.");
+      } else {
+        alert(`${available.length} update(s) available.`);
+      }
+    } catch (e) {
+      alert(`Failed to check updates: ${e}`);
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
+  const handleUpdatePack = async (pack: PackSummary) => {
+    setUpdatingPack(pack.filePath);
+    try {
+      const updated = await api.updatePack(pack.filePath);
+      alert(`Updated "${updated.name}" to v${updated.version}`);
+      setUpdates((prev) =>
+        prev.filter((u) => u.filePath !== pack.filePath)
+      );
+      await loadPacks();
+    } catch (e) {
+      alert(`Update failed: ${e}`);
+    } finally {
+      setUpdatingPack(null);
     }
   };
 
@@ -134,6 +220,78 @@ export function PacksPage({ repo }: Props) {
     );
   };
 
+  const getUpdateForPack = (pack: PackSummary): PackUpdateCheck | undefined => {
+    return updates.find(
+      (u) => u.filePath === pack.filePath && u.updateAvailable
+    );
+  };
+
+  // Git install view
+  if (view === "git-install") {
+    return (
+      <div className="page packs-page">
+        <div className="page-header">
+          <h2>Install from Git</h2>
+          <button className="btn" onClick={() => setView("list")}>
+            Back
+          </button>
+        </div>
+
+        <div className="export-form">
+          <div className="form-group">
+            <label>Repository URL</label>
+            <input
+              type="text"
+              value={gitUrl}
+              onChange={(e) => setGitUrl(e.target.value)}
+              placeholder="https://github.com/user/pack-repo.git"
+            />
+            <p className="text-muted" style={{ marginTop: 4 }}>
+              Supports HTTPS and SSH URLs. Private repos work if your git
+              credentials are configured.
+            </p>
+          </div>
+          <div className="form-group">
+            <label>Branch or Tag (optional)</label>
+            <input
+              type="text"
+              value={gitBranch}
+              onChange={(e) => setGitBranch(e.target.value)}
+              placeholder="main (defaults to repo default branch)"
+            />
+          </div>
+
+          <div className="git-install-info">
+            <h4>How it works</h4>
+            <ul>
+              <li>
+                The repo is cloned and scanned for <code>.agentpack</code>{" "}
+                files
+              </li>
+              <li>Found packs are installed to your library</li>
+              <li>
+                Git source is tracked so you can check for updates later
+              </li>
+            </ul>
+          </div>
+
+          <div className="form-actions">
+            <button
+              className="btn btn-primary"
+              onClick={handleGitInstall}
+              disabled={installing || !gitUrl.trim()}
+            >
+              {installing ? "Cloning & Installing..." : "Install"}
+            </button>
+            <button className="btn" onClick={() => setView("list")}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Export wizard view
   if (view === "export") {
     return (
@@ -154,6 +312,19 @@ export function PacksPage({ repo }: Props) {
               onChange={(e) => setExportName(e.target.value)}
               placeholder="My Company Pack"
             />
+          </div>
+          <div className="form-group">
+            <label>Version</label>
+            <input
+              type="text"
+              value={exportVersion}
+              onChange={(e) => setExportVersion(e.target.value)}
+              placeholder="1.0.0"
+            />
+            <p className="text-muted" style={{ marginTop: 4 }}>
+              Use semver (e.g. 1.0.0, 1.2.3). Bump this when publishing
+              updates.
+            </p>
           </div>
           <div className="form-group">
             <label>Description</label>
@@ -187,7 +358,8 @@ export function PacksPage({ repo }: Props) {
 
           <div className="form-group">
             <label>
-              Agents to include ({exportSelectedIds.length}/{exportAgents.length})
+              Agents to include ({exportSelectedIds.length}/
+              {exportAgents.length})
             </label>
             <div className="export-agents-list">
               {exportAgents.map((agent) => (
@@ -253,7 +425,9 @@ export function PacksPage({ repo }: Props) {
 
           {importPreview.agentsToUpdate.length > 0 && (
             <div className="preview-section">
-              <h3>Agents to Update ({importPreview.agentsToUpdate.length})</h3>
+              <h3>
+                Agents to Update ({importPreview.agentsToUpdate.length})
+              </h3>
               <ul>
                 {importPreview.agentsToUpdate.map((id) => (
                   <li key={id}>
@@ -335,10 +509,31 @@ export function PacksPage({ repo }: Props) {
             >
               Library ({libraryPacks.length})
             </button>
+            <button
+              className={`btn btn-sm ${activeTab === "git" ? "active" : ""}`}
+              onClick={() => setActiveTab("git")}
+            >
+              Git ({gitPacks.length})
+            </button>
           </div>
           <button className="btn btn-primary btn-sm" onClick={startExport}>
             Export Pack
           </button>
+          <button
+            className="btn btn-sm"
+            onClick={() => setView("git-install")}
+          >
+            Install from Git
+          </button>
+          {gitPacks.length > 0 && (
+            <button
+              className="btn btn-sm"
+              onClick={handleCheckUpdates}
+              disabled={checkingUpdates}
+            >
+              {checkingUpdates ? "Checking..." : "Check Updates"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -346,54 +541,134 @@ export function PacksPage({ repo }: Props) {
         <p className="text-muted">Loading packs...</p>
       ) : displayedPacks.length === 0 ? (
         <div className="packs-empty">
-          <h3>{activeTab === "my" ? "No Packs Yet" : "Library Empty"}</h3>
+          <h3>
+            {activeTab === "my"
+              ? "No Packs Yet"
+              : activeTab === "git"
+                ? "No Git Packs"
+                : "Library Empty"}
+          </h3>
           <p>
             {activeTab === "my"
               ? "Create a pack by exporting agents and config from a repository. Packs can be shared with your team."
-              : "Add .agentpack files to your library folder to see them here."}
+              : activeTab === "git"
+                ? "Install packs from a git repository. Point to any public or private repo containing .agentpack files."
+                : "Add .agentpack files to your library folder to see them here."}
           </p>
           {activeTab === "my" && (
             <button className="btn btn-primary" onClick={startExport}>
               Export Pack
             </button>
           )}
+          {activeTab === "git" && (
+            <button
+              className="btn btn-primary"
+              onClick={() => setView("git-install")}
+            >
+              Install from Git
+            </button>
+          )}
         </div>
       ) : (
         <div className="packs-grid">
-          {displayedPacks.map((pack) => (
-            <div key={pack.packId} className="pack-card">
-              <div className="pack-card-header">
-                <h3>{pack.name}</h3>
-                <span className="pack-version">v{pack.version}</span>
-              </div>
-              <p className="pack-description">{pack.description}</p>
-              <div className="pack-meta">
-                {pack.author && (
-                  <span className="pack-author">by {pack.author}</span>
+          {displayedPacks.map((pack) => {
+            const update = getUpdateForPack(pack);
+            return (
+              <div
+                key={pack.packId}
+                className={`pack-card ${update ? "pack-card-update" : ""}`}
+              >
+                <div className="pack-card-header">
+                  <h3>{pack.name}</h3>
+                  <div className="pack-version-row">
+                    <span className="pack-version">v{pack.version}</span>
+                    {pack.source === "git" && (
+                      <span className="pack-source-badge">git</span>
+                    )}
+                  </div>
+                </div>
+                <p className="pack-description">{pack.description}</p>
+                <div className="pack-meta">
+                  {pack.author && (
+                    <span className="pack-author">by {pack.author}</span>
+                  )}
+                  <span>{pack.agentCount} agents</span>
+                  {pack.hasConfig && <span>+ config</span>}
+                </div>
+                {pack.gitSource && (
+                  <div className="pack-git-info">
+                    <span className="pack-git-url" title={pack.gitSource.repoUrl}>
+                      {shortenGitUrl(pack.gitSource.repoUrl)}
+                    </span>
+                    {pack.gitSource.branch && (
+                      <span className="pack-git-branch">
+                        {pack.gitSource.branch}
+                      </span>
+                    )}
+                    <span
+                      className="pack-git-commit"
+                      title={pack.gitSource.installedCommit}
+                    >
+                      {pack.gitSource.installedCommit.slice(0, 7)}
+                    </span>
+                  </div>
                 )}
-                <span>{pack.agentCount} agents</span>
-                {pack.hasConfig && <span>+ config</span>}
-              </div>
-              <div className="pack-actions">
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={() => startImport(pack)}
-                >
-                  Import
-                </button>
-                {pack.source === "local" && (
+                {update && (
+                  <div className="pack-update-banner">
+                    Update available (
+                    {update.latestCommit.slice(0, 7)})
+                  </div>
+                )}
+                <div className="pack-actions">
                   <button
-                    className="btn btn-sm btn-danger"
-                    onClick={() => handleDeletePack(pack)}
+                    className="btn btn-sm btn-primary"
+                    onClick={() => startImport(pack)}
                   >
-                    Delete
+                    Import
                   </button>
-                )}
+                  {update && (
+                    <button
+                      className="btn btn-sm btn-update"
+                      onClick={() => handleUpdatePack(pack)}
+                      disabled={updatingPack === pack.filePath}
+                    >
+                      {updatingPack === pack.filePath
+                        ? "Updating..."
+                        : "Update"}
+                    </button>
+                  )}
+                  {pack.source !== "git" && pack.source !== "library" && (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => handleDeletePack(pack)}
+                    >
+                      Delete
+                    </button>
+                  )}
+                  {pack.source === "git" && (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => handleDeletePack(pack)}
+                    >
+                      Uninstall
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
+}
+
+function shortenGitUrl(url: string): string {
+  // Turn "https://github.com/user/repo.git" into "user/repo"
+  return url
+    .replace(/^https?:\/\//, "")
+    .replace(/^git@[^:]+:/, "")
+    .replace(/\.git$/, "")
+    .replace(/^github\.com\//, "")
+    .replace(/^gitlab\.com\//, "");
 }

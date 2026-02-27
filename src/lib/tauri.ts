@@ -12,6 +12,7 @@ import type {
   PackContents,
   ImportPreview,
   ImportMode,
+  PackUpdateCheck,
   CommandTemplate,
 } from "@/types";
 
@@ -162,7 +163,8 @@ export async function exportPack(
   description: string,
   author: string | null,
   includeConfig: boolean,
-  agentIds: string[]
+  agentIds: string[],
+  version?: string
 ): Promise<string> {
   return invoke("export_pack", {
     repoPath,
@@ -171,6 +173,7 @@ export async function exportPack(
     author,
     includeConfig,
     agentIds,
+    version: version || null,
   });
 }
 
@@ -195,6 +198,24 @@ export async function deletePack(packPath: string): Promise<void> {
 
 export async function readPack(packPath: string): Promise<PackContents> {
   return invoke("read_pack", { packPath });
+}
+
+export async function installPackFromGit(
+  repoUrl: string,
+  branch?: string
+): Promise<PackSummary[]> {
+  return invoke("install_pack_from_git", {
+    repoUrl,
+    branch: branch || null,
+  });
+}
+
+export async function checkPackUpdates(): Promise<PackUpdateCheck[]> {
+  return invoke("check_pack_updates");
+}
+
+export async function updatePack(packPath: string): Promise<PackSummary> {
+  return invoke("update_pack", { packPath });
 }
 
 // -- Template commands --
