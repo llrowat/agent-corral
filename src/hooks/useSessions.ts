@@ -1,0 +1,51 @@
+import { useState, useEffect, useCallback } from "react";
+import type { SessionEnvelope } from "@/types";
+import * as api from "@/lib/tauri";
+
+export function useSessions() {
+  const [sessions, setSessions] = useState<SessionEnvelope[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await api.listSessions();
+      setSessions(result);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    // Poll for updates every 3 seconds
+    const interval = setInterval(refresh, 3000);
+    return () => clearInterval(interval);
+  }, [refresh]);
+
+  const getLog = useCallback(
+    async (sessionId: string, tailLines?: number) => {
+      return api.readSessionLog(sessionId, tailLines);
+    },
+    []
+  );
+
+  const launchSession = useCallback(
+    async (repoPath: string, commandName: string, command: string) => {
+      const sessionId = await api.launchSession(
+        repoPath,
+        commandName,
+        command
+      );
+      await refresh();
+      return sessionId;
+    },
+    [refresh]
+  );
+
+  return { sessions, loading, error, getLog, launchSession, refresh };
+}
