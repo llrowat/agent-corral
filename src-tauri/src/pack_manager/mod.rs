@@ -1,7 +1,6 @@
 use crate::claude_adapter::{atomic_write, Agent, ClaudeRepoAdapter, NormalizedConfig};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
