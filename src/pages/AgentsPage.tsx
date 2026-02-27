@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Repo, Agent } from "@/types";
+import type { Repo, Agent, MemoryStore } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
@@ -22,6 +22,8 @@ export function AgentsPage({ repo }: Props) {
   const [selected, setSelected] = useState<Agent | null>(null);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [saving, setSaving] = useState(false);
+  const [knownTools, setKnownTools] = useState<string[]>([]);
+  const [memoryStores, setMemoryStores] = useState<MemoryStore[]>([]);
 
   const loadAgents = useCallback(async () => {
     if (!repo) return;
@@ -33,7 +35,11 @@ export function AgentsPage({ repo }: Props) {
     setSelected(null);
     setEditing(null);
     loadAgents();
-  }, [loadAgents]);
+    api.getKnownTools().then(setKnownTools);
+    if (repo) {
+      api.readMemoryStores(repo.path).then(setMemoryStores).catch(() => setMemoryStores([]));
+    }
+  }, [loadAgents, repo]);
 
   if (!repo) {
     return (
@@ -46,7 +52,6 @@ export function AgentsPage({ repo }: Props) {
   const handleSave = async () => {
     if (!editing || !repo) return;
 
-    // Validation
     if (!editing.agentId.trim()) {
       alert("Agent ID is required");
       return;
@@ -90,7 +95,16 @@ export function AgentsPage({ repo }: Props) {
     }
   };
 
+  const toggleTool = (tool: string) => {
+    if (!editing) return;
+    const tools = editing.tools.includes(tool)
+      ? editing.tools.filter((t) => t !== tool)
+      : [...editing.tools, tool];
+    setEditing({ ...editing, tools });
+  };
+
   const currentAgent = editing ?? selected;
+  const isNewAgent = editing !== null && !agents.some((a) => a.agentId === editing.agentId);
 
   return (
     <div className="page agents-page">
@@ -101,8 +115,7 @@ export function AgentsPage({ repo }: Props) {
             <button
               className="btn btn-sm"
               onClick={() => {
-                const agent = newAgent();
-                setEditing(agent);
+                setEditing(newAgent());
                 setSelected(null);
               }}
             >
@@ -151,7 +164,7 @@ export function AgentsPage({ repo }: Props) {
             </div>
           ) : editing ? (
             <div className="agent-editor">
-              <h3>{editing.agentId ? `Edit: ${editing.name}` : "New Agent"}</h3>
+              <h3>{isNewAgent ? "New Agent" : `Edit: ${editing.name}`}</h3>
               <div className="form-group">
                 <label>Agent ID (slug)</label>
                 <input
@@ -161,7 +174,7 @@ export function AgentsPage({ repo }: Props) {
                     setEditing({ ...editing, agentId: e.target.value })
                   }
                   placeholder="my-agent"
-                  disabled={agents.some((a) => a.agentId === editing.agentId)}
+                  disabled={!isNewAgent}
                 />
               </div>
               <div className="form-group">
@@ -186,6 +199,28 @@ export function AgentsPage({ repo }: Props) {
                   placeholder="You are a helpful assistant that..."
                 />
               </div>
+
+              <div className="form-group">
+                <label>Allowed Tools</label>
+                <div className="tools-grid">
+                  {knownTools.map((tool) => (
+                    <label key={tool} className="tool-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={editing.tools.includes(tool)}
+                        onChange={() => toggleTool(tool)}
+                      />
+                      <span>{tool}</span>
+                    </label>
+                  ))}
+                </div>
+                {editing.tools.length === 0 && (
+                  <span className="text-muted" style={{ fontSize: "12px" }}>
+                    No tools selected (agent will have access to all tools)
+                  </span>
+                )}
+              </div>
+
               <div className="form-group">
                 <label>Model Override (optional)</label>
                 <select
@@ -203,6 +238,27 @@ export function AgentsPage({ repo }: Props) {
                   <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
                 </select>
               </div>
+
+              <div className="form-group">
+                <label>Memory Binding (optional)</label>
+                <select
+                  value={editing.memoryBinding ?? ""}
+                  onChange={(e) =>
+                    setEditing({
+                      ...editing,
+                      memoryBinding: e.target.value || null,
+                    })
+                  }
+                >
+                  <option value="">None</option>
+                  {memoryStores.map((store) => (
+                    <option key={store.storeId} value={store.storeId}>
+                      {store.name} ({store.entryCount} entries)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="form-actions">
                 <button
                   className="btn btn-primary"
@@ -211,12 +267,7 @@ export function AgentsPage({ repo }: Props) {
                 >
                   {saving ? "Saving..." : "Save Agent"}
                 </button>
-                <button
-                  className="btn"
-                  onClick={() => {
-                    setEditing(null);
-                  }}
-                >
+                <button className="btn" onClick={() => setEditing(null)}>
                   Cancel
                 </button>
               </div>
@@ -232,10 +283,28 @@ export function AgentsPage({ repo }: Props) {
                 <label>System Prompt</label>
                 <pre className="prompt-preview">{selected!.systemPrompt}</pre>
               </div>
+              {selected!.tools.length > 0 && (
+                <div className="detail-field">
+                  <label>Tools</label>
+                  <div className="tool-tags">
+                    {selected!.tools.map((t) => (
+                      <span key={t} className="tool-tag">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {selected!.modelOverride && (
                 <div className="detail-field">
                   <label>Model Override</label>
                   <code>{selected!.modelOverride}</code>
+                </div>
+              )}
+              {selected!.memoryBinding && (
+                <div className="detail-field">
+                  <label>Memory Binding</label>
+                  <code>{selected!.memoryBinding}</code>
                 </div>
               )}
               <div className="form-actions">

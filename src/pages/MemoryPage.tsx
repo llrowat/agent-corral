@@ -11,6 +11,10 @@ export function MemoryPage({ repo }: Props) {
   const [selectedStore, setSelectedStore] = useState<MemoryStore | null>(null);
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [newEntry, setNewEntry] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [showCreateStore, setShowCreateStore] = useState(false);
+  const [newStoreName, setNewStoreName] = useState("");
 
   const loadStores = useCallback(async () => {
     if (!repo) return;
@@ -25,6 +29,7 @@ export function MemoryPage({ repo }: Props) {
   useEffect(() => {
     setSelectedStore(null);
     setEntries([]);
+    setEditingIndex(null);
     loadStores();
   }, [loadStores]);
 
@@ -66,6 +71,31 @@ export function MemoryPage({ repo }: Props) {
     }
   };
 
+  const handleUpdateEntry = async (index: number) => {
+    if (!selectedStore || !editContent.trim()) return;
+    try {
+      await api.updateMemoryEntry(selectedStore.path, index, editContent.trim());
+      setEditingIndex(null);
+      setEditContent("");
+      await loadEntries(selectedStore);
+      await loadStores();
+    } catch (e) {
+      alert(`Failed to update entry: ${e}`);
+    }
+  };
+
+  const handleDeleteEntry = async (index: number) => {
+    if (!selectedStore) return;
+    if (!confirm("Delete this entry?")) return;
+    try {
+      await api.deleteMemoryEntry(selectedStore.path, index);
+      await loadEntries(selectedStore);
+      await loadStores();
+    } catch (e) {
+      alert(`Failed to delete entry: ${e}`);
+    }
+  };
+
   const handleReset = async () => {
     if (!selectedStore) return;
     if (
@@ -83,6 +113,23 @@ export function MemoryPage({ repo }: Props) {
     }
   };
 
+  const handleCreateStore = async () => {
+    if (!repo || !newStoreName.trim()) return;
+    if (!/^[a-z0-9-]+$/.test(newStoreName.trim())) {
+      alert("Store name must be a lowercase slug (letters, numbers, hyphens)");
+      return;
+    }
+    try {
+      const store = await api.createMemoryStore(repo.path, newStoreName.trim());
+      setNewStoreName("");
+      setShowCreateStore(false);
+      await loadStores();
+      setSelectedStore(store);
+    } catch (e) {
+      alert(`Failed to create store: ${e}`);
+    }
+  };
+
   return (
     <div className="page memory-page">
       <h2>Memory Studio</h2>
@@ -90,7 +137,39 @@ export function MemoryPage({ repo }: Props) {
         <div className="panel-left">
           <div className="panel-header">
             <h3>Stores</h3>
+            <button
+              className="btn btn-sm"
+              onClick={() => setShowCreateStore(!showCreateStore)}
+            >
+              + New
+            </button>
           </div>
+          {showCreateStore && (
+            <div className="store-create-form">
+              <input
+                type="text"
+                placeholder="store-name"
+                value={newStoreName}
+                onChange={(e) => setNewStoreName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateStore()}
+                autoFocus
+              />
+              <div className="store-create-actions">
+                <button className="btn btn-sm btn-primary" onClick={handleCreateStore}>
+                  Create
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setShowCreateStore(false);
+                    setNewStoreName("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           <ul className="store-list">
             {stores.map((store) => (
               <li
@@ -99,7 +178,7 @@ export function MemoryPage({ repo }: Props) {
                   selectedStore?.storeId === store.storeId ? "active" : ""
                 }`}
               >
-                <button onClick={() => setSelectedStore(store)}>
+                <button onClick={() => { setSelectedStore(store); setEditingIndex(null); }}>
                   <span className="store-name">{store.name}</span>
                   <span className="store-count">
                     {store.entryCount} entries
@@ -124,16 +203,69 @@ export function MemoryPage({ repo }: Props) {
             <div className="memory-detail">
               <div className="panel-header">
                 <h3>{selectedStore.name}</h3>
-                <button className="btn btn-danger" onClick={handleReset}>
+                <button className="btn btn-danger btn-sm" onClick={handleReset}>
                   Reset Store
                 </button>
               </div>
 
               <div className="memory-entries">
-                {entries.map((entry) => (
+                {entries.map((entry, index) => (
                   <div key={entry.key} className="memory-entry">
-                    <span className="entry-key">{entry.key}</span>
-                    <p className="entry-content">{entry.content}</p>
+                    <div className="entry-header">
+                      <span className="entry-key">#{index + 1}</span>
+                      <div className="entry-actions">
+                        {editingIndex !== index && (
+                          <>
+                            <button
+                              className="btn-icon"
+                              onClick={() => {
+                                setEditingIndex(index);
+                                setEditContent(entry.content);
+                              }}
+                              title="Edit"
+                            >
+                              E
+                            </button>
+                            <button
+                              className="btn-icon"
+                              onClick={() => handleDeleteEntry(index)}
+                              title="Delete"
+                            >
+                              x
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {editingIndex === index ? (
+                      <div className="entry-edit">
+                        <textarea
+                          rows={3}
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          autoFocus
+                        />
+                        <div className="entry-edit-actions">
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => handleUpdateEntry(index)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => {
+                              setEditingIndex(null);
+                              setEditContent("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="entry-content">{entry.content}</p>
+                    )}
                   </div>
                 ))}
                 {entries.length === 0 && (
@@ -147,6 +279,11 @@ export function MemoryPage({ repo }: Props) {
                   value={newEntry}
                   onChange={(e) => setNewEntry(e.target.value)}
                   placeholder="Add a new memory entry..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                      handleAddEntry();
+                    }
+                  }}
                 />
                 <button className="btn btn-primary" onClick={handleAddEntry}>
                   Add Entry

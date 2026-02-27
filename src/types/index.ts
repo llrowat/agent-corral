@@ -70,6 +70,56 @@ export interface MemoryEntry {
   content: string;
 }
 
+// -- Pack Manager --
+
+export interface PackManifest {
+  packId: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string | null;
+  createdAt: string;
+  agentCount: number;
+  hasConfig: boolean;
+}
+
+export interface PackContents {
+  manifest: PackManifest;
+  agents: Agent[];
+  config: NormalizedConfig | null;
+}
+
+export interface PackSummary {
+  packId: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string | null;
+  agentCount: number;
+  hasConfig: boolean;
+  filePath: string;
+  source: "local" | "library";
+}
+
+export type ImportMode = "addOnly" | "overwrite";
+
+export interface ImportPreview {
+  agentsToAdd: string[];
+  agentsToUpdate: string[];
+  configChanges: boolean;
+}
+
+// -- Command Templates --
+
+export interface CommandTemplate {
+  templateId: string;
+  name: string;
+  description: string;
+  requires: string[];
+  command: string;
+  cwd: string | null;
+}
+
 // -- Navigation --
 
 export type PageId =

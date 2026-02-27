@@ -1,9 +1,13 @@
-mod commands;
 mod claude_adapter;
+mod command_templates;
+mod commands;
+mod pack_manager;
 mod repo_registry;
 mod session_manager;
 mod terminal_launcher;
 
+use command_templates::TemplateEngine;
+use pack_manager::PackManager;
 use repo_registry::RepoRegistry;
 use session_manager::SessionManager;
 use std::sync::Mutex;
@@ -11,6 +15,8 @@ use std::sync::Mutex;
 pub struct AppState {
     pub repo_registry: Mutex<RepoRegistry>,
     pub session_manager: Mutex<SessionManager>,
+    pub pack_manager: Mutex<PackManager>,
+    pub template_engine: Mutex<TemplateEngine>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,20 +26,28 @@ pub fn run() {
         .join("AgentCorral");
 
     std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data directory");
-    std::fs::create_dir_all(app_data_dir.join("sessions")).expect("Failed to create sessions dir");
-    std::fs::create_dir_all(app_data_dir.join("packs/library")).expect("Failed to create packs dir");
-    std::fs::create_dir_all(app_data_dir.join("packs/cache")).expect("Failed to create packs cache dir");
+    std::fs::create_dir_all(app_data_dir.join("sessions"))
+        .expect("Failed to create sessions dir");
+    std::fs::create_dir_all(app_data_dir.join("packs")).expect("Failed to create packs dir");
+    std::fs::create_dir_all(app_data_dir.join("packs/library"))
+        .expect("Failed to create library dir");
 
     let db_path = app_data_dir.join("repos.db");
     let sessions_dir = app_data_dir.join("sessions");
+    let packs_dir = app_data_dir.join("packs");
+    let library_dir = app_data_dir.join("packs/library");
 
     let repo_registry = RepoRegistry::new(&db_path).expect("Failed to initialize repo registry");
     let session_manager =
         SessionManager::new(sessions_dir).expect("Failed to initialize session manager");
+    let pack_manager = PackManager::new(packs_dir, library_dir);
+    let template_engine = TemplateEngine::new(&app_data_dir);
 
     let state = AppState {
         repo_registry: Mutex::new(repo_registry),
         session_manager: Mutex::new(session_manager),
+        pack_manager: Mutex::new(pack_manager),
+        template_engine: Mutex::new(template_engine),
     };
 
     tauri::Builder::default()
@@ -42,13 +56,16 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
+            // Repo commands
             commands::repo::add_repo,
             commands::repo::remove_repo,
             commands::repo::list_repos,
             commands::repo::get_repo_status,
+            // Session commands
             commands::session::list_sessions,
             commands::session::get_session,
             commands::session::read_session_log,
+            // Claude adapter commands
             commands::claude::detect_claude_config,
             commands::claude::read_claude_config,
             commands::claude::write_claude_config,
@@ -56,10 +73,27 @@ pub fn run() {
             commands::claude::write_agent,
             commands::claude::delete_agent,
             commands::claude::read_memory_stores,
+            commands::claude::create_memory_store,
             commands::claude::read_memory_entries,
             commands::claude::write_memory_entry,
+            commands::claude::update_memory_entry,
+            commands::claude::delete_memory_entry,
             commands::claude::reset_memory,
+            commands::claude::get_known_tools,
+            // Terminal commands
             commands::terminal::launch_session,
+            // Pack commands
+            commands::pack::list_packs,
+            commands::pack::export_pack,
+            commands::pack::preview_import,
+            commands::pack::import_pack,
+            commands::pack::delete_pack,
+            commands::pack::read_pack,
+            // Template commands
+            commands::template::list_templates,
+            commands::template::save_template,
+            commands::template::delete_template,
+            commands::template::render_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

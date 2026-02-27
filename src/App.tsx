@@ -58,7 +58,7 @@ function App() {
               path="/sessions"
               element={<SessionsPage repo={selectedRepo} />}
             />
-            <Route path="/packs" element={<PacksPage />} />
+            <Route path="/packs" element={<PacksPage repo={selectedRepo} />} />
           </Routes>
         </main>
       </div>

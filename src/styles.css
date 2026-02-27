@@ -872,6 +872,252 @@ code {
   border-radius: 3px;
 }
 
+/* -- Tools Grid (Agent Studio) -- */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.tool-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tool-checkbox:hover {
+  background: var(--bg-hover);
+}
+
+.tool-checkbox input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.tool-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tool-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(108, 122, 255, 0.1);
+  color: var(--accent);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* -- Memory Entry Edit/Delete -- */
+.entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.entry-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.entry-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.entry-edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* -- Store Create Form -- */
+.store-create-form {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.store-create-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* -- Pack Cards -- */
+.packs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pack-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.pack-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.pack-card-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pack-version {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.pack-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.pack-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.pack-author {
+  font-style: italic;
+}
+
+.pack-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* -- Import Preview -- */
+.import-preview {
+  max-width: 600px;
+}
+
+.preview-section {
+  margin-bottom: 20px;
+}
+
+.preview-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.preview-section ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview-section li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.badge-new {
+  padding: 1px 6px;
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--success);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-update {
+  padding: 1px 6px;
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warning);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* -- Export Form -- */
+.export-form {
+  max-width: 600px;
+}
+
+.export-agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* -- Command Templates -- */
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.template-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.template-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.template-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* -- Scrollbar -- */
 ::-webkit-scrollbar {
   width: 6px;

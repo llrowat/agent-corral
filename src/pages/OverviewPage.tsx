@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Repo, RepoStatus, ClaudeDetection } from "@/types";
+import type { Repo, RepoStatus, ClaudeDetection, CommandTemplate } from "@/types";
 import * as api from "@/lib/tauri";
 import { useSessions } from "@/hooks/useSessions";
 
@@ -10,6 +10,7 @@ interface Props {
 export function OverviewPage({ repo }: Props) {
   const [status, setStatus] = useState<RepoStatus | null>(null);
   const [detection, setDetection] = useState<ClaudeDetection | null>(null);
+  const [templates, setTemplates] = useState<CommandTemplate[]>([]);
   const { sessions, launchSession } = useSessions();
 
   useEffect(() => {
@@ -21,6 +22,10 @@ export function OverviewPage({ repo }: Props) {
     api.getRepoStatus(repo.path).then(setStatus);
     api.detectClaudeConfig(repo.path).then(setDetection);
   }, [repo]);
+
+  useEffect(() => {
+    api.listTemplates().then(setTemplates).catch(() => {});
+  }, []);
 
   if (!repo) {
     return (
@@ -34,6 +39,24 @@ export function OverviewPage({ repo }: Props) {
   const recentSessions = sessions
     .filter((s) => s.repoPath === repo.path)
     .slice(0, 5);
+
+  const handleRunTemplate = async (template: CommandTemplate) => {
+    // Simple variable substitution for repo-only templates
+    let cmd = template.command;
+    cmd = cmd.replace("{{repoPath}}", repo.path);
+    // For templates requiring agent, prompt user
+    if (template.requires.includes("agent")) {
+      const agentId = prompt("Enter agent ID:");
+      if (!agentId) return;
+      cmd = cmd.replace("{{agentId}}", agentId);
+    }
+    if (template.requires.includes("prompt")) {
+      const promptText = prompt("Enter prompt:");
+      if (!promptText) return;
+      cmd = cmd.replace("{{prompt}}", promptText);
+    }
+    await launchSession(repo.path, template.name, cmd);
+  };
 
   return (
     <div className="page overview-page">
@@ -53,24 +76,18 @@ export function OverviewPage({ repo }: Props) {
       </section>
 
       <section className="overview-section">
-        <h3>Quick Actions</h3>
-        <div className="quick-actions">
-          <button
-            className="btn btn-primary"
-            onClick={() =>
-              launchSession(repo.path, "Claude Code", "claude")
-            }
-          >
-            Launch Claude Code
-          </button>
-          <button
-            className="btn"
-            onClick={() =>
-              launchSession(repo.path, "Claude Chat", "claude --chat")
-            }
-          >
-            Open Chat
-          </button>
+        <h3>Command Templates</h3>
+        <div className="templates-grid">
+          {templates.map((t) => (
+            <button
+              key={t.templateId}
+              className="template-card"
+              onClick={() => handleRunTemplate(t)}
+            >
+              <span className="template-name">{t.name}</span>
+              <span className="template-desc">{t.description}</span>
+            </button>
+          ))}
         </div>
       </section>
 

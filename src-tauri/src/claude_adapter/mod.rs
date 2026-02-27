@@ -15,6 +15,8 @@ pub enum ClaudeAdapterError {
     AgentNotFound(String),
     #[error("Memory store not found: {0}")]
     MemoryStoreNotFound(String),
+    #[error("Memory entry not found: index {0}")]
+    MemoryEntryNotFound(usize),
 }
 
 // -- Normalized internal types --
@@ -65,6 +67,21 @@ pub struct MemoryEntry {
     pub content: String,
 }
 
+/// Known Claude Code tools for the tools selector
+pub const KNOWN_TOOLS: &[&str] = &[
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch",
+    "TodoWrite",
+    "NotebookEdit",
+    "Task",
+];
+
 pub struct ClaudeRepoAdapter;
 
 impl ClaudeRepoAdapter {
@@ -94,7 +111,6 @@ impl ClaudeRepoAdapter {
     pub fn read_config(repo_path: &str) -> Result<NormalizedConfig, ClaudeAdapterError> {
         let settings_path = Path::new(repo_path).join(".claude/settings.json");
         if !settings_path.exists() {
-            // Return empty config if no settings file
             return Ok(NormalizedConfig {
                 model: None,
                 permissions: None,
@@ -157,7 +173,11 @@ impl ClaudeRepoAdapter {
             let entry = entry?;
             let path = entry.path();
             if path.extension().map_or(false, |ext| ext == "md") {
-                let agent = Self::parse_agent_file(&path)?;
+                let agent_id = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let agent = Self::parse_agent_file(&path, &agent_id, repo_path)?;
                 agents.push(agent);
             }
         }
@@ -166,7 +186,7 @@ impl ClaudeRepoAdapter {
         Ok(agents)
     }
 
-    /// Write an agent to .claude/agents/<agent_id>.md
+    /// Write an agent to .claude/agents/<agent_id>.md + metadata sidecar
     pub fn write_agent(repo_path: &str, agent: &Agent) -> Result<(), ClaudeAdapterError> {
         let agents_dir = Path::new(repo_path).join(".claude/agents");
         fs::create_dir_all(&agents_dir)?;
@@ -179,16 +199,35 @@ impl ClaudeRepoAdapter {
         content.push('\n');
 
         atomic_write(&agent_path, &content)?;
+
+        // Write metadata sidecar JSON (tools, model override, memory binding)
+        let meta_path = agents_dir.join(format!("{}.meta.json", agent.agent_id));
+        let meta = serde_json::json!({
+            "tools": agent.tools,
+            "modelOverride": agent.model_override,
+            "memoryBinding": agent.memory_binding,
+        });
+        let meta_json = serde_json::to_string_pretty(&meta)?;
+        atomic_write(&meta_path, &meta_json)?;
+
         Ok(())
     }
 
-    /// Delete an agent file
+    /// Delete an agent file and its metadata
     pub fn delete_agent(repo_path: &str, agent_id: &str) -> Result<(), ClaudeAdapterError> {
-        let agent_path = Path::new(repo_path).join(format!(".claude/agents/{}.md", agent_id));
+        let agents_dir = Path::new(repo_path).join(".claude/agents");
+        let agent_path = agents_dir.join(format!("{}.md", agent_id));
         if !agent_path.exists() {
             return Err(ClaudeAdapterError::AgentNotFound(agent_id.to_string()));
         }
         fs::remove_file(&agent_path)?;
+
+        // Also remove metadata sidecar if it exists
+        let meta_path = agents_dir.join(format!("{}.meta.json", agent_id));
+        if meta_path.exists() {
+            fs::remove_file(&meta_path)?;
+        }
+
         Ok(())
     }
 
@@ -226,6 +265,25 @@ impl ClaudeRepoAdapter {
         Ok(stores)
     }
 
+    /// Create a new memory store
+    pub fn create_memory_store(
+        repo_path: &str,
+        store_name: &str,
+    ) -> Result<MemoryStore, ClaudeAdapterError> {
+        let memory_dir = Path::new(repo_path).join(".claude/memory");
+        fs::create_dir_all(&memory_dir)?;
+        let store_path = memory_dir.join(format!("{}.md", store_name));
+
+        atomic_write(&store_path, "")?;
+
+        Ok(MemoryStore {
+            store_id: store_name.to_string(),
+            name: store_name.to_string(),
+            path: store_path.to_string_lossy().to_string(),
+            entry_count: 0,
+        })
+    }
+
     /// Read entries from a memory store file
     pub fn read_memory_entries(store_path: &str) -> Result<Vec<MemoryEntry>, ClaudeAdapterError> {
         let path = Path::new(store_path);
@@ -236,39 +294,10 @@ impl ClaudeRepoAdapter {
         }
 
         let contents = fs::read_to_string(path)?;
-        let mut entries = Vec::new();
-        let mut current_key = String::new();
-        let mut current_content = String::new();
-        let mut idx = 0;
-
-        for line in contents.lines() {
-            if line.starts_with("- ") || line.starts_with("* ") {
-                if !current_key.is_empty() {
-                    entries.push(MemoryEntry {
-                        key: current_key.clone(),
-                        content: current_content.trim().to_string(),
-                    });
-                }
-                idx += 1;
-                current_key = format!("entry_{}", idx);
-                current_content = line[2..].to_string();
-            } else if !current_key.is_empty() {
-                current_content.push('\n');
-                current_content.push_str(line);
-            }
-        }
-
-        if !current_key.is_empty() {
-            entries.push(MemoryEntry {
-                key: current_key,
-                content: current_content.trim().to_string(),
-            });
-        }
-
-        Ok(entries)
+        Ok(Self::parse_entries(&contents))
     }
 
-    /// Write a memory entry to a store
+    /// Write a memory entry to a store (append)
     pub fn write_memory_entry(
         store_path: &str,
         entry: &MemoryEntry,
@@ -294,6 +323,57 @@ impl ClaudeRepoAdapter {
         Ok(())
     }
 
+    /// Update a memory entry by its index (0-based)
+    pub fn update_memory_entry(
+        store_path: &str,
+        entry_index: usize,
+        new_content: &str,
+    ) -> Result<(), ClaudeAdapterError> {
+        let path = Path::new(store_path);
+        if !path.exists() {
+            return Err(ClaudeAdapterError::MemoryStoreNotFound(
+                store_path.to_string(),
+            ));
+        }
+
+        let contents = fs::read_to_string(path)?;
+        let mut entries = Self::parse_entries(&contents);
+
+        if entry_index >= entries.len() {
+            return Err(ClaudeAdapterError::MemoryEntryNotFound(entry_index));
+        }
+
+        entries[entry_index].content = new_content.to_string();
+        let rebuilt = Self::rebuild_entries(&entries);
+        atomic_write(path, &rebuilt)?;
+        Ok(())
+    }
+
+    /// Delete a memory entry by its index (0-based)
+    pub fn delete_memory_entry(
+        store_path: &str,
+        entry_index: usize,
+    ) -> Result<(), ClaudeAdapterError> {
+        let path = Path::new(store_path);
+        if !path.exists() {
+            return Err(ClaudeAdapterError::MemoryStoreNotFound(
+                store_path.to_string(),
+            ));
+        }
+
+        let contents = fs::read_to_string(path)?;
+        let mut entries = Self::parse_entries(&contents);
+
+        if entry_index >= entries.len() {
+            return Err(ClaudeAdapterError::MemoryEntryNotFound(entry_index));
+        }
+
+        entries.remove(entry_index);
+        let rebuilt = Self::rebuild_entries(&entries);
+        atomic_write(path, &rebuilt)?;
+        Ok(())
+    }
+
     /// Reset (clear) a memory store
     pub fn reset_memory(store_path: &str) -> Result<(), ClaudeAdapterError> {
         let path = Path::new(store_path);
@@ -306,45 +386,123 @@ impl ClaudeRepoAdapter {
         Ok(())
     }
 
+    /// Return list of known tool names
+    pub fn known_tools() -> Vec<String> {
+        KNOWN_TOOLS.iter().map(|s| s.to_string()).collect()
+    }
+
     // -- Private helpers --
 
-    fn parse_agent_file(path: &Path) -> Result<Agent, ClaudeAdapterError> {
+    fn parse_agent_file(
+        path: &Path,
+        agent_id: &str,
+        repo_path: &str,
+    ) -> Result<Agent, ClaudeAdapterError> {
         let contents = fs::read_to_string(path)?;
-        let agent_id = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
 
         // Extract name from first markdown heading
         let name = contents
             .lines()
             .find(|l| l.starts_with("# "))
             .map(|l| l[2..].trim().to_string())
-            .unwrap_or_else(|| agent_id.clone());
+            .unwrap_or_else(|| agent_id.to_string());
 
         // Everything after the heading is the system prompt
         let system_prompt = contents
             .lines()
             .skip_while(|l| !l.starts_with("# "))
-            .skip(1) // skip the heading line
+            .skip(1)
             .collect::<Vec<&str>>()
             .join("\n")
             .trim()
             .to_string();
 
+        // Read metadata sidecar if it exists
+        let meta_path = Path::new(repo_path)
+            .join(".claude/agents")
+            .join(format!("{}.meta.json", agent_id));
+
+        let (tools, model_override, memory_binding) = if meta_path.exists() {
+            let meta_str = fs::read_to_string(&meta_path)?;
+            let meta: serde_json::Value = serde_json::from_str(&meta_str)?;
+
+            let tools = meta
+                .get("tools")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let model_override = meta
+                .get("modelOverride")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            let memory_binding = meta
+                .get("memoryBinding")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            (tools, model_override, memory_binding)
+        } else {
+            (vec![], None, None)
+        };
+
         Ok(Agent {
-            agent_id,
+            agent_id: agent_id.to_string(),
             name,
             system_prompt,
-            tools: vec![],
-            model_override: None,
-            memory_binding: None,
+            tools,
+            model_override,
+            memory_binding,
         })
+    }
+
+    fn parse_entries(contents: &str) -> Vec<MemoryEntry> {
+        let mut entries = Vec::new();
+        let mut current_content = String::new();
+        let mut idx = 0;
+
+        for line in contents.lines() {
+            if line.starts_with("- ") || line.starts_with("* ") {
+                if idx > 0 {
+                    entries.push(MemoryEntry {
+                        key: format!("entry_{}", idx),
+                        content: current_content.trim().to_string(),
+                    });
+                }
+                idx += 1;
+                current_content = line[2..].to_string();
+            } else if idx > 0 {
+                current_content.push('\n');
+                current_content.push_str(line);
+            }
+        }
+
+        if idx > 0 {
+            entries.push(MemoryEntry {
+                key: format!("entry_{}", idx),
+                content: current_content.trim().to_string(),
+            });
+        }
+
+        entries
+    }
+
+    fn rebuild_entries(entries: &[MemoryEntry]) -> String {
+        let mut output = String::new();
+        for entry in entries {
+            output.push_str(&format!("- {}\n", entry.content));
+        }
+        output
     }
 }
 
 /// Atomic file write: write to temp file, then rename
-fn atomic_write(path: &Path, contents: &str) -> Result<(), std::io::Error> {
+pub fn atomic_write(path: &Path, contents: &str) -> Result<(), std::io::Error> {
     let temp_path = path.with_extension("tmp");
     fs::write(&temp_path, contents)?;
     fs::rename(&temp_path, path)?;

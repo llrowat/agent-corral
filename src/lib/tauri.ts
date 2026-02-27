@@ -8,6 +8,11 @@ import type {
   Agent,
   MemoryStore,
   MemoryEntry,
+  PackSummary,
+  PackContents,
+  ImportPreview,
+  ImportMode,
+  CommandTemplate,
 } from "@/types";
 
 // -- Repo commands --
@@ -34,7 +39,9 @@ export async function listSessions(): Promise<SessionEnvelope[]> {
   return invoke("list_sessions");
 }
 
-export async function getSession(sessionId: string): Promise<SessionEnvelope> {
+export async function getSession(
+  sessionId: string
+): Promise<SessionEnvelope> {
   return invoke("get_session", { sessionId });
 }
 
@@ -90,6 +97,13 @@ export async function readMemoryStores(
   return invoke("read_memory_stores", { repoPath });
 }
 
+export async function createMemoryStore(
+  repoPath: string,
+  storeName: string
+): Promise<MemoryStore> {
+  return invoke("create_memory_store", { repoPath, storeName });
+}
+
 export async function readMemoryEntries(
   storePath: string
 ): Promise<MemoryEntry[]> {
@@ -103,8 +117,27 @@ export async function writeMemoryEntry(
   return invoke("write_memory_entry", { storePath, entry });
 }
 
+export async function updateMemoryEntry(
+  storePath: string,
+  entryIndex: number,
+  newContent: string
+): Promise<void> {
+  return invoke("update_memory_entry", { storePath, entryIndex, newContent });
+}
+
+export async function deleteMemoryEntry(
+  storePath: string,
+  entryIndex: number
+): Promise<void> {
+  return invoke("delete_memory_entry", { storePath, entryIndex });
+}
+
 export async function resetMemory(storePath: string): Promise<void> {
   return invoke("reset_memory", { storePath });
+}
+
+export async function getKnownTools(): Promise<string[]> {
+  return invoke("get_known_tools");
 }
 
 // -- Terminal commands --
@@ -115,4 +148,74 @@ export async function launchSession(
   command: string
 ): Promise<string> {
   return invoke("launch_session", { repoPath, commandName, command });
+}
+
+// -- Pack commands --
+
+export async function listPacks(): Promise<PackSummary[]> {
+  return invoke("list_packs");
+}
+
+export async function exportPack(
+  repoPath: string,
+  name: string,
+  description: string,
+  author: string | null,
+  includeConfig: boolean,
+  agentIds: string[]
+): Promise<string> {
+  return invoke("export_pack", {
+    repoPath,
+    name,
+    description,
+    author,
+    includeConfig,
+    agentIds,
+  });
+}
+
+export async function previewImport(
+  packPath: string,
+  repoPath: string
+): Promise<ImportPreview> {
+  return invoke("preview_import", { packPath, repoPath });
+}
+
+export async function importPack(
+  packPath: string,
+  repoPath: string,
+  mode: ImportMode
+): Promise<void> {
+  return invoke("import_pack", { packPath, repoPath, mode });
+}
+
+export async function deletePack(packPath: string): Promise<void> {
+  return invoke("delete_pack", { packPath });
+}
+
+export async function readPack(packPath: string): Promise<PackContents> {
+  return invoke("read_pack", { packPath });
+}
+
+// -- Template commands --
+
+export async function listTemplates(): Promise<CommandTemplate[]> {
+  return invoke("list_templates");
+}
+
+export async function saveTemplate(
+  template: CommandTemplate
+): Promise<void> {
+  return invoke("save_template", { template });
+}
+
+export async function deleteTemplate(templateId: string): Promise<void> {
+  return invoke("delete_template", { templateId });
+}
+
+export async function renderTemplate(
+  template: CommandTemplate,
+  vars: Record<string, string>
+): Promise<string> {
+  return invoke("render_template", { template, vars });
 }
