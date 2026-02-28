@@ -38,7 +38,7 @@ agent-corral/
 - **Plugin Manager** uses a directory-based format (`.claude-plugin/plugin.json`) that bundles agents, skills, hooks, and MCP servers. Replaces the legacy `.agentpack` JSON format.
 - **Session Manager** tracks launched terminal sessions via JSON envelope files. Records PID on launch, auto-cleans dead sessions (via `GetExitCodeProcess` on Windows), and supports focusing/killing terminal windows. Manages git worktree lifecycle (create, status, cleanup) for isolated session working directories.
 - **Git Worktree Support** — Sessions can optionally run in an isolated git worktree. Each worktree gets its own branch (`worktree/{session-id}`), is stored in `{app_data_dir}/worktrees/{session_id}/`, and is automatically cleaned up (including branch deletion) when the session is deleted or detected as dead. The worktree feature can be enabled per-template (`useWorktree` flag) or toggled at launch time via the UI. Worktree sessions support status inspection (branch, dirty state, commit count), diff viewing, and merging back into a target branch.
-- **Terminal Launcher** spawns commands directly in a new console window (no bridge). On Windows uses `CREATE_NEW_CONSOLE` flag.
+- **Terminal Launcher** spawns commands directly in a new console window. On Windows uses `CREATE_NEW_CONSOLE` flag.
 - **Atomic file writes** are used everywhere to prevent corruption (write to .tmp, then rename).
 - **Agent metadata sidecar files** (`.meta.json`) store tools, model override, and memory binding alongside `.md` agent files.
 - **Plugin git source sidecars** (`.claude-plugin/source.json`) track the git origin, branch, and installed commit for git-sourced plugins.
@@ -103,7 +103,7 @@ npm run test:watch
 
 ## Build Phases
 
-- Phase 1: Bridge CLI, Terminal Launcher, Session Manager, Repo Registry
+- Phase 1: Terminal Launcher, Session Manager, Repo Registry
 - Phase 2: Config Studio, Agent Studio with full CRUD
 - Phase 3: Memory Studio
 - Phase 4: Pack system (legacy, kept for migration)

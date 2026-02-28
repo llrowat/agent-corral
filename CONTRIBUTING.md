@@ -30,7 +30,6 @@ npm run tauri build
 ## Project Structure
 
 - `backend/` — Rust backend (Tauri app, state management, IPC commands)
-- `bridge/` — Standalone Rust binary for session wrapping
 - `frontend/` — React + TypeScript frontend
 - See `CLAUDE.md` for detailed architecture notes
 
