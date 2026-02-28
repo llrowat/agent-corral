@@ -16,6 +16,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { useRepos } from "./hooks/useRepos";
 import { getClaudeHome } from "./lib/tauri";
 import type { Scope } from "./types";
+import appIcon from "./assets/agent_corral_icon.png";
 
 function App() {
   const { repos, addRepo, removeRepo } = useRepos();
@@ -30,6 +31,7 @@ function App() {
     <div className="app-layout">
       <header className="app-header">
         <div className="app-brand">
+          <img src={appIcon} alt="" className="app-icon" />
           <h1>AgentCorral</h1>
           <span className="app-subtitle">Claude Code Command Center</span>
         </div>

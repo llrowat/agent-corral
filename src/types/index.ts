@@ -18,18 +18,13 @@ export interface RepoStatus {
 
 // -- Session Manager --
 
-export type SessionStatus = "running" | "success" | "failed";
-
 export interface SessionEnvelope {
   sessionId: string;
   repoPath: string;
   commandName: string;
   command: string;
   startedAt: string;
-  endedAt: string | null;
-  status: SessionStatus;
-  exitCode: number | null;
-  logPath: string;
+  pid: number | null;
 }
 
 // -- Claude Adapter --

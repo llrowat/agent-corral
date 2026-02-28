@@ -78,8 +78,8 @@ pub fn run() {
             commands::repo::get_repo_status,
             // Session commands
             commands::session::list_sessions,
-            commands::session::get_session,
-            commands::session::read_session_log,
+            commands::session::delete_session,
+            commands::session::focus_session,
             // Claude adapter commands
             commands::claude::get_claude_home,
             commands::claude::detect_claude_config,
@@ -94,6 +94,7 @@ pub fn run() {
             commands::claude::write_memory_entry,
             commands::claude::update_memory_entry,
             commands::claude::delete_memory_entry,
+            commands::claude::delete_memory_store,
             commands::claude::reset_memory,
             commands::claude::get_known_tools,
             // Terminal commands

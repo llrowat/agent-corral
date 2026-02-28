@@ -22,17 +22,9 @@ export function useSessions() {
 
   useEffect(() => {
     refresh();
-    // Poll for updates every 3 seconds
     const interval = setInterval(refresh, 3000);
     return () => clearInterval(interval);
   }, [refresh]);
-
-  const getLog = useCallback(
-    async (sessionId: string, tailLines?: number) => {
-      return api.readSessionLog(sessionId, tailLines);
-    },
-    []
-  );
 
   const launchSession = useCallback(
     async (repoPath: string, commandName: string, command: string) => {
@@ -47,5 +39,5 @@ export function useSessions() {
     [refresh]
   );
 
-  return { sessions, loading, error, getLog, launchSession, refresh };
+  return { sessions, loading, error, launchSession, refresh };
 }

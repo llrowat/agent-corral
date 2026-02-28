@@ -460,6 +460,18 @@ impl ClaudeRepoAdapter {
         Ok(())
     }
 
+    /// Delete a memory store file
+    pub fn delete_memory_store(store_path: &str) -> Result<(), ClaudeAdapterError> {
+        let path = Path::new(store_path);
+        if !path.exists() {
+            return Err(ClaudeAdapterError::MemoryStoreNotFound(
+                store_path.to_string(),
+            ));
+        }
+        fs::remove_file(path)?;
+        Ok(())
+    }
+
     /// Reset (clear) a memory store
     pub fn reset_memory(store_path: &str) -> Result<(), ClaudeAdapterError> {
         let path = Path::new(store_path);

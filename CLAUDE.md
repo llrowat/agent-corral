@@ -12,18 +12,16 @@ agent-corral/
 │   │   ├── main.rs             # Binary entry
 │   │   ├── commands/           # Tauri IPC command handlers
 │   │   ├── repo_registry/      # SQLite repo management
-│   │   ├── session_manager/    # Session envelope reader
-│   │   ├── claude_adapter/     # Claude Code file format adapter (agents, hooks, skills, MCP)
+│   │   ├── session_manager/    # Session tracking, process lifecycle, window focus
+│   │   ├── claude_adapter/     # Claude Code file format adapter (agents, hooks, skills, MCP, memory)
 │   │   ├── plugin_manager/     # Plugin export/import/git install/update (directory-based)
 │   │   ├── pack_manager/       # Legacy pack system (.agentpack JSON, kept for migration)
 │   │   ├── command_templates/  # Template engine with variable substitution
-│   │   └── terminal_launcher/  # Native terminal spawning
+│   │   └── terminal_launcher/  # Native terminal spawning (per-platform)
 │   └── tauri.conf.json
-├── bridge/             # Bridge CLI (standalone Rust binary)
-│   └── src/main.rs     # Session wrapping, log tee, envelope writing
 ├── src/                # React frontend
-│   ├── components/     # Shared UI components (Sidebar, RepoSwitcher)
-│   ├── pages/          # Page components (Overview, Agents, Hooks, Skills, MCP, Plugins, etc.)
+│   ├── components/     # Shared UI components (Sidebar, ScopeSwitcher)
+│   ├── pages/          # Page components (Overview, Agents, Hooks, Skills, MCP, Config, Memory, Sessions, Plugins, Settings)
 │   ├── hooks/          # React hooks (useRepos, useSessions)
 │   ├── lib/            # Tauri API bindings
 │   ├── types/          # TypeScript type definitions
@@ -35,10 +33,11 @@ agent-corral/
 
 ## Key Architecture Decisions
 
-- **ClaudeRepoAdapter** isolates all Claude file format concerns. Never read/write Claude config files directly outside this module. Handles agents, hooks (settings.json), skills (.claude/skills/), and MCP servers (.mcp.json).
+- **Global + Project Scope** — The app supports managing Claude Code config at both the global (`~/.claude/`) and project (`{repo}/.claude/`) level. Most adapters work for both by passing the appropriate base path. MCP is the exception: global uses `~/.claude.json`, project uses `{repo}/.mcp.json`.
+- **ClaudeRepoAdapter** isolates all Claude file format concerns. Never read/write Claude config files directly outside this module. Handles agents, hooks (settings.json), skills (.claude/skills/), MCP servers, and memory stores.
 - **Plugin Manager** uses a directory-based format (`.claude-plugin/plugin.json`) that bundles agents, skills, hooks, and MCP servers. Replaces the legacy `.agentpack` JSON format.
-- **Bridge CLI** (`agentcorral-bridge`) is a separate binary that wraps commands with session tracking. It writes JSON envelopes and tees output to log files.
-- **Session Manager** reads envelope JSON files from the sessions directory. The bridge CLI writes them.
+- **Session Manager** tracks launched terminal sessions via JSON envelope files. Records PID on launch, auto-cleans dead sessions (via `GetExitCodeProcess` on Windows), and supports focusing/killing terminal windows.
+- **Terminal Launcher** spawns commands directly in a new console window (no bridge). On Windows uses `CREATE_NEW_CONSOLE` flag.
 - **Atomic file writes** are used everywhere to prevent corruption (write to .tmp, then rename).
 - **Agent metadata sidecar files** (`.meta.json`) store tools, model override, and memory binding alongside `.md` agent files.
 - **Plugin git source sidecars** (`.claude-plugin/source.json`) track the git origin, branch, and installed commit for git-sourced plugins.

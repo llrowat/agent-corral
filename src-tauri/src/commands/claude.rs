@@ -75,6 +75,11 @@ pub fn delete_memory_entry(store_path: String, entry_index: usize) -> Result<(),
 }
 
 #[tauri::command]
+pub fn delete_memory_store(store_path: String) -> Result<(), String> {
+    ClaudeRepoAdapter::delete_memory_store(&store_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn reset_memory(store_path: String) -> Result<(), String> {
     ClaudeRepoAdapter::reset_memory(&store_path).map_err(|e| e.to_string())
 }

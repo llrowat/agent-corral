@@ -47,17 +47,12 @@ export async function listSessions(): Promise<SessionEnvelope[]> {
   return invoke("list_sessions");
 }
 
-export async function getSession(
-  sessionId: string
-): Promise<SessionEnvelope> {
-  return invoke("get_session", { sessionId });
+export async function deleteSession(sessionId: string): Promise<void> {
+  return invoke("delete_session", { sessionId });
 }
 
-export async function readSessionLog(
-  sessionId: string,
-  tailLines?: number
-): Promise<string> {
-  return invoke("read_session_log", { sessionId, tailLines });
+export async function focusSession(pid: number): Promise<void> {
+  return invoke("focus_session", { pid });
 }
 
 // -- Claude home --
@@ -144,6 +139,10 @@ export async function deleteMemoryEntry(
   entryIndex: number
 ): Promise<void> {
   return invoke("delete_memory_entry", { storePath, entryIndex });
+}
+
+export async function deleteMemoryStore(storePath: string): Promise<void> {
+  return invoke("delete_memory_store", { storePath });
 }
 
 export async function resetMemory(storePath: string): Promise<void> {

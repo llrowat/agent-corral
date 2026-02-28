@@ -88,7 +88,6 @@ export function MemoryPage({ scope }: Props) {
 
   const handleDeleteEntry = async (index: number) => {
     if (!selectedStore) return;
-    if (!confirm("Delete this entry?")) return;
     try {
       await api.deleteMemoryEntry(selectedStore.path, index);
       await loadEntries(selectedStore);
@@ -100,18 +99,24 @@ export function MemoryPage({ scope }: Props) {
 
   const handleReset = async () => {
     if (!selectedStore) return;
-    if (
-      !confirm(
-        `Reset "${selectedStore.name}"? This will delete all ${selectedStore.entryCount} entries.`
-      )
-    )
-      return;
     try {
       await api.resetMemory(selectedStore.path);
       await loadEntries(selectedStore);
       await loadStores();
     } catch (e) {
       alert(`Failed to reset memory: ${e}`);
+    }
+  };
+
+  const handleDeleteStore = async () => {
+    if (!selectedStore) return;
+    try {
+      await api.deleteMemoryStore(selectedStore.path);
+      setSelectedStore(null);
+      setEntries([]);
+      await loadStores();
+    } catch (e) {
+      alert(`Failed to delete store: ${e}`);
     }
   };
 
@@ -205,9 +210,14 @@ export function MemoryPage({ scope }: Props) {
             <div className="memory-detail">
               <div className="panel-header">
                 <h3>{selectedStore.name}</h3>
-                <button className="btn btn-danger btn-sm" onClick={handleReset}>
-                  Reset Store
-                </button>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button className="btn btn-sm" onClick={handleReset}>
+                    Reset
+                  </button>
+                  <button className="btn btn-danger btn-sm" onClick={handleDeleteStore}>
+                    Delete
+                  </button>
+                </div>
               </div>
 
               <div className="memory-entries">

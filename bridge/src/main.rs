@@ -2,9 +2,9 @@ use chrono::Utc;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 #[derive(Parser)]
 #[command(name = "agentcorral-bridge")]
@@ -100,8 +100,8 @@ fn run_session(
     };
     atomic_write_json(&envelope_path, &envelope);
 
-    // Open log file
-    let mut log_file = fs::File::create(&log_path).expect("Failed to create log file");
+    // Create an empty log file for bookkeeping
+    let _ = fs::File::create(&log_path);
 
     // Determine shell and command
     let (shell, shell_arg) = if cfg!(target_os = "windows") {
@@ -110,13 +110,12 @@ fn run_session(
         ("sh", "-c")
     };
 
-    // Spawn the child process
+    // Spawn the child process with inherited stdio so interactive TUI apps
+    // (like Claude Code) get direct terminal access.
     let child_result = Command::new(shell)
         .arg(shell_arg)
         .arg(&command_str)
         .current_dir(repo_path)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
         .spawn();
 
     let mut child = match child_result {
@@ -124,7 +123,9 @@ fn run_session(
         Err(e) => {
             let error_msg = format!("Failed to spawn command: {}\n", e);
             eprint!("{}", error_msg);
-            let _ = log_file.write_all(error_msg.as_bytes());
+            if let Ok(mut log_file) = fs::File::create(&log_path) {
+                let _ = log_file.write_all(error_msg.as_bytes());
+            }
 
             let final_envelope = SessionEnvelope {
                 ended_at: Some(Utc::now().to_rfc3339()),
@@ -137,50 +138,8 @@ fn run_session(
         }
     };
 
-    // Tee stdout
-    let stdout = child.stdout.take();
-    let log_path_clone = log_path.clone();
-    let stdout_handle = std::thread::spawn(move || {
-        if let Some(stdout) = stdout {
-            let reader = BufReader::new(stdout);
-            let mut log = fs::OpenOptions::new()
-                .append(true)
-                .open(&log_path_clone)
-                .expect("Failed to open log for stdout");
-
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    println!("{}", line);
-                    let _ = writeln!(log, "{}", line);
-                }
-            }
-        }
-    });
-
-    // Tee stderr
-    let stderr = child.stderr.take();
-    let log_path_clone2 = log_path.clone();
-    let stderr_handle = std::thread::spawn(move || {
-        if let Some(stderr) = stderr {
-            let reader = BufReader::new(stderr);
-            let mut log = fs::OpenOptions::new()
-                .append(true)
-                .open(&log_path_clone2)
-                .expect("Failed to open log for stderr");
-
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    eprintln!("{}", line);
-                    let _ = writeln!(log, "[stderr] {}", line);
-                }
-            }
-        }
-    });
-
-    // Wait for process and threads
+    // Wait for process to finish
     let status = child.wait().expect("Failed to wait for child process");
-    let _ = stdout_handle.join();
-    let _ = stderr_handle.join();
 
     let exit_code = status.code().unwrap_or(1);
     let final_status = if exit_code == 0 { "success" } else { "failed" };

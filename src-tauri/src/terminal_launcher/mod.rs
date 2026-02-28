@@ -14,48 +14,32 @@ pub enum LaunchError {
 pub struct TerminalLauncher;
 
 impl TerminalLauncher {
-    /// Launch a command in the system's default terminal or a user-chosen terminal.
-    /// The command is wrapped with the agentcorral-bridge for session tracking.
+    /// Launch a command directly in the system's terminal.
+    /// Returns the PID of the spawned process.
     pub fn launch(
         repo_path: &str,
-        session_id: &str,
-        command_name: &str,
         command: &str,
-        log_dir: &str,
-        bridge_path: &str,
         terminal_preference: Option<&str>,
-    ) -> Result<(), LaunchError> {
-        let bridge_cmd = format!(
-            "{} run --session {} --repo {} --name {} --logdir {} -- {}",
-            shell_quote(bridge_path),
-            shell_quote(session_id),
-            shell_quote(repo_path),
-            shell_quote(command_name),
-            shell_quote(log_dir),
-            command
-        );
-
+    ) -> Result<u32, LaunchError> {
         #[cfg(target_os = "macos")]
         {
-            Self::launch_macos(repo_path, &bridge_cmd, terminal_preference)?;
+            return Self::launch_macos(repo_path, command, terminal_preference);
         }
 
         #[cfg(target_os = "linux")]
         {
-            Self::launch_linux(repo_path, &bridge_cmd, terminal_preference)?;
+            return Self::launch_linux(repo_path, command, terminal_preference);
         }
 
         #[cfg(target_os = "windows")]
         {
-            Self::launch_windows(repo_path, &bridge_cmd, terminal_preference)?;
+            return Self::launch_windows(repo_path, command, terminal_preference);
         }
 
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             return Err(LaunchError::UnsupportedPlatform);
         }
-
-        Ok(())
     }
 
     #[cfg(target_os = "macos")]
@@ -63,8 +47,8 @@ impl TerminalLauncher {
         repo_path: &str,
         command: &str,
         terminal_preference: Option<&str>,
-    ) -> Result<(), LaunchError> {
-        match terminal_preference {
+    ) -> Result<u32, LaunchError> {
+        let child = match terminal_preference {
             Some("iterm") => {
                 let script = format!(
                     r#"tell application "iTerm"
@@ -83,7 +67,7 @@ end tell"#,
                     .spawn()
                     .map_err(|e| {
                         LaunchError::LaunchFailed(format!("iTerm2 launch failed: {}", e))
-                    })?;
+                    })?
             }
             _ => {
                 let script = format!(
@@ -100,10 +84,10 @@ end tell"#,
                     .spawn()
                     .map_err(|e| {
                         LaunchError::LaunchFailed(format!("osascript failed: {}", e))
-                    })?;
+                    })?
             }
-        }
-        Ok(())
+        };
+        Ok(child.id())
     }
 
     #[cfg(target_os = "linux")]
@@ -111,9 +95,7 @@ end tell"#,
         repo_path: &str,
         command: &str,
         terminal_preference: Option<&str>,
-    ) -> Result<(), LaunchError> {
-        // Wrap the command so the shell stays open after it exits.
-        // "exec bash" replaces the subshell with an interactive bash.
+    ) -> Result<u32, LaunchError> {
         let keep_open = format!("{}; exec bash", command);
         let cd_keep_open = format!(
             "cd {} && {}; exec bash",
@@ -122,7 +104,7 @@ end tell"#,
         );
 
         if let Some(pref) = terminal_preference {
-            let result = match pref {
+            let child = match pref {
                 "gnome-terminal" => Command::new("gnome-terminal")
                     .args(["--working-directory", repo_path, "--", "bash", "-c", &keep_open])
                     .spawn(),
@@ -144,14 +126,13 @@ end tell"#,
                         pref
                     )));
                 }
-            };
-            result.map_err(|e| {
+            }
+            .map_err(|e| {
                 LaunchError::LaunchFailed(format!("Failed to launch {}: {}", pref, e))
             })?;
-            return Ok(());
+            return Ok(child.id());
         }
 
-        // Auto-detect: try common terminal emulators in order
         let terminals = [
             ("gnome-terminal", vec!["--working-directory", repo_path, "--", "bash", "-c", &keep_open as &str]),
             ("konsole", vec!["--workdir", repo_path, "-e", "bash", "-c", &keep_open]),
@@ -159,154 +140,54 @@ end tell"#,
         ];
 
         for (term, args) in &terminals {
-            if let Ok(_) = Command::new(term).args(args).spawn() {
-                return Ok(());
+            if let Ok(child) = Command::new(term).args(args).spawn() {
+                return Ok(child.id());
             }
         }
 
-        // Fallback: try xdg-terminal-exec (freedesktop standard)
-        Command::new("bash")
+        let child = Command::new("bash")
             .arg("-c")
             .arg(&cd_keep_open)
             .spawn()
             .map_err(|e| LaunchError::LaunchFailed(format!("No terminal emulator found: {}", e)))?;
 
-        Ok(())
+        Ok(child.id())
     }
 
     #[cfg(target_os = "windows")]
     fn launch_windows(
         repo_path: &str,
         command: &str,
-        terminal_preference: Option<&str>,
-    ) -> Result<(), LaunchError> {
-        match terminal_preference {
-            Some("cmd") => {
-                Command::new("cmd")
-                    .arg("/c")
-                    .arg(format!("start cmd /k \"cd /d {} && {}\"", repo_path, command))
-                    .spawn()
-                    .map_err(|e| {
-                        LaunchError::LaunchFailed(format!("Failed to launch cmd: {}", e))
-                    })?;
-            }
-            Some("powershell") => {
-                Command::new("cmd")
-                    .arg("/c")
-                    .arg(format!(
-                        "start powershell -NoExit -Command \"Set-Location '{}'; {}\"",
-                        repo_path, command
-                    ))
-                    .spawn()
-                    .map_err(|e| {
-                        LaunchError::LaunchFailed(format!("Failed to launch PowerShell: {}", e))
-                    })?;
-            }
-            Some("git-bash") => {
-                // Git Bash: use mintty + bash --login so the terminal stays open.
-                // git-bash.exe is a wrapper around mintty; using bash.exe directly
-                // with "cmd /c start" and /k keeps the window alive.
-                let git_dirs = [
-                    "C:\\Program Files\\Git",
-                    "C:\\Program Files (x86)\\Git",
-                ];
-                let mut launched = false;
-                for dir in &git_dirs {
-                    let bash_exe = format!("{}\\bin\\bash.exe", dir);
-                    if std::path::Path::new(&bash_exe).exists() {
-                        // Open mintty (Git Bash window) running bash with our command.
-                        // Using --hold=error keeps the window open if the command fails,
-                        // and bash -l -c "cmd; exec bash -l" keeps it open on success too.
-                        let mintty_exe = format!("{}\\usr\\bin\\mintty.exe", dir);
-                        let shell_cmd = format!(
-                            "cd {} && {}; exec bash -l",
-                            shell_quote(repo_path),
-                            command
-                        );
-                        if std::path::Path::new(&mintty_exe).exists() {
-                            Command::new(&mintty_exe)
-                                .args(["-h", "always", "-e", "/bin/bash", "-l", "-c", &shell_cmd])
-                                .spawn()
-                                .map_err(|e| {
-                                    LaunchError::LaunchFailed(format!(
-                                        "Failed to launch Git Bash: {}",
-                                        e
-                                    ))
-                                })?;
-                        } else {
-                            // Fallback: open bash.exe in a new cmd window
-                            Command::new("cmd")
-                                .arg("/c")
-                                .arg(format!(
-                                    "start \"\" \"{}\" -l -c \"cd {} && {}; exec bash -l\"",
-                                    bash_exe,
-                                    shell_quote(repo_path),
-                                    command
-                                ))
-                                .spawn()
-                                .map_err(|e| {
-                                    LaunchError::LaunchFailed(format!(
-                                        "Failed to launch Git Bash: {}",
-                                        e
-                                    ))
-                                })?;
-                        }
-                        launched = true;
-                        break;
-                    }
-                }
-                if !launched {
-                    return Err(LaunchError::LaunchFailed(
-                        "Git Bash not found".to_string(),
-                    ));
-                }
-            }
-            Some("windows-terminal") | None => {
-                // Try Windows Terminal first, fall back to cmd.
-                // Use /k so the terminal stays open after the command exits.
-                let wt_result = Command::new("wt.exe")
-                    .arg("new-tab")
-                    .arg("--startingDirectory")
-                    .arg(repo_path)
-                    .arg("cmd")
-                    .arg("/k")
-                    .arg(command)
-                    .spawn();
+        _terminal_preference: Option<&str>,
+    ) -> Result<u32, LaunchError> {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
-                match wt_result {
-                    Ok(_) => {}
-                    Err(_) => {
-                        Command::new("cmd")
-                            .arg("/c")
-                            .arg(format!(
-                                "start cmd /k \"cd /d {} && {}\"",
-                                repo_path, command
-                            ))
-                            .spawn()
-                            .map_err(|e| {
-                                LaunchError::LaunchFailed(format!(
-                                    "Failed to launch terminal: {}",
-                                    e
-                                ))
-                            })?;
-                    }
-                }
-            }
-            Some(other) => {
-                return Err(LaunchError::LaunchFailed(format!(
-                    "Unknown terminal: {}",
-                    other
-                )));
-            }
-        }
-        Ok(())
+        let child = Command::new("cmd")
+            .args(["/k", command])
+            .current_dir(repo_path)
+            .creation_flags(CREATE_NEW_CONSOLE)
+            .spawn()
+            .map_err(|e| {
+                LaunchError::LaunchFailed(format!("Failed to launch terminal: {}", e))
+            })?;
+
+        Ok(child.id())
     }
 }
 
 fn shell_quote(s: &str) -> String {
-    if s.contains(' ') || s.contains('"') || s.contains('\'') {
-        format!("'{}'", s.replace('\'', "'\\''"))
+    if cfg!(target_os = "windows") {
+        if s.contains(' ') || s.contains('"') || s.contains('&') || s.contains('^') {
+            format!("\"{}\"", s.replace('"', "\\\""))
+        } else {
+            s.to_string()
+        }
     } else {
-        s.to_string()
+        if s.contains(' ') || s.contains('"') || s.contains('\'') {
+            format!("'{}'", s.replace('\'', "'\\''"))
+        } else {
+            s.to_string()
+        }
     }
 }

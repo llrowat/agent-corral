@@ -11,7 +11,7 @@ export function OverviewPage({ scope }: Props) {
   const [status, setStatus] = useState<RepoStatus | null>(null);
   const [detection, setDetection] = useState<ClaudeDetection | null>(null);
   const [templates, setTemplates] = useState<CommandTemplate[]>([]);
-  const { sessions, launchSession } = useSessions();
+  const { sessions, launchSession, refresh } = useSessions();
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isGlobal = scope?.type === "global";
@@ -128,20 +128,34 @@ export function OverviewPage({ scope }: Props) {
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Status</th>
-                  <th>Started</th>
+                  <th>Command</th>
+                  <th>Launched</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
                 {recentSessions.map((s) => (
-                  <tr key={s.sessionId}>
+                  <tr
+                    key={s.sessionId}
+                    className="session-row-clickable"
+                    onClick={() => {
+                      if (s.pid) api.focusSession(s.pid);
+                    }}
+                  >
                     <td>{s.commandName}</td>
-                    <td>
-                      <span className={`status-pill status-${s.status}`}>
-                        {s.status}
-                      </span>
-                    </td>
+                    <td><code>{s.command}</code></td>
                     <td>{new Date(s.startedAt).toLocaleString()}</td>
+                    <td>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          api.deleteSession(s.sessionId).then(() => refresh());
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -1,16 +1,15 @@
 import { useState } from "react";
 import type { Scope, SessionEnvelope } from "@/types";
 import { useSessions } from "@/hooks/useSessions";
+import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
 }
 
 export function SessionsPage({ scope }: Props) {
-  const { sessions, loading, getLog, launchSession } = useSessions();
+  const { sessions, loading, launchSession, refresh } = useSessions();
   const [selectedSession, setSelectedSession] = useState<SessionEnvelope | null>(null);
-  const [logContent, setLogContent] = useState<string>("");
-  const [filter, setFilter] = useState<"all" | "running" | "success" | "failed">("all");
 
   if (scope?.type === "global") {
     return (
@@ -24,39 +23,36 @@ export function SessionsPage({ scope }: Props) {
 
   const filteredSessions = sessions.filter((s) => {
     if (repoPath && s.repoPath !== repoPath) return false;
-    if (filter !== "all" && s.status !== filter) return false;
     return true;
   });
 
-  const handleSelectSession = async (session: SessionEnvelope) => {
-    setSelectedSession(session);
+  const handleRerun = async (session: SessionEnvelope) => {
+    await launchSession(session.repoPath, session.commandName, session.command);
+  };
+
+  const handleDelete = async (session: SessionEnvelope) => {
     try {
-      const log = await getLog(session.sessionId, 200);
-      setLogContent(log);
-    } catch {
-      setLogContent("(Failed to load log)");
+      await api.deleteSession(session.sessionId);
+      if (selectedSession?.sessionId === session.sessionId) {
+        setSelectedSession(null);
+      }
+      await refresh();
+    } catch (e) {
+      alert(`Failed to delete session: ${e}`);
     }
   };
 
-  const handleRerun = async (session: SessionEnvelope) => {
-    await launchSession(session.repoPath, session.commandName, session.command);
+  const handleFocus = (session: SessionEnvelope) => {
+    if (session.pid) {
+      api.focusSession(session.pid);
+    }
+    setSelectedSession(session);
   };
 
   return (
     <div className="page sessions-page">
       <div className="page-header">
         <h2>Sessions</h2>
-        <div className="session-filters">
-          {(["all", "running", "success", "failed"] as const).map((f) => (
-            <button
-              key={f}
-              className={`btn btn-sm ${filter === f ? "active" : ""}`}
-              onClick={() => setFilter(f)}
-            >
-              {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
-        </div>
       </div>
 
       {loading && <p className="text-muted">Loading sessions...</p>}
@@ -70,19 +66,14 @@ export function SessionsPage({ scope }: Props) {
                 className={`session-item ${
                   selectedSession?.sessionId === session.sessionId ? "active" : ""
                 }`}
-                onClick={() => handleSelectSession(session)}
+                onClick={() => setSelectedSession(session)}
               >
                 <div className="session-item-header">
                   <span className="session-name">{session.commandName}</span>
-                  <span className={`status-pill status-${session.status}`}>
-                    {session.status}
-                  </span>
                 </div>
                 <div className="session-item-meta">
                   <span>{new Date(session.startedAt).toLocaleString()}</span>
-                  {session.exitCode !== null && (
-                    <span>exit: {session.exitCode}</span>
-                  )}
+                  <span className="text-muted">{session.command}</span>
                 </div>
               </div>
             ))}
@@ -106,10 +97,6 @@ export function SessionsPage({ scope }: Props) {
               <h3>{selectedSession.commandName}</h3>
               <div className="detail-grid">
                 <div className="detail-field">
-                  <label>Session ID</label>
-                  <code>{selectedSession.sessionId}</code>
-                </div>
-                <div className="detail-field">
                   <label>Command</label>
                   <code>{selectedSession.command}</code>
                 </div>
@@ -118,43 +105,30 @@ export function SessionsPage({ scope }: Props) {
                   <code>{selectedSession.repoPath}</code>
                 </div>
                 <div className="detail-field">
-                  <label>Status</label>
-                  <span className={`status-pill status-${selectedSession.status}`}>
-                    {selectedSession.status}
-                  </span>
-                </div>
-                <div className="detail-field">
-                  <label>Started</label>
+                  <label>Launched</label>
                   <span>{new Date(selectedSession.startedAt).toLocaleString()}</span>
                 </div>
-                {selectedSession.endedAt && (
-                  <div className="detail-field">
-                    <label>Ended</label>
-                    <span>
-                      {new Date(selectedSession.endedAt).toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                {selectedSession.exitCode !== null && (
-                  <div className="detail-field">
-                    <label>Exit Code</label>
-                    <code>{selectedSession.exitCode}</code>
-                  </div>
-                )}
               </div>
 
               <div className="session-actions">
+                <button
+                  className="btn"
+                  onClick={() => handleFocus(selectedSession)}
+                >
+                  Focus Terminal
+                </button>
                 <button
                   className="btn"
                   onClick={() => handleRerun(selectedSession)}
                 >
                   Re-run
                 </button>
-              </div>
-
-              <div className="session-log">
-                <h4>Output (last 200 lines)</h4>
-                <pre className="log-output">{logContent || "(empty)"}</pre>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => handleDelete(selectedSession)}
+                >
+                  Delete
+                </button>
               </div>
             </div>
           )}

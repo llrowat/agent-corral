@@ -64,8 +64,13 @@ body {
 
 .app-brand {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-icon {
+  width: 62px;
+  height: 62px;
 }
 
 .app-brand h1 {
@@ -444,6 +449,14 @@ body {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
+}
+
+.session-row-clickable {
+  cursor: pointer;
+}
+
+.session-row-clickable:hover {
+  background: var(--bg-hover);
 }
 
 /* -- Status Pills -- */
