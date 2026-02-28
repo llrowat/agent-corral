@@ -1,5 +1,7 @@
+use crate::session_manager::SessionEnvelope;
 use crate::terminal_launcher::TerminalLauncher;
 use crate::AppState;
+use std::process::Command;
 use uuid::Uuid;
 
 #[tauri::command]
@@ -61,4 +63,91 @@ pub fn launch_session(
         .map_err(|e| e.to_string())?;
 
     Ok(session_id)
+}
+
+/// Resume a dead worktree session by launching a new terminal in the existing
+/// worktree directory. Updates the session's PID and marks it alive again.
+#[tauri::command]
+pub fn resume_session(
+    state: tauri::State<AppState>,
+    session_id: String,
+    command: String,
+) -> Result<(), String> {
+    let terminal_pref = state
+        .preferences
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get_terminal_emulator();
+
+    let mut mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
+    let sessions = mgr.list_sessions().map_err(|e| e.to_string())?;
+
+    let session = sessions
+        .into_iter()
+        .find(|s| s.session_id == session_id)
+        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+    let launch_dir = session
+        .worktree_path
+        .as_deref()
+        .unwrap_or(&session.repo_path);
+
+    let pid = TerminalLauncher::launch(launch_dir, &command, terminal_pref.as_deref())
+        .map_err(|e| e.to_string())?;
+
+    let updated = SessionEnvelope {
+        pid: Some(pid),
+        process_alive: true,
+        command: command,
+        ..session
+    };
+    mgr.update_session_pub(&updated).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Open the session's working directory in the system file manager.
+#[tauri::command]
+pub fn open_session_folder(
+    state: tauri::State<AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    let mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
+    let sessions = mgr.list_sessions().map_err(|e| e.to_string())?;
+
+    let session = sessions
+        .iter()
+        .find(|s| s.session_id == session_id)
+        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+    let dir = session
+        .worktree_path
+        .as_deref()
+        .unwrap_or(&session.repo_path);
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    Ok(())
 }

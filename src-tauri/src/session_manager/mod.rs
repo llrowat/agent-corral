@@ -345,6 +345,11 @@ impl SessionManager {
         Ok(envelope)
     }
 
+    /// Update an existing session envelope on disk (public accessor).
+    pub fn update_session_pub(&mut self, envelope: &SessionEnvelope) -> Result<(), SessionError> {
+        self.update_session(envelope)
+    }
+
     /// Update an existing session envelope on disk (atomic write).
     fn update_session(&self, envelope: &SessionEnvelope) -> Result<(), SessionError> {
         let path = self

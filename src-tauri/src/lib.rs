@@ -102,6 +102,8 @@ pub fn run() {
             commands::claude::get_known_tools,
             // Terminal commands
             commands::terminal::launch_session,
+            commands::terminal::resume_session,
+            commands::terminal::open_session_folder,
             // Preferences commands
             commands::preferences::get_preferences,
             commands::preferences::set_terminal_preference,

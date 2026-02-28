@@ -63,6 +63,23 @@ export function SessionsPage({ scope }: Props) {
     );
   }, [launchSession]);
 
+  const handleResume = useCallback(async (session: SessionEnvelope) => {
+    try {
+      await api.resumeSession(session.sessionId, session.command);
+      await refresh();
+    } catch (e) {
+      alert(`Failed to resume session: ${e}`);
+    }
+  }, [refresh]);
+
+  const handleOpenFolder = useCallback(async (session: SessionEnvelope) => {
+    try {
+      await api.openSessionFolder(session.sessionId);
+    } catch (e) {
+      alert(`Failed to open folder: ${e}`);
+    }
+  }, []);
+
   const handleDelete = useCallback(async (session: SessionEnvelope) => {
     if (session.worktreePath) {
       const hasWork = worktreeStatus
@@ -222,12 +239,31 @@ export function SessionsPage({ scope }: Props) {
                     Focus Terminal
                   </button>
                 )}
-                <button
-                  className="btn"
-                  onClick={() => handleRerun(selectedSession)}
-                >
-                  Re-run
-                </button>
+                {selectedSession.worktreePath ? (
+                  <>
+                    {!selectedSession.processAlive && (
+                      <button
+                        className="btn"
+                        onClick={() => handleResume(selectedSession)}
+                      >
+                        Resume
+                      </button>
+                    )}
+                    <button
+                      className="btn"
+                      onClick={() => handleOpenFolder(selectedSession)}
+                    >
+                      Open Folder
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="btn"
+                    onClick={() => handleRerun(selectedSession)}
+                  >
+                    Re-run
+                  </button>
+                )}
                 <button
                   className="btn btn-danger"
                   onClick={() => handleDelete(selectedSession)}

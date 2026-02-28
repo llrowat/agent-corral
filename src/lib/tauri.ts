@@ -250,6 +250,17 @@ export async function launchSession(
   });
 }
 
+export async function resumeSession(
+  sessionId: string,
+  command: string
+): Promise<void> {
+  return invoke("resume_session", { sessionId, command });
+}
+
+export async function openSessionFolder(sessionId: string): Promise<void> {
+  return invoke("open_session_folder", { sessionId });
+}
+
 // -- Worktree commands --
 
 export async function getWorktreeStatus(
