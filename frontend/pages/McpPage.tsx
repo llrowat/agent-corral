@@ -408,6 +408,8 @@ export function McpPage({ scope, homePath }: Props) {
         </div>
       </div>
 
+      <p className="page-description">External tool servers that Claude Code connects to via the Model Context Protocol. MCP servers give Claude access to databases, APIs, file systems, and other integrations beyond its built-in tools.</p>
+
       {loading ? (
         <p className="text-muted">Loading servers...</p>
       ) : servers.length === 0 && globalServers.length === 0 ? (
