@@ -38,4 +38,4 @@ tempfile = "3"
 
 [lib]
 name = "agent_corral_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["rlib"]
