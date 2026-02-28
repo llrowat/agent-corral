@@ -1359,6 +1359,73 @@ code {
   flex: 1;
 }
 
+/* -- Global Hierarchy -- */
+.global-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 6px;
+  border-top: 1px solid var(--border);
+}
+
+.global-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.global-section-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.badge-global {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(139, 143, 163, 0.15);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.global-item {
+  opacity: 0.75;
+}
+
+.global-item:hover {
+  opacity: 1;
+}
+
+.global-item.active {
+  opacity: 1;
+}
+
+.global-card {
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+.global-card:hover {
+  opacity: 1;
+}
+
+.global-readonly-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: rgba(139, 143, 163, 0.08);
+  border-radius: var(--radius);
+}
+
 /* -- Scrollbar -- */
 ::-webkit-scrollbar {
   width: 6px;

@@ -4,6 +4,7 @@ import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
+  homePath: string | null;
 }
 
 function newServer(): McpServer {
@@ -20,8 +21,9 @@ function newServer(): McpServer {
 
 type View = "list" | "edit";
 
-export function McpPage({ scope }: Props) {
+export function McpPage({ scope, homePath }: Props) {
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [globalServers, setGlobalServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("list");
   const [editing, setEditing] = useState<McpServer | null>(null);
@@ -38,6 +40,7 @@ export function McpPage({ scope }: Props) {
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isGlobal = scope?.type === "global";
+  const isProjectScope = scope?.type === "project";
 
   const loadServers = useCallback(async () => {
     if (!basePath) return;
@@ -52,11 +55,25 @@ export function McpPage({ scope }: Props) {
     }
   }, [basePath, isGlobal]);
 
+  const loadGlobalServers = useCallback(async () => {
+    if (!isProjectScope || !homePath) {
+      setGlobalServers([]);
+      return;
+    }
+    try {
+      const result = await api.readMcpServers(homePath, true);
+      setGlobalServers(result);
+    } catch {
+      setGlobalServers([]);
+    }
+  }, [isProjectScope, homePath]);
+
   useEffect(() => {
     setView("list");
     setEditing(null);
     loadServers();
-  }, [loadServers, basePath]);
+    loadGlobalServers();
+  }, [loadServers, loadGlobalServers, basePath]);
 
   if (!scope) {
     return (
@@ -340,7 +357,7 @@ export function McpPage({ scope }: Props) {
 
       {loading ? (
         <p className="text-muted">Loading servers...</p>
-      ) : servers.length === 0 ? (
+      ) : servers.length === 0 && globalServers.length === 0 ? (
         <div className="packs-empty">
           <h3>No MCP Servers</h3>
           <p>
@@ -352,56 +369,110 @@ export function McpPage({ scope }: Props) {
           </button>
         </div>
       ) : (
-        <div className="packs-grid">
-          {servers.map((server) => (
-            <div key={server.serverId} className="pack-card">
-              <div className="pack-card-header">
-                <h3>{server.serverId}</h3>
-                <span className="pack-source-badge">{server.serverType}</span>
-              </div>
-              {server.serverType === "stdio" && server.command && (
-                <div className="pack-meta">
-                  <code>{server.command}</code>
-                </div>
-              )}
-              {(server.serverType === "http" ||
-                server.serverType === "sse") &&
-                server.url && (
-                  <div className="pack-meta">
-                    <code>{server.url}</code>
+        <>
+          {servers.length > 0 && (
+            <div className="packs-grid">
+              {servers.map((server) => (
+                <div key={server.serverId} className="pack-card">
+                  <div className="pack-card-header">
+                    <h3>{server.serverId}</h3>
+                    <span className="pack-source-badge">{server.serverType}</span>
                   </div>
-                )}
-              {server.args && server.args.length > 0 && (
-                <div className="pack-meta">
-                  <span>
-                    {server.args.length} arg(s)
-                  </span>
+                  {server.serverType === "stdio" && server.command && (
+                    <div className="pack-meta">
+                      <code>{server.command}</code>
+                    </div>
+                  )}
+                  {(server.serverType === "http" ||
+                    server.serverType === "sse") &&
+                    server.url && (
+                      <div className="pack-meta">
+                        <code>{server.url}</code>
+                      </div>
+                    )}
+                  {server.args && server.args.length > 0 && (
+                    <div className="pack-meta">
+                      <span>
+                        {server.args.length} arg(s)
+                      </span>
+                    </div>
+                  )}
+                  {server.env && Object.keys(server.env).length > 0 && (
+                    <div className="pack-meta">
+                      <span>
+                        {Object.keys(server.env).length} env var(s)
+                      </span>
+                    </div>
+                  )}
+                  <div className="pack-actions">
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => startEdit(server)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => handleDelete(server.serverId)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-              )}
-              {server.env && Object.keys(server.env).length > 0 && (
-                <div className="pack-meta">
-                  <span>
-                    {Object.keys(server.env).length} env var(s)
-                  </span>
-                </div>
-              )}
-              <div className="pack-actions">
-                <button
-                  className="btn btn-sm"
-                  onClick={() => startEdit(server)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => handleDelete(server.serverId)}
-                >
-                  Delete
-                </button>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+          {servers.length === 0 && isProjectScope && (
+            <p className="text-muted" style={{ marginTop: 16 }}>No project-level MCP servers configured.</p>
+          )}
+          {isProjectScope && globalServers.length > 0 && (
+            <>
+              <div className="global-section-header" style={{ marginTop: 24 }}>
+                <span className="global-section-label">Global MCP Servers</span>
+                <span className="global-section-hint">Switch to Global Settings to edit</span>
+              </div>
+              <div className="packs-grid">
+                {globalServers.map((server) => (
+                  <div key={`global-${server.serverId}`} className="pack-card global-card">
+                    <div className="pack-card-header">
+                      <h3>
+                        {server.serverId}
+                        <span className="badge-global" style={{ marginLeft: 8 }}>global</span>
+                      </h3>
+                      <span className="pack-source-badge">{server.serverType}</span>
+                    </div>
+                    {server.serverType === "stdio" && server.command && (
+                      <div className="pack-meta">
+                        <code>{server.command}</code>
+                      </div>
+                    )}
+                    {(server.serverType === "http" ||
+                      server.serverType === "sse") &&
+                      server.url && (
+                        <div className="pack-meta">
+                          <code>{server.url}</code>
+                        </div>
+                      )}
+                    {server.args && server.args.length > 0 && (
+                      <div className="pack-meta">
+                        <span>
+                          {server.args.length} arg(s)
+                        </span>
+                      </div>
+                    )}
+                    {server.env && Object.keys(server.env).length > 0 && (
+                      <div className="pack-meta">
+                        <span>
+                          {Object.keys(server.env).length} env var(s)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );

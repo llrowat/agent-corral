@@ -5,6 +5,7 @@ import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
+  homePath: string | null;
 }
 
 function newHandler(): HookHandler {
@@ -15,14 +16,17 @@ function newGroup(): HookGroup {
   return { matcher: null, hooks: [newHandler()] };
 }
 
-export function HooksPage({ scope }: Props) {
+export function HooksPage({ scope, homePath }: Props) {
   const [hooks, setHooks] = useState<HookEvent[]>([]);
+  const [globalHooks, setGlobalHooks] = useState<HookEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
+  const [selectedIsGlobal, setSelectedIsGlobal] = useState(false);
   const [editing, setEditing] = useState<HookEvent | null>(null);
   const [saving, setSaving] = useState(false);
   const [isNew, setIsNew] = useState(false);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+  const isProjectScope = scope?.type === "project";
 
   const loadHooks = useCallback(async () => {
     if (!basePath) return;
@@ -34,11 +38,26 @@ export function HooksPage({ scope }: Props) {
     }
   }, [basePath]);
 
+  const loadGlobalHooks = useCallback(async () => {
+    if (!isProjectScope || !homePath) {
+      setGlobalHooks([]);
+      return;
+    }
+    try {
+      const result = await api.readHooks(homePath);
+      setGlobalHooks(result);
+    } catch {
+      setGlobalHooks([]);
+    }
+  }, [isProjectScope, homePath]);
+
   useEffect(() => {
     setSelectedEvent(null);
+    setSelectedIsGlobal(false);
     setEditing(null);
     loadHooks();
-  }, [loadHooks, basePath]);
+    loadGlobalHooks();
+  }, [loadHooks, loadGlobalHooks, basePath]);
 
   if (!scope) {
     return (
@@ -48,7 +67,9 @@ export function HooksPage({ scope }: Props) {
     );
   }
 
-  const selected = hooks.find((h) => h.event === selectedEvent) ?? null;
+  const selected = selectedIsGlobal
+    ? globalHooks.find((h) => h.event === selectedEvent) ?? null
+    : hooks.find((h) => h.event === selectedEvent) ?? null;
   const currentEvent = editing ?? selected;
 
   const handleSave = async () => {
@@ -149,13 +170,14 @@ export function HooksPage({ scope }: Props) {
               <li
                 key={hookEvent.event}
                 className={`agent-list-item ${
-                  currentEvent?.event === hookEvent.event ? "active" : ""
+                  currentEvent?.event === hookEvent.event && !selectedIsGlobal ? "active" : ""
                 }`}
               >
                 <button
                   className="agent-select"
                   onClick={() => {
                     setSelectedEvent(hookEvent.event);
+                    setSelectedIsGlobal(false);
                     setEditing(null);
                     setIsNew(false);
                   }}
@@ -175,12 +197,53 @@ export function HooksPage({ scope }: Props) {
                 </button>
               </li>
             ))}
-            {hooks.length === 0 && (
+            {hooks.length === 0 && !isProjectScope && (
+              <li className="text-muted" style={{ padding: "12px" }}>
+                No hooks configured
+              </li>
+            )}
+            {isProjectScope && hooks.length === 0 && globalHooks.length === 0 && (
               <li className="text-muted" style={{ padding: "12px" }}>
                 No hooks configured
               </li>
             )}
           </ul>
+          {isProjectScope && globalHooks.length > 0 && (
+            <>
+              <div className="global-section-header">
+                <span className="global-section-label">Global</span>
+              </div>
+              <ul className="agent-list">
+                {globalHooks.map((hookEvent) => (
+                  <li
+                    key={`global-${hookEvent.event}`}
+                    className={`agent-list-item global-item ${
+                      currentEvent?.event === hookEvent.event && selectedIsGlobal ? "active" : ""
+                    }`}
+                  >
+                    <button
+                      className="agent-select"
+                      onClick={() => {
+                        setSelectedEvent(hookEvent.event);
+                        setSelectedIsGlobal(true);
+                        setEditing(null);
+                        setIsNew(false);
+                      }}
+                    >
+                      <span className="agent-name">
+                        {hookEvent.event}
+                        <span className="badge-global">global</span>
+                      </span>
+                      <span className="agent-id">
+                        {hookEvent.groups.length} group(s),{" "}
+                        {hookEvent.groups.reduce((sum, g) => sum + g.hooks.length, 0)} handler(s)
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
 
         <div className="panel-right">
@@ -355,7 +418,15 @@ export function HooksPage({ scope }: Props) {
             </div>
           ) : (
             <div className="agent-detail">
-              <h3>{selected!.event}</h3>
+              <h3>
+                {selected!.event}
+                {selectedIsGlobal && <span className="badge-global" style={{ marginLeft: 8 }}>global</span>}
+              </h3>
+              {selectedIsGlobal && (
+                <p className="global-readonly-hint">
+                  This hook is defined in the global scope. Switch to Global Settings to edit it.
+                </p>
+              )}
               {selected!.groups.map((group, gi) => (
                 <div key={gi} className="hook-group-detail">
                   <h4>Group {gi + 1}</h4>
@@ -393,14 +464,16 @@ export function HooksPage({ scope }: Props) {
                   ))}
                 </div>
               ))}
-              <div className="form-actions">
-                <button
-                  className="btn"
-                  onClick={() => setEditing({ ...selected! })}
-                >
-                  Edit
-                </button>
-              </div>
+              {!selectedIsGlobal && (
+                <div className="form-actions">
+                  <button
+                    className="btn"
+                    onClick={() => setEditing({ ...selected! })}
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
