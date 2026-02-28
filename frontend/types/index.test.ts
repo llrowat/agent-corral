@@ -3,14 +3,9 @@ import type {
   Repo,
   RepoStatus,
   SessionEnvelope,
-  WorktreeStatus,
   SessionActivity,
   SessionActivityMap,
-  ClaudeDetection,
-  NormalizedConfig,
   Agent,
-  MemoryStore,
-  MemoryEntry,
   HookHandler,
   HookGroup,
   HookEvent,
@@ -20,8 +15,6 @@ import type {
   Scope,
   PageId,
   PluginSummary,
-  PluginContents,
-  PluginImportPreview,
 } from "./index";
 import { HOOK_EVENTS } from "./index";
 
