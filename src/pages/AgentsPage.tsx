@@ -2,6 +2,15 @@ import { useEffect, useState, useCallback } from "react";
 import type { Scope, Agent, MemoryStore } from "@/types";
 import * as api from "@/lib/tauri";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
+import { PresetPicker } from "@/components/PresetPicker";
+import { AGENT_PRESETS, type AgentPreset } from "@/lib/presets";
+import { ScopeBanner } from "@/components/ScopeGuard";
+import {
+  validateAgentId,
+  validateRequired,
+  FieldError,
+  type ValidationError,
+} from "@/components/InlineValidation";
 
 interface Props {
   scope: Scope | null;
@@ -29,6 +38,8 @@ export function AgentsPage({ scope, homePath }: Props) {
   const [knownTools, setKnownTools] = useState<string[]>([]);
   const [memoryStores, setMemoryStores] = useState<MemoryStore[]>([]);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [errors, setErrors] = useState<Record<string, ValidationError | null>>({});
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isProjectScope = scope?.type === "project";
@@ -72,25 +83,45 @@ export function AgentsPage({ scope, homePath }: Props) {
     );
   }
 
+  const handleSelectPreset = (preset: AgentPreset) => {
+    setEditing({ ...preset.agent });
+    setSelected(null);
+    setErrors({});
+  };
+
+  const handleCopyToGlobal = async (agent: Agent) => {
+    if (!homePath) return;
+    try {
+      await api.writeAgent(homePath, agent);
+      await loadGlobalAgents();
+    } catch (e) {
+      console.error("Failed to copy agent to global:", e);
+    }
+  };
+
+  const handleCopyToProject = async (agent: Agent) => {
+    if (!basePath) return;
+    try {
+      await api.writeAgent(basePath, agent);
+      await loadAgents();
+    } catch (e) {
+      console.error("Failed to copy agent to project:", e);
+    }
+  };
+
   const handleSave = async () => {
     if (!editing || !basePath) return;
 
-    if (!editing.agentId.trim()) {
-      alert("Agent ID is required");
-      return;
-    }
-    if (!editing.name.trim()) {
-      alert("Agent name is required");
-      return;
-    }
-    if (!editing.systemPrompt.trim()) {
-      alert("System prompt cannot be empty");
-      return;
-    }
-    if (!/^[a-z0-9-]+$/.test(editing.agentId)) {
-      alert("Agent ID must be a lowercase slug (letters, numbers, hyphens)");
-      return;
-    }
+    const newErrors: Record<string, ValidationError | null> = {};
+    newErrors.agentId = validateAgentId(editing.agentId);
+    newErrors.name = validateRequired("name", editing.name, "Agent name");
+    newErrors.systemPrompt = validateRequired(
+      "systemPrompt",
+      editing.systemPrompt,
+      "System prompt"
+    );
+    setErrors(newErrors);
+    if (Object.values(newErrors).some((e) => e !== null)) return;
 
     setSaving(true);
     try {
@@ -131,11 +162,18 @@ export function AgentsPage({ scope, homePath }: Props) {
 
   return (
     <div className="page agents-page">
+      {scope && <ScopeBanner scope={scope} />}
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
             <h3>Agents</h3>
             <div className="header-actions">
+              <button
+                className="btn btn-sm"
+                onClick={() => setShowPresets(true)}
+              >
+                From Template
+              </button>
               {basePath && (
                 <button
                   className="btn btn-sm"
@@ -149,6 +187,7 @@ export function AgentsPage({ scope, homePath }: Props) {
                 onClick={() => {
                   setEditing(newAgent());
                   setSelected(null);
+                  setErrors({});
                 }}
               >
                 + New
@@ -241,11 +280,20 @@ export function AgentsPage({ scope, homePath }: Props) {
                 <input
                   type="text"
                   value={editing.agentId}
-                  onChange={(e) =>
-                    setEditing({ ...editing, agentId: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setEditing({ ...editing, agentId: e.target.value });
+                    setErrors({ ...errors, agentId: null });
+                  }}
                   placeholder="my-agent"
                   disabled={!isNewAgent}
+                  className={errors.agentId ? "input-error" : ""}
+                />
+                <FieldError
+                  error={errors.agentId ?? null}
+                  onAutoFix={(val) => {
+                    setEditing({ ...editing, agentId: val });
+                    setErrors({ ...errors, agentId: null });
+                  }}
                 />
               </div>
               <div className="form-group">
@@ -253,22 +301,28 @@ export function AgentsPage({ scope, homePath }: Props) {
                 <input
                   type="text"
                   value={editing.name}
-                  onChange={(e) =>
-                    setEditing({ ...editing, name: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setEditing({ ...editing, name: e.target.value });
+                    setErrors({ ...errors, name: null });
+                  }}
                   placeholder="My Agent"
+                  className={errors.name ? "input-error" : ""}
                 />
+                <FieldError error={errors.name ?? null} />
               </div>
               <div className="form-group">
                 <label>System Prompt</label>
                 <textarea
                   rows={12}
                   value={editing.systemPrompt}
-                  onChange={(e) =>
-                    setEditing({ ...editing, systemPrompt: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setEditing({ ...editing, systemPrompt: e.target.value });
+                    setErrors({ ...errors, systemPrompt: null });
+                  }}
                   placeholder="You are a helpful assistant that..."
+                  className={errors.systemPrompt ? "input-error" : ""}
                 />
+                <FieldError error={errors.systemPrompt ?? null} />
               </div>
 
               <div className="form-group">
@@ -386,16 +440,37 @@ export function AgentsPage({ scope, homePath }: Props) {
                   <code>{selected!.memoryBinding}</code>
                 </div>
               )}
-              {!selectedIsGlobal && (
-                <div className="form-actions">
+              <div className="form-actions">
+                {!selectedIsGlobal && (
                   <button
                     className="btn"
-                    onClick={() => setEditing({ ...selected! })}
+                    onClick={() => {
+                      setEditing({ ...selected! });
+                      setErrors({});
+                    }}
                   >
                     Edit
                   </button>
-                </div>
-              )}
+                )}
+                {!selectedIsGlobal && isProjectScope && homePath && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => handleCopyToGlobal(selected!)}
+                    title="Copy this agent to global scope"
+                  >
+                    Copy to Global
+                  </button>
+                )}
+                {selectedIsGlobal && isProjectScope && basePath && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => handleCopyToProject(selected!)}
+                    title="Copy this agent to project scope"
+                  >
+                    Copy to Project
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -406,6 +481,14 @@ export function AgentsPage({ scope, homePath }: Props) {
           repoPath={basePath}
           onClose={() => setShowAiModal(false)}
           onCreated={() => loadAgents()}
+        />
+      )}
+      {showPresets && (
+        <PresetPicker
+          title="Agent Templates"
+          presets={AGENT_PRESETS}
+          onSelect={handleSelectPreset}
+          onClose={() => setShowPresets(false)}
         />
       )}
     </div>

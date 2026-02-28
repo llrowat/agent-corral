@@ -1,13 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Scope, RepoStatus, ClaudeDetection, CommandTemplate } from "@/types";
 import * as api from "@/lib/tauri";
 import { useSessions } from "@/hooks/useSessions";
+import { QuickSetup } from "@/components/QuickSetup";
+import { ConfigSummary } from "@/components/ConfigSummary";
+import { ScopeBanner } from "@/components/ScopeGuard";
 
 interface Props {
   scope: Scope | null;
 }
 
 export function OverviewPage({ scope }: Props) {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<RepoStatus | null>(null);
   const [detection, setDetection] = useState<ClaudeDetection | null>(null);
   const [templates, setTemplates] = useState<CommandTemplate[]>([]);
@@ -21,6 +26,11 @@ export function OverviewPage({ scope }: Props) {
   const isGlobal = scope?.type === "global";
   const isGitRepo = status?.is_git_repo ?? false;
 
+  const reloadDetection = useCallback(() => {
+    if (!basePath) return;
+    api.detectClaudeConfig(basePath).then(setDetection);
+  }, [basePath]);
+
   useEffect(() => {
     if (!basePath) {
       setStatus(null);
@@ -32,8 +42,8 @@ export function OverviewPage({ scope }: Props) {
     } else {
       setStatus(null);
     }
-    api.detectClaudeConfig(basePath).then(setDetection);
-  }, [basePath, isGlobal]);
+    reloadDetection();
+  }, [basePath, isGlobal, reloadDetection]);
 
   useEffect(() => {
     if (!isGlobal) {
@@ -111,6 +121,19 @@ export function OverviewPage({ scope }: Props) {
     <div className="page overview-page">
       <h2>{heading}</h2>
       <p className="repo-path-display">{pathDisplay}</p>
+
+      <ScopeBanner scope={scope} />
+
+      {scope && <ConfigSummary scope={scope} key={basePath} />}
+
+      {detection && basePath && !isGlobal && (
+        <QuickSetup
+          basePath={basePath}
+          detection={detection}
+          onApplied={reloadDetection}
+          onNavigate={(page) => navigate(page)}
+        />
+      )}
 
       <section className="overview-section">
         <h3>{isGlobal ? "Global Detection" : "Repo Status"}</h3>

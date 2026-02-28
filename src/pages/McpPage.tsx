@@ -2,6 +2,14 @@ import { useEffect, useState, useCallback } from "react";
 import type { Scope, McpServer } from "@/types";
 import * as api from "@/lib/tauri";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
+import { PresetPicker } from "@/components/PresetPicker";
+import { MCP_PRESETS, type McpPreset } from "@/lib/presets";
+import { ScopeBanner, McpFileIndicator } from "@/components/ScopeGuard";
+import {
+  validateServerId,
+  FieldError,
+  type ValidationError,
+} from "@/components/InlineValidation";
 
 interface Props {
   scope: Scope | null;
@@ -31,6 +39,10 @@ export function McpPage({ scope, homePath }: Props) {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [serverIdError, setServerIdError] = useState<ValidationError | null>(
+    null
+  );
 
   // Env/headers editor state
   const [envPairs, setEnvPairs] = useState<{ key: string; value: string }[]>(
@@ -90,6 +102,7 @@ export function McpPage({ scope, homePath }: Props) {
     setIsNew(false);
     setEnvPairs(objToPairs(server.env));
     setHeaderPairs(objToPairs(server.headers));
+    setServerIdError(null);
     setView("edit");
   };
 
@@ -99,21 +112,24 @@ export function McpPage({ scope, homePath }: Props) {
     setIsNew(true);
     setEnvPairs([]);
     setHeaderPairs([]);
+    setServerIdError(null);
+    setView("edit");
+  };
+
+  const handleSelectPreset = (preset: McpPreset) => {
+    setEditing({ ...preset.server });
+    setIsNew(true);
+    setEnvPairs(objToPairs(preset.server.env));
+    setHeaderPairs(objToPairs(preset.server.headers));
+    setServerIdError(null);
     setView("edit");
   };
 
   const handleSave = async () => {
     if (!editing || !basePath) return;
-    if (!editing.serverId.trim()) {
-      alert("Server ID is required");
-      return;
-    }
-    if (!/^[a-zA-Z0-9_-]+$/.test(editing.serverId)) {
-      alert(
-        "Server ID must only contain letters, numbers, hyphens, and underscores"
-      );
-      return;
-    }
+    const err = validateServerId(editing.serverId);
+    setServerIdError(err);
+    if (err) return;
 
     setSaving(true);
     try {
@@ -127,7 +143,7 @@ export function McpPage({ scope, homePath }: Props) {
       setView("list");
       setEditing(null);
     } catch (e) {
-      alert(`Failed to save server: ${e}`);
+      console.error(`Failed to save server: ${e}`);
     } finally {
       setSaving(false);
     }
@@ -140,18 +156,22 @@ export function McpPage({ scope, homePath }: Props) {
       await api.deleteMcpServer(basePath, serverId, isGlobal);
       await loadServers();
     } catch (e) {
-      alert(`Failed to delete server: ${e}`);
+      console.error(`Failed to delete server: ${e}`);
     }
   };
 
   if (view === "edit" && editing) {
     return (
       <div className="page mcp-page">
+        {scope && <ScopeBanner scope={scope} />}
         <div className="page-header">
           <h2>{isNew ? "Add MCP Server" : `Edit: ${editing.serverId}`}</h2>
-          <button className="btn" onClick={() => setView("list")}>
-            Back
-          </button>
+          <div className="header-actions">
+            <McpFileIndicator scope={scope} />
+            <button className="btn" onClick={() => setView("list")}>
+              Back
+            </button>
+          </div>
         </div>
 
         <div className="export-form">
@@ -160,11 +180,20 @@ export function McpPage({ scope, homePath }: Props) {
             <input
               type="text"
               value={editing.serverId}
-              onChange={(e) =>
-                setEditing({ ...editing, serverId: e.target.value })
-              }
+              onChange={(e) => {
+                setEditing({ ...editing, serverId: e.target.value });
+                setServerIdError(null);
+              }}
               placeholder="my-server"
               disabled={!isNew}
+              className={serverIdError ? "input-error" : ""}
+            />
+            <FieldError
+              error={serverIdError}
+              onAutoFix={(val) => {
+                setEditing({ ...editing, serverId: val });
+                setServerIdError(null);
+              }}
             />
           </div>
 
@@ -350,9 +379,19 @@ export function McpPage({ scope, homePath }: Props) {
   // List view
   return (
     <div className="page mcp-page">
+      {scope && <ScopeBanner scope={scope} />}
       <div className="page-header">
-        <h2>MCP Servers</h2>
+        <h2>
+          MCP Servers{" "}
+          <McpFileIndicator scope={scope} />
+        </h2>
         <div className="header-actions">
+          <button
+            className="btn btn-sm"
+            onClick={() => setShowPresets(true)}
+          >
+            From Template
+          </button>
           {basePath && (
             <button
               className="btn btn-sm"
@@ -376,9 +415,17 @@ export function McpPage({ scope, homePath }: Props) {
             Configure MCP (Model Context Protocol) servers that Claude Code can
             use for additional tool integrations.
           </p>
-          <button className="btn btn-primary" onClick={startNew}>
-            Add Server
-          </button>
+          <div className="form-actions" style={{ justifyContent: "center" }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowPresets(true)}
+            >
+              Pick a Template
+            </button>
+            <button className="btn" onClick={startNew}>
+              Create from Scratch
+            </button>
+          </div>
         </div>
       ) : (
         <>
@@ -492,6 +539,14 @@ export function McpPage({ scope, homePath }: Props) {
           repoPath={basePath}
           onClose={() => setShowAiModal(false)}
           onCreated={() => loadServers()}
+        />
+      )}
+      {showPresets && (
+        <PresetPicker
+          title="MCP Server Templates"
+          presets={MCP_PRESETS}
+          onSelect={handleSelectPreset}
+          onClose={() => setShowPresets(false)}
         />
       )}
     </div>

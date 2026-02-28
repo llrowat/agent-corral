@@ -1772,6 +1772,348 @@ code {
   padding-left: 28px;
 }
 
+/* -- Quick Setup -- */
+.quick-setup {
+  margin-bottom: 28px;
+  padding: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.quick-setup h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.quick-setup-compact h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.starter-templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.starter-template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.starter-template-card:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.starter-template-card:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.starter-template-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.starter-template-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.quick-setup-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.quick-setup-divider::before,
+.quick-setup-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.quick-setup-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-setup-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.quick-setup-step.done {
+  opacity: 0.6;
+}
+
+.quick-setup-step-icon {
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.quick-setup-step.done .quick-setup-step-icon {
+  color: var(--success);
+}
+
+.quick-setup-step-label {
+  flex: 1;
+}
+
+.quick-setup-step-action {
+  flex-shrink: 0;
+}
+
+.quick-setup-success {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.quick-setup-check {
+  font-size: 24px;
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.quick-setup-progress-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.quick-setup-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.quick-setup-remaining {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* -- Config Summary (Unified Dashboard) -- */
+.config-summary {
+  margin-bottom: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.config-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  gap: 12px;
+}
+
+.config-summary-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-summary-details {
+  border-top: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-summary-section label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.config-summary-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* -- Config Init Card -- */
+.config-init-card {
+  max-width: 500px;
+  padding: 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.config-init-card h3 {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.config-init-defaults {
+  margin-bottom: 16px;
+}
+
+.config-init-preview {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* -- Scope Banner -- */
+.scope-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.scope-banner-warning {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  color: var(--warning);
+}
+
+.scope-banner-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* -- MCP File Indicator -- */
+.mcp-file-indicator {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* -- Copy to Scope -- */
+.copy-to-scope-btn {
+  font-size: 11px;
+}
+
+/* -- Inline Validation -- */
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(248, 113, 113, 0.08);
+  border-radius: var(--radius);
+}
+
+.field-error-message {
+  font-size: 12px;
+  color: var(--danger);
+  flex: 1;
+}
+
+.field-error-fix {
+  padding: 2px 8px;
+  background: rgba(108, 122, 255, 0.1);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.field-error-fix:hover {
+  background: rgba(108, 122, 255, 0.2);
+}
+
+input.input-error,
+textarea.input-error {
+  border-color: var(--danger);
+}
+
+/* -- Preset Picker -- */
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.preset-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text-primary);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.preset-item:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.preset-item-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.preset-item-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* -- Scrollbar -- */
 ::-webkit-scrollbar {
   width: 6px;
