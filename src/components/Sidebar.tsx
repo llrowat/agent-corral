@@ -19,7 +19,7 @@ const navGroups: NavGroup[] = [
     items: [
       { path: "/overview", label: "Overview", icon: "grid" },
       { path: "/sessions", label: "Sessions", icon: "terminal", projectOnly: true },
-      { path: "/templates", label: "Commands", icon: "template" },
+      { path: "/templates", label: "Launchers", icon: "template" },
     ],
   },
   {

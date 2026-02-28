@@ -137,7 +137,7 @@ export function OverviewPage({ scope }: Props) {
       {!isGlobal && (
         <section className="overview-section">
           <div className="section-header-row">
-            <h3>Commands</h3>
+            <h3>Launchers</h3>
             {isGitRepo && (
               <div className="worktree-toggle">
                 <label className="worktree-checkbox-label">

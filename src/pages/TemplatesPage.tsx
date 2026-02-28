@@ -92,7 +92,7 @@ export function TemplatesPage() {
       setEditing(null);
       setIsNew(false);
     } catch (e) {
-      alert(`Failed to save command: ${e}`);
+      alert(`Failed to save launcher: ${e}`);
     } finally {
       setSaving(false);
     }
@@ -100,14 +100,14 @@ export function TemplatesPage() {
 
   const handleDelete = async (id: string) => {
     if (isBuiltin(id)) return;
-    if (!confirm(`Delete this command?`)) return;
+    if (!confirm(`Delete this launcher?`)) return;
     try {
       await api.deleteTemplate(id);
       await loadTemplates();
       if (selectedId === id) setSelectedId(null);
       if (editing?.templateId === id) setEditing(null);
     } catch (e) {
-      alert(`Failed to delete command: ${e}`);
+      alert(`Failed to delete launcher: ${e}`);
     }
   };
 
@@ -116,7 +116,7 @@ export function TemplatesPage() {
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
-            <h3>Commands</h3>
+            <h3>Launchers</h3>
             <button className="btn btn-sm" onClick={startNew}>
               + New
             </button>
@@ -158,7 +158,7 @@ export function TemplatesPage() {
             ))}
             {templates.length === 0 && (
               <li className="text-muted" style={{ padding: "12px" }}>
-                No commands found
+                No launchers found
               </li>
             )}
           </ul>
@@ -167,11 +167,11 @@ export function TemplatesPage() {
         <div className="panel-right">
           {!current ? (
             <div className="panel-empty">
-              <p>Select a command or create a new one.</p>
+              <p>Select a launcher or create a new one.</p>
             </div>
           ) : editing ? (
             <div className="agent-editor">
-              <h3>{isNew ? "New Command" : `Edit: ${editing.name}`}</h3>
+              <h3>{isNew ? "New Launcher" : `Edit: ${editing.name}`}</h3>
 
               <div className="form-group">
                 <label>Name</label>
@@ -181,7 +181,7 @@ export function TemplatesPage() {
                   onChange={(e) =>
                     setEditing({ ...editing, name: e.target.value })
                   }
-                  placeholder="My Custom Command"
+                  placeholder="My Custom Launcher"
                 />
               </div>
 
@@ -193,7 +193,7 @@ export function TemplatesPage() {
                   onChange={(e) =>
                     setEditing({ ...editing, description: e.target.value })
                   }
-                  placeholder="What this command does"
+                  placeholder="What this launcher does"
                 />
               </div>
 
