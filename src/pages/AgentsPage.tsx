@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope, Agent, MemoryStore } from "@/types";
 import * as api from "@/lib/tauri";
+import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 
 interface Props {
   scope: Scope | null;
@@ -27,6 +28,7 @@ export function AgentsPage({ scope, homePath }: Props) {
   const [saving, setSaving] = useState(false);
   const [knownTools, setKnownTools] = useState<string[]>([]);
   const [memoryStores, setMemoryStores] = useState<MemoryStore[]>([]);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isProjectScope = scope?.type === "project";
@@ -133,15 +135,25 @@ export function AgentsPage({ scope, homePath }: Props) {
         <div className="panel-left">
           <div className="panel-header">
             <h3>Agents</h3>
-            <button
-              className="btn btn-sm"
-              onClick={() => {
-                setEditing(newAgent());
-                setSelected(null);
-              }}
-            >
-              + New
-            </button>
+            <div className="header-actions">
+              {basePath && (
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setShowAiModal(true)}
+                >
+                  AI Create
+                </button>
+              )}
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  setEditing(newAgent());
+                  setSelected(null);
+                }}
+              >
+                + New
+              </button>
+            </div>
           </div>
           <ul className="agent-list">
             {agents.map((agent) => (
@@ -388,6 +400,14 @@ export function AgentsPage({ scope, homePath }: Props) {
           )}
         </div>
       </div>
+      {showAiModal && basePath && (
+        <CreateWithAiModal
+          entityType="agent"
+          repoPath={basePath}
+          onClose={() => setShowAiModal(false)}
+          onCreated={() => loadAgents()}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope, McpServer } from "@/types";
 import * as api from "@/lib/tauri";
+import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 
 interface Props {
   scope: Scope | null;
@@ -29,6 +30,7 @@ export function McpPage({ scope, homePath }: Props) {
   const [editing, setEditing] = useState<McpServer | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   // Env/headers editor state
   const [envPairs, setEnvPairs] = useState<{ key: string; value: string }[]>(
@@ -350,9 +352,19 @@ export function McpPage({ scope, homePath }: Props) {
     <div className="page mcp-page">
       <div className="page-header">
         <h2>MCP Servers</h2>
-        <button className="btn btn-primary btn-sm" onClick={startNew}>
-          + Add Server
-        </button>
+        <div className="header-actions">
+          {basePath && (
+            <button
+              className="btn btn-sm"
+              onClick={() => setShowAiModal(true)}
+            >
+              AI Create
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={startNew}>
+            + Add Server
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -473,6 +485,14 @@ export function McpPage({ scope, homePath }: Props) {
             </>
           )}
         </>
+      )}
+      {showAiModal && basePath && (
+        <CreateWithAiModal
+          entityType="mcp"
+          repoPath={basePath}
+          onClose={() => setShowAiModal(false)}
+          onCreated={() => loadServers()}
+        />
       )}
     </div>
   );
