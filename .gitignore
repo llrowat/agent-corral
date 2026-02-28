@@ -17,7 +17,7 @@ target/
 Thumbs.db
 
 # Tauri generated
-src-tauri/gen/
+backend/gen/
 
 # Env files
 .env
