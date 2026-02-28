@@ -1,4 +1,4 @@
-# AgentCorral - Claude Code Command Center
+# AgentCorral - Claude Code Workspace Manager
 
 ## Project Structure
 

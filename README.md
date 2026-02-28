@@ -4,7 +4,7 @@
 
 <h1 align="center">AgentCorral</h1>
 
-<p align="center"><strong>Claude Code Command Center</strong> — a desktop app for managing Claude Code agents, configs, hooks, skills, MCP servers, memory, sessions, and plugins across your repositories.</p>
+<p align="center"><strong>Claude Code Workspace Manager</strong> — a desktop app for managing Claude Code agents, configs, hooks, skills, MCP servers, memory, sessions, and plugins across your repositories.</p>
 
 Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
