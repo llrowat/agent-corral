@@ -29,9 +29,9 @@ npm run tauri build
 
 ## Project Structure
 
-- `src-tauri/` — Rust backend (Tauri app, state management, IPC commands)
+- `backend/` — Rust backend (Tauri app, state management, IPC commands)
 - `bridge/` — Standalone Rust binary for session wrapping
-- `src/` — React + TypeScript frontend
+- `frontend/` — React + TypeScript frontend
 - See `CLAUDE.md` for detailed architecture notes
 
 ## How to Contribute
@@ -64,8 +64,8 @@ Open an issue describing the use case and proposed solution.
 
 - **ClaudeRepoAdapter** isolates all Claude file format concerns. Never read/write Claude config files directly outside this module.
 - **Atomic file writes** everywhere — write to `.tmp`, then rename.
-- **Tauri IPC commands** go in `src-tauri/src/commands/`. Each domain gets its own file.
-- **TypeScript bindings** in `src/lib/tauri.ts` must stay in sync with Rust command signatures.
+- **Tauri IPC commands** go in `backend/src/commands/`. Each domain gets its own file.
+- **TypeScript bindings** in `frontend/lib/tauri.ts` must stay in sync with Rust command signatures.
 
 ## License
 

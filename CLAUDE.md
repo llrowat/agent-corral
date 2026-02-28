@@ -6,7 +6,7 @@ This is a Tauri v2 + React (TypeScript) desktop application with a Rust backend.
 
 ```
 agent-corral/
-├── src-tauri/          # Rust backend (Tauri app)
+├── backend/            # Rust backend (Tauri app)
 │   ├── src/
 │   │   ├── lib.rs              # App entry, state management
 │   │   ├── main.rs             # Binary entry
@@ -19,7 +19,7 @@ agent-corral/
 │   │   ├── command_templates/  # Template engine with variable substitution
 │   │   └── terminal_launcher/  # Native terminal spawning (per-platform)
 │   └── tauri.conf.json
-├── src/                # React frontend
+├── frontend/           # React frontend
 │   ├── components/     # Shared UI components (Sidebar, ScopeSwitcher)
 │   ├── pages/          # Page components (Overview, Agents, Hooks, Skills, MCP, Config, Memory, Sessions, Plugins, Settings)
 │   ├── hooks/          # React hooks (useRepos, useSessions)
@@ -78,7 +78,7 @@ Tests are required for every change. CI runs on all PRs and pushes to `main`.
 
 ```bash
 # Run Rust backend unit tests
-cd src-tauri && cargo test --lib
+cd backend && cargo test --lib
 
 # Run frontend tests
 npm test
@@ -91,15 +91,15 @@ npm run test:watch
 
 - **Every PR must include tests** for new or modified functionality. Do not merge code without corresponding test coverage.
 - **Rust backend**: Add `#[cfg(test)] mod tests { ... }` blocks inline in the module being tested. Use `tempfile::tempdir()` for tests that need filesystem access. Test both the happy path and error cases.
-- **Frontend**: Use Vitest + React Testing Library. Test files live next to the source files they test (e.g., `Foo.test.tsx` next to `Foo.tsx`). Mock Tauri `invoke` calls via the setup in `src/test/setup.ts`.
+- **Frontend**: Use Vitest + React Testing Library. Test files live next to the source files they test (e.g., `Foo.test.tsx` next to `Foo.tsx`). Mock Tauri `invoke` calls via the setup in `frontend/test/setup.ts`.
 - **Test naming**: Use descriptive names that explain what is being tested (e.g., `delete_nonexistent_agent_fails`, not `test_delete`).
 - **CI**: GitHub Actions workflow (`.github/workflows/test.yml`) runs both Rust and frontend tests. All tests must pass before merge.
 
 ### Test Structure
 
-- `src-tauri/src/*/mod.rs` — Inline `#[cfg(test)]` modules for Rust unit tests
-- `src/**/*.test.ts` / `src/**/*.test.tsx` — Frontend test files (Vitest)
-- `src/test/setup.ts` — Vitest global setup (Tauri mock, jest-dom matchers)
+- `backend/src/*/mod.rs` — Inline `#[cfg(test)]` modules for Rust unit tests
+- `frontend/**/*.test.ts` / `frontend/**/*.test.tsx` — Frontend test files (Vitest)
+- `frontend/test/setup.ts` — Vitest global setup (Tauri mock, jest-dom matchers)
 
 ## Build Phases
 

@@ -53,7 +53,7 @@ npm run tauri build
 
 ```
 agent-corral/
-├── src-tauri/          # Rust backend (Tauri app)
+├── backend/            # Rust backend (Tauri app)
 │   ├── src/
 │   │   ├── lib.rs              # App entry, state management
 │   │   ├── main.rs             # Binary entry
@@ -66,7 +66,7 @@ agent-corral/
 │   │   ├── command_templates/  # Template engine with variable substitution
 │   │   └── terminal_launcher/  # Native terminal spawning (per-platform)
 │   └── tauri.conf.json
-├── src/                # React frontend
+├── frontend/           # React frontend
 │   ├── components/     # Shared UI components (Sidebar, ScopeSwitcher)
 │   ├── pages/          # Page components (Overview, Agents, Hooks, Skills, MCP, Config, Memory, Sessions, Plugins, Settings)
 │   ├── hooks/          # React hooks (useRepos, useSessions)
