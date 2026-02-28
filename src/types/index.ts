@@ -200,6 +200,7 @@ export interface PluginSummary {
   skillCount: number;
   hookCount: number;
   mcpCount: number;
+  templateCount: number;
   hasConfig: boolean;
   dirPath: string;
   source: "local" | "library" | "git";
@@ -212,6 +213,7 @@ export interface PluginContents {
   skills: Skill[];
   hooks: HookEvent[];
   mcpServers: McpServer[];
+  templates: CommandTemplate[];
   config: NormalizedConfig | null;
 }
 
@@ -223,6 +225,8 @@ export interface PluginImportPreview {
   hooksToAdd: string[];
   mcpToAdd: string[];
   mcpToUpdate: string[];
+  templatesToAdd: string[];
+  templatesToUpdate: string[];
   configChanges: boolean;
 }
 

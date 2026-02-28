@@ -1,6 +1,7 @@
 use crate::claude_adapter::{
     atomic_write, Agent, ClaudeRepoAdapter, HookEvent, McpServer, NormalizedConfig, Skill,
 };
+use crate::command_templates::CommandTemplate;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -46,6 +47,7 @@ pub struct PluginSummary {
     pub skill_count: usize,
     pub hook_count: usize,
     pub mcp_count: usize,
+    pub template_count: usize,
     pub has_config: bool,
     pub dir_path: String,
     pub source: PluginSource,
@@ -97,6 +99,7 @@ pub struct PluginContents {
     pub skills: Vec<Skill>,
     pub hooks: Vec<HookEvent>,
     pub mcp_servers: Vec<McpServer>,
+    pub templates: Vec<CommandTemplate>,
     pub config: Option<NormalizedConfig>,
 }
 
@@ -110,6 +113,8 @@ pub struct PluginImportPreview {
     pub hooks_to_add: Vec<String>,
     pub mcp_to_add: Vec<String>,
     pub mcp_to_update: Vec<String>,
+    pub templates_to_add: Vec<String>,
+    pub templates_to_update: Vec<String>,
     pub config_changes: bool,
 }
 
@@ -139,6 +144,7 @@ impl PluginManager {
         skill_ids: &[String],
         include_hooks: bool,
         include_mcp: bool,
+        templates: &[CommandTemplate],
     ) -> Result<String, PluginError> {
         let dir_name = name.to_lowercase().replace(' ', "-");
         let plugin_dir = self.plugins_dir.join(&dir_name);
@@ -213,11 +219,8 @@ impl PluginManager {
                 let skill_subdir = skills_dir.join(&skill.skill_id);
                 fs::create_dir_all(&skill_subdir)?;
                 // Re-use adapter's write logic by writing directly
-                ClaudeRepoAdapter::write_skill(
-                    &plugin_dir.to_string_lossy(),
-                    skill,
-                )
-                .map_err(|e| PluginError::Adapter(e.to_string()))?;
+                ClaudeRepoAdapter::write_skill(&plugin_dir.to_string_lossy(), skill)
+                    .map_err(|e| PluginError::Adapter(e.to_string()))?;
                 // Move from .claude/skills to skills/
                 let src = plugin_dir.join(".claude/skills").join(&skill.skill_id);
                 let dst = skills_dir.join(&skill.skill_id);
@@ -246,7 +249,8 @@ impl PluginManager {
             if !hooks.is_empty() {
                 let hooks_dir = plugin_dir.join("hooks");
                 fs::create_dir_all(&hooks_dir)?;
-                let hooks_json = serde_json::to_string_pretty(&serde_json::json!({ "hooks": hooks }))?;
+                let hooks_json =
+                    serde_json::to_string_pretty(&serde_json::json!({ "hooks": hooks }))?;
                 atomic_write(&hooks_dir.join("hooks.json"), &hooks_json)?;
             }
         }
@@ -264,7 +268,10 @@ impl PluginManager {
                         serde_json::Value::String(server.server_type.clone()),
                     );
                     if let Some(ref cmd) = server.command {
-                        obj.insert("command".to_string(), serde_json::Value::String(cmd.clone()));
+                        obj.insert(
+                            "command".to_string(),
+                            serde_json::Value::String(cmd.clone()),
+                        );
                     }
                     if let Some(ref args) = server.args {
                         obj.insert(
@@ -300,6 +307,12 @@ impl PluginManager {
                 .map_err(|e| PluginError::Adapter(e.to_string()))?;
             let config_json = serde_json::to_string_pretty(&config.raw)?;
             atomic_write(&plugin_dir.join("settings.json"), &config_json)?;
+        }
+
+        // Export templates
+        if !templates.is_empty() {
+            let templates_json = serde_json::to_string_pretty(templates)?;
+            atomic_write(&plugin_dir.join("templates.json"), &templates_json)?;
         }
 
         Ok(plugin_dir.to_string_lossy().to_string())
@@ -375,6 +388,15 @@ impl PluginManager {
             vec![]
         };
 
+        // Read templates from templates.json
+        let templates_file = dir.join("templates.json");
+        let templates: Vec<CommandTemplate> = if templates_file.exists() {
+            let contents = fs::read_to_string(&templates_file)?;
+            serde_json::from_str(&contents)?
+        } else {
+            vec![]
+        };
+
         // Read config from settings.json
         let settings_file = dir.join("settings.json");
         let config = if settings_file.exists() {
@@ -402,6 +424,7 @@ impl PluginManager {
             skills,
             hooks,
             mcp_servers,
+            templates,
             config,
         })
     }
@@ -411,6 +434,7 @@ impl PluginManager {
         &self,
         plugin_dir: &str,
         repo_path: &str,
+        existing_template_ids: &[String],
     ) -> Result<PluginImportPreview, PluginError> {
         let contents = self.read_plugin(plugin_dir)?;
 
@@ -461,6 +485,16 @@ impl PluginManager {
             }
         }
 
+        let mut templates_to_add = Vec::new();
+        let mut templates_to_update = Vec::new();
+        for tmpl in &contents.templates {
+            if existing_template_ids.contains(&tmpl.template_id) {
+                templates_to_update.push(tmpl.template_id.clone());
+            } else {
+                templates_to_add.push(tmpl.template_id.clone());
+            }
+        }
+
         Ok(PluginImportPreview {
             agents_to_add,
             agents_to_update,
@@ -469,6 +503,8 @@ impl PluginManager {
             hooks_to_add,
             mcp_to_add,
             mcp_to_update,
+            templates_to_add,
+            templates_to_update,
             config_changes: contents.config.is_some(),
         })
     }
@@ -479,6 +515,7 @@ impl PluginManager {
         plugin_dir: &str,
         repo_path: &str,
         mode: ImportMode,
+        template_engine: &crate::command_templates::TemplateEngine,
     ) -> Result<(), PluginError> {
         let contents = self.read_plugin(plugin_dir)?;
 
@@ -543,6 +580,35 @@ impl PluginManager {
         for server in &contents.mcp_servers {
             ClaudeRepoAdapter::write_mcp_server(repo_path, server, false)
                 .map_err(|e| PluginError::Adapter(e.to_string()))?;
+        }
+
+        // Import templates
+        if !contents.templates.is_empty() {
+            let existing_templates = template_engine
+                .list_templates()
+                .map_err(|e| PluginError::Adapter(e.to_string()))?;
+            let existing_ids: Vec<String> = existing_templates
+                .iter()
+                .map(|t| t.template_id.clone())
+                .collect();
+
+            for tmpl in &contents.templates {
+                let exists = existing_ids.contains(&tmpl.template_id);
+                match mode {
+                    ImportMode::AddOnly => {
+                        if !exists {
+                            template_engine
+                                .save_template(tmpl)
+                                .map_err(|e| PluginError::Adapter(e.to_string()))?;
+                        }
+                    }
+                    ImportMode::Overwrite => {
+                        template_engine
+                            .save_template(tmpl)
+                            .map_err(|e| PluginError::Adapter(e.to_string()))?;
+                    }
+                }
+            }
         }
 
         // Import config
@@ -847,10 +913,7 @@ impl PluginManager {
                         content.push_str(&format!("# {}\n\n", agent.name));
                         content.push_str(&agent.system_prompt);
                         content.push('\n');
-                        atomic_write(
-                            &agents_dir.join(format!("{}.md", agent.agent_id)),
-                            &content,
-                        )?;
+                        atomic_write(&agents_dir.join(format!("{}.md", agent.agent_id)), &content)?;
 
                         let meta = serde_json::json!({
                             "tools": agent.tools,
@@ -1041,11 +1104,7 @@ impl PluginManager {
             fs::read_dir(&agents_dir)?
                 .filter(|e| {
                     e.as_ref()
-                        .map(|e| {
-                            e.path()
-                                .extension()
-                                .map_or(false, |ext| ext == "md")
-                        })
+                        .map(|e| e.path().extension().map_or(false, |ext| ext == "md"))
                         .unwrap_or(false)
                 })
                 .count()
@@ -1056,11 +1115,7 @@ impl PluginManager {
         let skills_dir = dir.join("skills");
         let skill_count = if skills_dir.exists() {
             fs::read_dir(&skills_dir)?
-                .filter(|e| {
-                    e.as_ref()
-                        .map(|e| e.path().is_dir())
-                        .unwrap_or(false)
-                })
+                .filter(|e| e.as_ref().map(|e| e.path().is_dir()).unwrap_or(false))
                 .count()
         } else {
             0
@@ -1092,6 +1147,17 @@ impl PluginManager {
             0
         };
 
+        let templates_file = dir.join("templates.json");
+        let template_count = if templates_file.exists() {
+            fs::read_to_string(&templates_file)
+                .ok()
+                .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
+                .map(|a| a.len())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
         let has_config = dir.join("settings.json").exists();
 
         // Check for git source
@@ -1116,6 +1182,7 @@ impl PluginManager {
             skill_count,
             hook_count,
             mcp_count,
+            template_count,
             has_config,
             dir_path: dir.to_string_lossy().to_string(),
             source,
@@ -1150,11 +1217,7 @@ impl PluginManager {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let latest_commit = stdout
-            .split_whitespace()
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let latest_commit = stdout.split_whitespace().next().unwrap_or("").to_string();
 
         if latest_commit.is_empty() {
             return Err(PluginError::Git(
@@ -1330,7 +1393,9 @@ fn parse_skill_contents(contents: &str, skill_id: &str) -> Skill {
         if let Some(end_idx) = after_first.find("\n---") {
             let yaml_str = &after_first[..end_idx];
             let body_start = end_idx + 4;
-            let body = after_first[body_start..].trim_start_matches('\n').to_string();
+            let body = after_first[body_start..]
+                .trim_start_matches('\n')
+                .to_string();
             match serde_yaml::from_str::<serde_json::Value>(yaml_str) {
                 Ok(fm) => (fm, body),
                 Err(_) => (serde_json::json!({}), contents.to_string()),
@@ -1353,9 +1418,7 @@ fn parse_skill_contents(contents: &str, skill_id: &str) -> Skill {
             .get("description")
             .and_then(|v| v.as_str())
             .map(String::from),
-        user_invocable: frontmatter
-            .get("user_invocable")
-            .and_then(|v| v.as_bool()),
+        user_invocable: frontmatter.get("user_invocable").and_then(|v| v.as_bool()),
         allowed_tools: frontmatter
             .get("allowed_tools")
             .and_then(|v| v.as_array())

@@ -5,6 +5,7 @@ import type {
   PluginImportPreview,
   Agent,
   Skill,
+  CommandTemplate,
   PluginUpdateCheck,
 } from "@/types";
 import * as api from "@/lib/tauri";
@@ -34,6 +35,8 @@ export function PluginsPage({ scope }: Props) {
   const [exportSelectedAgentIds, setExportSelectedAgentIds] = useState<string[]>([]);
   const [exportSkills, setExportSkills] = useState<Skill[]>([]);
   const [exportSelectedSkillIds, setExportSelectedSkillIds] = useState<string[]>([]);
+  const [exportTemplates, setExportTemplates] = useState<CommandTemplate[]>([]);
+  const [exportSelectedTemplateIds, setExportSelectedTemplateIds] = useState<string[]>([]);
   const [exporting, setExporting] = useState(false);
 
   // Import wizard state
@@ -85,14 +88,20 @@ export function PluginsPage({ scope }: Props) {
       return;
     }
     try {
-      const [agents, skills] = await Promise.all([
+      const [agents, skills, templates] = await Promise.all([
         api.readAgents(repo.path),
         api.readSkills(repo.path),
+        api.listTemplates(),
       ]);
+      // Filter out built-in templates — only custom ones are exportable
+      const builtinIds = ["run-claude", "run-chat", "run-agent", "run-prompt", "run-review"];
+      const customTemplates = templates.filter((t) => !builtinIds.includes(t.templateId));
       setExportAgents(agents);
       setExportSelectedAgentIds(agents.map((a) => a.agentId));
       setExportSkills(skills);
       setExportSelectedSkillIds(skills.map((s) => s.skillId));
+      setExportTemplates(customTemplates);
+      setExportSelectedTemplateIds(customTemplates.map((t) => t.templateId));
       setExportName("");
       setExportDesc("");
       setExportAuthor("");
@@ -120,7 +129,8 @@ export function PluginsPage({ scope }: Props) {
         exportSelectedAgentIds,
         exportSelectedSkillIds,
         exportIncludeHooks,
-        exportIncludeMcp
+        exportIncludeMcp,
+        exportSelectedTemplateIds
       );
       alert(`Plugin exported to: ${path}`);
       setView("list");
@@ -236,6 +246,12 @@ export function PluginsPage({ scope }: Props) {
 
   const toggleExportSkill = (id: string) => {
     setExportSelectedSkillIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleExportTemplate = (id: string) => {
+    setExportSelectedTemplateIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
@@ -444,6 +460,30 @@ export function PluginsPage({ scope }: Props) {
             </div>
           </div>
 
+          <div className="form-group">
+            <label>
+              Command Templates ({exportSelectedTemplateIds.length}/{exportTemplates.length})
+            </label>
+            <div className="export-agents-list">
+              {exportTemplates.map((tmpl) => (
+                <label key={tmpl.templateId} className="tool-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={exportSelectedTemplateIds.includes(tmpl.templateId)}
+                    onChange={() => toggleExportTemplate(tmpl.templateId)}
+                  />
+                  <span>
+                    {tmpl.name}{" "}
+                    <span className="text-muted">({tmpl.templateId})</span>
+                  </span>
+                </label>
+              ))}
+              {exportTemplates.length === 0 && (
+                <p className="text-muted">No custom command templates.</p>
+              )}
+            </div>
+          </div>
+
           <div className="form-actions">
             <button
               className="btn btn-primary"
@@ -466,7 +506,8 @@ export function PluginsPage({ scope }: Props) {
     const hasConflicts =
       importPreview.agentsToUpdate.length > 0 ||
       importPreview.skillsToUpdate.length > 0 ||
-      importPreview.mcpToUpdate.length > 0;
+      importPreview.mcpToUpdate.length > 0 ||
+      importPreview.templatesToUpdate.length > 0;
 
     return (
       <div className="page plugins-page">
@@ -555,6 +596,30 @@ export function PluginsPage({ scope }: Props) {
               <h3>MCP Servers to Update ({importPreview.mcpToUpdate.length})</h3>
               <ul>
                 {importPreview.mcpToUpdate.map((id) => (
+                  <li key={id}>
+                    <code>{id}</code> <span className="badge-update">exists</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {importPreview.templatesToAdd.length > 0 && (
+            <div className="preview-section">
+              <h3>Templates to Add ({importPreview.templatesToAdd.length})</h3>
+              <ul>
+                {importPreview.templatesToAdd.map((id) => (
+                  <li key={id}>
+                    <code>{id}</code> <span className="badge-new">new</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {importPreview.templatesToUpdate.length > 0 && (
+            <div className="preview-section">
+              <h3>Templates to Update ({importPreview.templatesToUpdate.length})</h3>
+              <ul>
+                {importPreview.templatesToUpdate.map((id) => (
                   <li key={id}>
                     <code>{id}</code> <span className="badge-update">exists</span>
                   </li>
@@ -716,6 +781,9 @@ export function PluginsPage({ scope }: Props) {
                   )}
                   {plugin.mcpCount > 0 && (
                     <span>{plugin.mcpCount} MCP</span>
+                  )}
+                  {plugin.templateCount > 0 && (
+                    <span>{plugin.templateCount} templates</span>
                   )}
                   {plugin.hasConfig && <span>+ config</span>}
                 </div>

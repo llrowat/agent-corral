@@ -324,7 +324,8 @@ export async function exportPlugin(
   agentIds: string[],
   skillIds: string[],
   includeHooks: boolean,
-  includeMcp: boolean
+  includeMcp: boolean,
+  templateIds: string[]
 ): Promise<string> {
   return invoke("export_plugin", {
     repoPath,
@@ -337,6 +338,7 @@ export async function exportPlugin(
     skillIds,
     includeHooks,
     includeMcp,
+    templateIds,
   });
 }
 
