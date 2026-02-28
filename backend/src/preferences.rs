@@ -2,10 +2,27 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppPreferences {
     /// Which terminal emulator to use. None means auto-detect.
     pub terminal_emulator: Option<String>,
+    /// How often to auto-check git plugins for updates (in minutes). 0 = disabled.
+    /// Default is 30 minutes.
+    #[serde(default = "default_sync_interval")]
+    pub plugin_sync_interval_minutes: u32,
+}
+
+impl Default for AppPreferences {
+    fn default() -> Self {
+        Self {
+            terminal_emulator: None,
+            plugin_sync_interval_minutes: 30,
+        }
+    }
+}
+
+fn default_sync_interval() -> u32 {
+    30
 }
 
 pub struct PreferencesManager {
@@ -43,6 +60,16 @@ impl PreferencesManager {
         prefs.terminal_emulator = terminal;
         self.save(&prefs)
     }
+
+    pub fn get_plugin_sync_interval(&self) -> u32 {
+        self.load().plugin_sync_interval_minutes
+    }
+
+    pub fn set_plugin_sync_interval(&self, minutes: u32) -> Result<(), String> {
+        let mut prefs = self.load();
+        prefs.plugin_sync_interval_minutes = minutes;
+        self.save(&prefs)
+    }
 }
 
 #[cfg(test)]
@@ -64,6 +91,7 @@ mod tests {
 
         let prefs = AppPreferences {
             terminal_emulator: Some("alacritty".to_string()),
+            ..Default::default()
         };
         mgr.save(&prefs).unwrap();
 
@@ -102,6 +130,7 @@ mod tests {
 
         let prefs = AppPreferences {
             terminal_emulator: Some("wezterm".to_string()),
+            ..Default::default()
         };
         mgr.save(&prefs).unwrap();
 
@@ -124,9 +153,53 @@ mod tests {
     fn app_preferences_serialization() {
         let prefs = AppPreferences {
             terminal_emulator: Some("gnome-terminal".to_string()),
+            ..Default::default()
         };
         let json = serde_json::to_string(&prefs).unwrap();
         let deserialized: AppPreferences = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.terminal_emulator, prefs.terminal_emulator);
+    }
+
+    #[test]
+    fn default_sync_interval_is_30() {
+        let prefs = AppPreferences::default();
+        assert_eq!(prefs.plugin_sync_interval_minutes, 30);
+    }
+
+    #[test]
+    fn set_and_get_plugin_sync_interval() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mgr = PreferencesManager::new(tmp.path());
+
+        mgr.set_plugin_sync_interval(60).unwrap();
+        assert_eq!(mgr.get_plugin_sync_interval(), 60);
+
+        mgr.set_plugin_sync_interval(0).unwrap();
+        assert_eq!(mgr.get_plugin_sync_interval(), 0);
+    }
+
+    #[test]
+    fn sync_interval_survives_save_load() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mgr = PreferencesManager::new(tmp.path());
+
+        mgr.set_plugin_sync_interval(15).unwrap();
+
+        // Reload from disk
+        let loaded = mgr.load();
+        assert_eq!(loaded.plugin_sync_interval_minutes, 15);
+    }
+
+    #[test]
+    fn old_prefs_without_sync_interval_default_to_30() {
+        let tmp = tempfile::tempdir().unwrap();
+        let prefs_path = tmp.path().join("preferences.json");
+        // Write JSON without the new field
+        fs::write(&prefs_path, r#"{"terminal_emulator":"kitty"}"#).unwrap();
+
+        let mgr = PreferencesManager::new(tmp.path());
+        let loaded = mgr.load();
+        assert_eq!(loaded.terminal_emulator, Some("kitty".to_string()));
+        assert_eq!(loaded.plugin_sync_interval_minutes, 30);
     }
 }

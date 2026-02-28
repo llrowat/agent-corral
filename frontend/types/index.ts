@@ -260,6 +260,34 @@ export interface PluginUpdateCheck {
   dirPath: string;
 }
 
+// -- Plugin Import Sync --
+
+export interface PluginImportRecord {
+  pluginName: string;
+  pluginDir: string;
+  gitSource: GitSource | null;
+  importedCommit: string | null;
+  importedAt: string;
+  importMode: ImportMode;
+  pinned: boolean;
+  autoSync: boolean;
+}
+
+export interface PluginImportRegistry {
+  imports: PluginImportRecord[];
+}
+
+export interface PluginSyncStatus {
+  pluginName: string;
+  pluginDir: string;
+  pluginExists: boolean;
+  importedCommit: string | null;
+  libraryCommit: string | null;
+  updateAvailable: boolean;
+  autoSync: boolean;
+  pinned: boolean;
+}
+
 // -- Command Templates --
 
 export interface CommandTemplate {

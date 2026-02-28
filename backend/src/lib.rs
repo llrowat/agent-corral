@@ -151,6 +151,17 @@ pub fn run() {
             commands::plugin::check_plugin_updates,
             commands::plugin::update_plugin,
             commands::plugin::migrate_agentpack,
+            // Plugin sync commands
+            commands::plugin::get_import_sync_status,
+            commands::plugin::sync_imported_plugin,
+            commands::plugin::auto_sync_repo,
+            commands::plugin::set_import_pinned,
+            commands::plugin::set_import_auto_sync,
+            commands::plugin::remove_import_record,
+            commands::plugin::auto_update_library,
+            commands::plugin::read_import_registry,
+            commands::plugin::set_plugin_sync_interval,
+            commands::plugin::get_plugin_sync_interval,
             // Template commands
             commands::template::list_templates,
             commands::template::save_template,
