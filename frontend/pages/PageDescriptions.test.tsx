@@ -7,6 +7,7 @@ import { HooksPage } from "./HooksPage";
 import { McpPage } from "./McpPage";
 import { MemoryPage } from "./MemoryPage";
 import { ConfigPage } from "./ConfigPage";
+import { TemplatesPage } from "./TemplatesPage";
 import type { Scope } from "@/types";
 
 const mockInvoke = invoke as ReturnType<typeof vi.fn>;
@@ -57,7 +58,7 @@ describe("Page descriptions", () => {
   it("MemoryPage renders a description for new users", async () => {
     render(<MemoryPage scope={globalScope} homePath="/home/user" />);
     expect(
-      screen.getByText(/persistent key-value stores/i)
+      screen.getByText(/persistent notes that claude code/i)
     ).toBeInTheDocument();
   });
 
@@ -65,6 +66,13 @@ describe("Page descriptions", () => {
     render(<ConfigPage scope={globalScope} />);
     expect(
       screen.getByText(/project and global settings/i)
+    ).toBeInTheDocument();
+  });
+
+  it("TemplatesPage renders a description for new users", async () => {
+    render(<TemplatesPage />);
+    expect(
+      screen.getByText(/saved command templates/i)
     ).toBeInTheDocument();
   });
 

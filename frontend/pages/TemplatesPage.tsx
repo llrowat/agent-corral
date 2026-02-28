@@ -113,6 +113,7 @@ export function TemplatesPage() {
 
   return (
     <div className="page hooks-page">
+      <p className="page-description">Saved command templates for launching Claude Code sessions. Define reusable commands with variable substitution and optional git worktree isolation.</p>
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
