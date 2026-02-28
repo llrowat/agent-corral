@@ -33,6 +33,7 @@ const navGroups: NavGroup[] = [
     label: "Project",
     items: [
       { path: "/sessions", label: "Sessions", icon: "terminal", projectOnly: true },
+      { path: "/templates", label: "Templates", icon: "template" },
     ],
   },
   {
@@ -102,6 +103,7 @@ function getIcon(name: string): string {
     database: "\u25C8",
     terminal: "\u25B6",
     package: "\u25A3",
+    template: "\u25B8",
     wrench: "\u2692",
   };
   return icons[name] ?? "\u25CF";
