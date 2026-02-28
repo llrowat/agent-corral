@@ -77,12 +77,12 @@ export function OverviewPage({ scope }: Props) {
     if (!basePath || isGlobal) return;
     let cmd = template.command;
     cmd = cmd.replace("{{repoPath}}", basePath);
-    if (template.requires.includes("agent")) {
+    if (cmd.includes("{{agentId}}")) {
       const agentId = prompt("Enter agent ID:");
       if (!agentId) return;
       cmd = cmd.replace("{{agentId}}", agentId);
     }
-    if (template.requires.includes("prompt")) {
+    if (cmd.includes("{{prompt}}")) {
       const promptText = prompt("Enter prompt:");
       if (!promptText) return;
       cmd = cmd.replace("{{prompt}}", promptText);
@@ -137,7 +137,7 @@ export function OverviewPage({ scope }: Props) {
       {!isGlobal && (
         <section className="overview-section">
           <div className="section-header-row">
-            <h3>Command Templates</h3>
+            <h3>Commands</h3>
             {isGitRepo && (
               <div className="worktree-toggle">
                 <label className="worktree-checkbox-label">
