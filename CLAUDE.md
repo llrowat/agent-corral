@@ -70,6 +70,37 @@ npm run tauri dev
 npm run tauri build
 ```
 
+## Testing
+
+Tests are required for every change. CI runs on all PRs and pushes to `main`.
+
+### Running Tests
+
+```bash
+# Run Rust backend unit tests
+cd src-tauri && cargo test --lib
+
+# Run frontend tests
+npm test
+
+# Run frontend tests in watch mode
+npm run test:watch
+```
+
+### Testing Requirements
+
+- **Every PR must include tests** for new or modified functionality. Do not merge code without corresponding test coverage.
+- **Rust backend**: Add `#[cfg(test)] mod tests { ... }` blocks inline in the module being tested. Use `tempfile::tempdir()` for tests that need filesystem access. Test both the happy path and error cases.
+- **Frontend**: Use Vitest + React Testing Library. Test files live next to the source files they test (e.g., `Foo.test.tsx` next to `Foo.tsx`). Mock Tauri `invoke` calls via the setup in `src/test/setup.ts`.
+- **Test naming**: Use descriptive names that explain what is being tested (e.g., `delete_nonexistent_agent_fails`, not `test_delete`).
+- **CI**: GitHub Actions workflow (`.github/workflows/test.yml`) runs both Rust and frontend tests. All tests must pass before merge.
+
+### Test Structure
+
+- `src-tauri/src/*/mod.rs` — Inline `#[cfg(test)]` modules for Rust unit tests
+- `src/**/*.test.ts` / `src/**/*.test.tsx` — Frontend test files (Vitest)
+- `src/test/setup.ts` — Vitest global setup (Tauri mock, jest-dom matchers)
+
 ## Build Phases
 
 - Phase 1: Bridge CLI, Terminal Launcher, Session Manager, Repo Registry

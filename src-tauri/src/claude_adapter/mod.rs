@@ -1147,3 +1147,679 @@ pub fn atomic_write(path: &Path, contents: &str) -> Result<(), std::io::Error> {
     fs::rename(&temp_path, path)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- atomic_write tests --
+
+    #[test]
+    fn atomic_write_creates_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("test.txt");
+        atomic_write(&file_path, "hello").unwrap();
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "hello");
+    }
+
+    #[test]
+    fn atomic_write_cleans_up_tmp() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("test.txt");
+        atomic_write(&file_path, "hello").unwrap();
+        let tmp_path = tmp.path().join("test.tmp");
+        assert!(!tmp_path.exists());
+    }
+
+    #[test]
+    fn atomic_write_overwrites_existing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file_path = tmp.path().join("test.txt");
+        atomic_write(&file_path, "first").unwrap();
+        atomic_write(&file_path, "second").unwrap();
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "second");
+    }
+
+    // -- detect tests --
+
+    #[test]
+    fn detect_empty_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let detection = ClaudeRepoAdapter::detect(tmp.path().to_str().unwrap());
+        assert!(!detection.has_settings_json);
+        assert!(!detection.has_claude_md);
+        assert!(!detection.has_agents_dir);
+        assert!(!detection.has_memory_dir);
+        assert!(!detection.has_skills_dir);
+        assert!(!detection.has_mcp_json);
+        assert_eq!(detection.hook_count, 0);
+        assert!(detection.config_path.is_none());
+    }
+
+    #[test]
+    fn detect_full_claude_setup() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+
+        fs::create_dir_all(base.join(".claude/agents")).unwrap();
+        fs::create_dir_all(base.join(".claude/memory")).unwrap();
+        fs::create_dir_all(base.join(".claude/skills")).unwrap();
+        fs::write(base.join("CLAUDE.md"), "# Test").unwrap();
+        fs::write(base.join(".mcp.json"), "{}").unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{"hooks": {"PreToolUse": [], "PostToolUse": []}}"#,
+        )
+        .unwrap();
+
+        let detection = ClaudeRepoAdapter::detect(base.to_str().unwrap());
+        assert!(detection.has_settings_json);
+        assert!(detection.has_claude_md);
+        assert!(detection.has_agents_dir);
+        assert!(detection.has_memory_dir);
+        assert!(detection.has_skills_dir);
+        assert!(detection.has_mcp_json);
+        assert_eq!(detection.hook_count, 2);
+        assert!(detection.config_path.is_some());
+    }
+
+    #[test]
+    fn detect_claude_json_counts_as_mcp() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join(".claude.json"), "{}").unwrap();
+
+        let detection = ClaudeRepoAdapter::detect(tmp.path().to_str().unwrap());
+        assert!(detection.has_mcp_json);
+    }
+
+    // -- read_config / write_config tests --
+
+    #[test]
+    fn read_config_returns_empty_when_no_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = ClaudeRepoAdapter::read_config(tmp.path().to_str().unwrap()).unwrap();
+        assert!(config.model.is_none());
+        assert!(config.permissions.is_none());
+        assert!(config.ignore_patterns.is_none());
+    }
+
+    #[test]
+    fn write_and_read_config_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let config = NormalizedConfig {
+            model: Some("claude-sonnet-4-20250514".to_string()),
+            permissions: Some(serde_json::json!({"allow": ["Read", "Write"]})),
+            ignore_patterns: Some(vec!["node_modules".to_string(), ".git".to_string()]),
+            raw: serde_json::json!({}),
+        };
+
+        ClaudeRepoAdapter::write_config(path, &config).unwrap();
+        let loaded = ClaudeRepoAdapter::read_config(path).unwrap();
+
+        assert_eq!(loaded.model, Some("claude-sonnet-4-20250514".to_string()));
+        assert!(loaded.permissions.is_some());
+        assert_eq!(
+            loaded.ignore_patterns,
+            Some(vec!["node_modules".to_string(), ".git".to_string()])
+        );
+    }
+
+    #[test]
+    fn write_config_creates_claude_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = NormalizedConfig {
+            model: None,
+            permissions: None,
+            ignore_patterns: None,
+            raw: serde_json::json!({"custom": "value"}),
+        };
+
+        ClaudeRepoAdapter::write_config(tmp.path().to_str().unwrap(), &config).unwrap();
+        assert!(tmp.path().join(".claude/settings.json").exists());
+    }
+
+    // -- agent CRUD tests --
+
+    #[test]
+    fn read_agents_empty_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let agents = ClaudeRepoAdapter::read_agents(tmp.path().to_str().unwrap()).unwrap();
+        assert!(agents.is_empty());
+    }
+
+    #[test]
+    fn write_and_read_agent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let agent = Agent {
+            agent_id: "test-agent".to_string(),
+            name: "Test Agent".to_string(),
+            system_prompt: "You are a test agent.".to_string(),
+            tools: vec!["Read".to_string(), "Write".to_string()],
+            model_override: Some("claude-sonnet-4-20250514".to_string()),
+            memory_binding: Some("context".to_string()),
+        };
+
+        ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
+        let agents = ClaudeRepoAdapter::read_agents(path).unwrap();
+
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].agent_id, "test-agent");
+        assert_eq!(agents[0].name, "Test Agent");
+        assert_eq!(agents[0].system_prompt, "You are a test agent.");
+        assert_eq!(agents[0].tools, vec!["Read", "Write"]);
+        assert_eq!(agents[0].model_override, Some("claude-sonnet-4-20250514".to_string()));
+        assert_eq!(agents[0].memory_binding, Some("context".to_string()));
+    }
+
+    #[test]
+    fn delete_agent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let agent = Agent {
+            agent_id: "doomed".to_string(),
+            name: "Doomed Agent".to_string(),
+            system_prompt: "Gone soon.".to_string(),
+            tools: vec![],
+            model_override: None,
+            memory_binding: None,
+        };
+
+        ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
+        ClaudeRepoAdapter::delete_agent(path, "doomed").unwrap();
+        let agents = ClaudeRepoAdapter::read_agents(path).unwrap();
+        assert!(agents.is_empty());
+    }
+
+    #[test]
+    fn delete_nonexistent_agent_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::delete_agent(tmp.path().to_str().unwrap(), "nope");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn write_agent_creates_sidecar() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let agent = Agent {
+            agent_id: "my-agent".to_string(),
+            name: "My Agent".to_string(),
+            system_prompt: "Hello".to_string(),
+            tools: vec!["Bash".to_string()],
+            model_override: None,
+            memory_binding: None,
+        };
+
+        ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
+
+        assert!(tmp.path().join(".claude/agents/my-agent.md").exists());
+        assert!(tmp.path().join(".claude/agents/my-agent.meta.json").exists());
+    }
+
+    // -- memory entry parsing tests --
+
+    #[test]
+    fn parse_entries_empty() {
+        let entries = ClaudeRepoAdapter::parse_entries("");
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn parse_entries_single() {
+        let entries = ClaudeRepoAdapter::parse_entries("- Hello world");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].content, "Hello world");
+    }
+
+    #[test]
+    fn parse_entries_multiple() {
+        let entries = ClaudeRepoAdapter::parse_entries("- First\n- Second\n- Third");
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].content, "First");
+        assert_eq!(entries[1].content, "Second");
+        assert_eq!(entries[2].content, "Third");
+    }
+
+    #[test]
+    fn parse_entries_asterisk_bullets() {
+        let entries = ClaudeRepoAdapter::parse_entries("* Item one\n* Item two");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].content, "Item one");
+    }
+
+    #[test]
+    fn parse_entries_multiline() {
+        let entries = ClaudeRepoAdapter::parse_entries("- Line one\n  continued\n- Line two");
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].content.contains("continued"));
+    }
+
+    #[test]
+    fn rebuild_entries_roundtrip() {
+        let entries = vec![
+            MemoryEntry { key: "1".to_string(), content: "First".to_string() },
+            MemoryEntry { key: "2".to_string(), content: "Second".to_string() },
+        ];
+        let rebuilt = ClaudeRepoAdapter::rebuild_entries(&entries);
+        assert_eq!(rebuilt, "- First\n- Second\n");
+    }
+
+    // -- memory store CRUD tests --
+
+    #[test]
+    fn create_and_read_memory_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let store = ClaudeRepoAdapter::create_memory_store(path, "test-store").unwrap();
+        assert_eq!(store.name, "test-store");
+        assert_eq!(store.entry_count, 0);
+
+        let stores = ClaudeRepoAdapter::read_memory_stores(path).unwrap();
+        assert_eq!(stores.len(), 1);
+    }
+
+    #[test]
+    fn write_and_read_memory_entries() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let store = ClaudeRepoAdapter::create_memory_store(path, "notes").unwrap();
+
+        let entry = MemoryEntry {
+            key: "entry_1".to_string(),
+            content: "Remember this".to_string(),
+        };
+        ClaudeRepoAdapter::write_memory_entry(&store.path, &entry).unwrap();
+
+        let entries = ClaudeRepoAdapter::read_memory_entries(&store.path).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].content, "Remember this");
+    }
+
+    #[test]
+    fn update_memory_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let store = ClaudeRepoAdapter::create_memory_store(path, "notes").unwrap();
+        ClaudeRepoAdapter::write_memory_entry(
+            &store.path,
+            &MemoryEntry { key: "1".to_string(), content: "Original".to_string() },
+        ).unwrap();
+
+        ClaudeRepoAdapter::update_memory_entry(&store.path, 0, "Updated").unwrap();
+
+        let entries = ClaudeRepoAdapter::read_memory_entries(&store.path).unwrap();
+        assert_eq!(entries[0].content, "Updated");
+    }
+
+    #[test]
+    fn update_memory_entry_out_of_bounds() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let store = ClaudeRepoAdapter::create_memory_store(path, "notes").unwrap();
+        let result = ClaudeRepoAdapter::update_memory_entry(&store.path, 99, "nope");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn delete_memory_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let store = ClaudeRepoAdapter::create_memory_store(path, "notes").unwrap();
+        ClaudeRepoAdapter::write_memory_entry(
+            &store.path,
+            &MemoryEntry { key: "1".to_string(), content: "Keep".to_string() },
+        ).unwrap();
+        ClaudeRepoAdapter::write_memory_entry(
+            &store.path,
+            &MemoryEntry { key: "2".to_string(), content: "Delete me".to_string() },
+        ).unwrap();
+
+        ClaudeRepoAdapter::delete_memory_entry(&store.path, 1).unwrap();
+
+        let entries = ClaudeRepoAdapter::read_memory_entries(&store.path).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].content, "Keep");
+    }
+
+    #[test]
+    fn reset_memory_clears_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let store = ClaudeRepoAdapter::create_memory_store(path, "notes").unwrap();
+        ClaudeRepoAdapter::write_memory_entry(
+            &store.path,
+            &MemoryEntry { key: "1".to_string(), content: "data".to_string() },
+        ).unwrap();
+
+        ClaudeRepoAdapter::reset_memory(&store.path).unwrap();
+
+        let entries = ClaudeRepoAdapter::read_memory_entries(&store.path).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn delete_memory_store() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let store = ClaudeRepoAdapter::create_memory_store(path, "temp").unwrap();
+        ClaudeRepoAdapter::delete_memory_store(&store.path).unwrap();
+
+        let stores = ClaudeRepoAdapter::read_memory_stores(path).unwrap();
+        assert!(stores.is_empty());
+    }
+
+    // -- hooks tests --
+
+    #[test]
+    fn read_hooks_no_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let hooks = ClaudeRepoAdapter::read_hooks(tmp.path().to_str().unwrap()).unwrap();
+        assert!(hooks.is_empty());
+    }
+
+    #[test]
+    fn write_and_read_hooks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let hooks = vec![HookEvent {
+            event: "PreToolUse".to_string(),
+            groups: vec![HookGroup {
+                matcher: Some("Bash".to_string()),
+                hooks: vec![HookHandler {
+                    hook_type: "command".to_string(),
+                    command: Some("echo 'pre-hook'".to_string()),
+                    prompt: None,
+                    timeout: Some(5000),
+                }],
+            }],
+        }];
+
+        ClaudeRepoAdapter::write_hooks(path, &hooks).unwrap();
+        let loaded = ClaudeRepoAdapter::read_hooks(path).unwrap();
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].event, "PreToolUse");
+        assert_eq!(loaded[0].groups.len(), 1);
+        assert_eq!(loaded[0].groups[0].matcher, Some("Bash".to_string()));
+        assert_eq!(loaded[0].groups[0].hooks[0].command, Some("echo 'pre-hook'".to_string()));
+        assert_eq!(loaded[0].groups[0].hooks[0].timeout, Some(5000));
+    }
+
+    #[test]
+    fn write_empty_hooks_removes_key() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        // Write hooks first
+        let hooks = vec![HookEvent {
+            event: "Stop".to_string(),
+            groups: vec![],
+        }];
+        ClaudeRepoAdapter::write_hooks(path, &hooks).unwrap();
+
+        // Then clear them
+        ClaudeRepoAdapter::write_hooks(path, &[]).unwrap();
+
+        let loaded = ClaudeRepoAdapter::read_hooks(path).unwrap();
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn write_hooks_preserves_other_settings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        fs::create_dir_all(base.join(".claude")).unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{"model": "claude-sonnet-4-20250514", "customKey": true}"#,
+        ).unwrap();
+
+        let hooks = vec![HookEvent {
+            event: "Stop".to_string(),
+            groups: vec![],
+        }];
+        ClaudeRepoAdapter::write_hooks(base.to_str().unwrap(), &hooks).unwrap();
+
+        // Verify model is preserved
+        let contents = fs::read_to_string(base.join(".claude/settings.json")).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert_eq!(raw["model"], "claude-sonnet-4-20250514");
+        assert_eq!(raw["customKey"], true);
+    }
+
+    // -- skills tests --
+
+    #[test]
+    fn read_skills_no_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skills = ClaudeRepoAdapter::read_skills(tmp.path().to_str().unwrap()).unwrap();
+        assert!(skills.is_empty());
+    }
+
+    #[test]
+    fn write_and_read_skill() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let skill = Skill {
+            skill_id: "my-skill".to_string(),
+            name: "My Skill".to_string(),
+            description: Some("A test skill".to_string()),
+            user_invocable: Some(true),
+            allowed_tools: vec!["Read".to_string(), "Bash".to_string()],
+            model: Some("claude-sonnet-4-20250514".to_string()),
+            disable_model_invocation: None,
+            context: None,
+            agent: None,
+            argument_hint: Some("file path".to_string()),
+            content: "Do the thing.\n".to_string(),
+        };
+
+        ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
+        let skills = ClaudeRepoAdapter::read_skills(path).unwrap();
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].skill_id, "my-skill");
+        assert_eq!(skills[0].name, "My Skill");
+        assert_eq!(skills[0].description, Some("A test skill".to_string()));
+        assert_eq!(skills[0].user_invocable, Some(true));
+        assert_eq!(skills[0].allowed_tools, vec!["Read", "Bash"]);
+        assert!(skills[0].content.contains("Do the thing."));
+    }
+
+    #[test]
+    fn delete_skill() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let skill = Skill {
+            skill_id: "deleteme".to_string(),
+            name: "Delete Me".to_string(),
+            description: None,
+            user_invocable: None,
+            allowed_tools: vec![],
+            model: None,
+            disable_model_invocation: None,
+            context: None,
+            agent: None,
+            argument_hint: None,
+            content: "temp".to_string(),
+        };
+
+        ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
+        ClaudeRepoAdapter::delete_skill(path, "deleteme").unwrap();
+        let skills = ClaudeRepoAdapter::read_skills(path).unwrap();
+        assert!(skills.is_empty());
+    }
+
+    #[test]
+    fn delete_nonexistent_skill_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::delete_skill(tmp.path().to_str().unwrap(), "nope");
+        assert!(result.is_err());
+    }
+
+    // -- MCP server tests --
+
+    #[test]
+    fn read_mcp_servers_no_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let servers = ClaudeRepoAdapter::read_mcp_servers(tmp.path().to_str().unwrap(), false).unwrap();
+        assert!(servers.is_empty());
+    }
+
+    #[test]
+    fn write_and_read_mcp_server_project() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let server = McpServer {
+            server_id: "my-server".to_string(),
+            server_type: "stdio".to_string(),
+            command: Some("npx".to_string()),
+            args: Some(vec!["-y".to_string(), "@my/server".to_string()]),
+            url: None,
+            env: Some(serde_json::json!({"API_KEY": "test"})),
+            headers: None,
+        };
+
+        ClaudeRepoAdapter::write_mcp_server(path, &server, false).unwrap();
+        let servers = ClaudeRepoAdapter::read_mcp_servers(path, false).unwrap();
+
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].server_id, "my-server");
+        assert_eq!(servers[0].server_type, "stdio");
+        assert_eq!(servers[0].command, Some("npx".to_string()));
+        assert_eq!(servers[0].args, Some(vec!["-y".to_string(), "@my/server".to_string()]));
+    }
+
+    #[test]
+    fn write_mcp_server_global_uses_claude_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let server = McpServer {
+            server_id: "global-srv".to_string(),
+            server_type: "sse".to_string(),
+            command: None,
+            args: None,
+            url: Some("https://example.com/mcp".to_string()),
+            env: None,
+            headers: None,
+        };
+
+        ClaudeRepoAdapter::write_mcp_server(path, &server, true).unwrap();
+        assert!(tmp.path().join(".claude.json").exists());
+        assert!(!tmp.path().join(".mcp.json").exists());
+    }
+
+    #[test]
+    fn delete_mcp_server() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let server = McpServer {
+            server_id: "srv".to_string(),
+            server_type: "stdio".to_string(),
+            command: Some("cmd".to_string()),
+            args: None,
+            url: None,
+            env: None,
+            headers: None,
+        };
+
+        ClaudeRepoAdapter::write_mcp_server(path, &server, false).unwrap();
+        ClaudeRepoAdapter::delete_mcp_server(path, "srv", false).unwrap();
+
+        let servers = ClaudeRepoAdapter::read_mcp_servers(path, false).unwrap();
+        assert!(servers.is_empty());
+    }
+
+    #[test]
+    fn delete_nonexistent_mcp_server_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join(".mcp.json"), r#"{"mcpServers": {}}"#).unwrap();
+
+        let result = ClaudeRepoAdapter::delete_mcp_server(tmp.path().to_str().unwrap(), "nope", false);
+        assert!(result.is_err());
+    }
+
+    // -- known_tools tests --
+
+    #[test]
+    fn known_tools_contains_expected() {
+        let tools = ClaudeRepoAdapter::known_tools();
+        assert!(tools.contains(&"Read".to_string()));
+        assert!(tools.contains(&"Write".to_string()));
+        assert!(tools.contains(&"Bash".to_string()));
+        assert!(tools.contains(&"Edit".to_string()));
+        assert!(!tools.is_empty());
+    }
+
+    // -- serialization tests --
+
+    #[test]
+    fn claude_detection_serializes_camel_case() {
+        let detection = ClaudeDetection {
+            has_settings_json: true,
+            has_claude_md: false,
+            has_agents_dir: true,
+            has_memory_dir: false,
+            has_skills_dir: false,
+            has_mcp_json: true,
+            hook_count: 3,
+            config_path: Some("/path".to_string()),
+        };
+        let json = serde_json::to_value(&detection).unwrap();
+        assert!(json.get("hasSettingsJson").is_some());
+        assert!(json.get("hookCount").is_some());
+        assert!(json.get("has_settings_json").is_none());
+    }
+
+    #[test]
+    fn agent_serializes_camel_case() {
+        let agent = Agent {
+            agent_id: "test".to_string(),
+            name: "Test".to_string(),
+            system_prompt: "Hello".to_string(),
+            tools: vec![],
+            model_override: None,
+            memory_binding: None,
+        };
+        let json = serde_json::to_value(&agent).unwrap();
+        assert!(json.get("agentId").is_some());
+        assert!(json.get("systemPrompt").is_some());
+        assert!(json.get("modelOverride").is_some());
+    }
+
+    #[test]
+    fn mcp_server_serializes_correctly() {
+        let server = McpServer {
+            server_id: "test".to_string(),
+            server_type: "stdio".to_string(),
+            command: Some("cmd".to_string()),
+            args: None,
+            url: None,
+            env: None,
+            headers: None,
+        };
+        let json = serde_json::to_value(&server).unwrap();
+        assert!(json.get("serverId").is_some());
+        // "type" field uses serde rename
+        assert!(json.get("type").is_some());
+    }
+}

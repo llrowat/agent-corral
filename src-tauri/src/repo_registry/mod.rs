@@ -162,3 +162,178 @@ impl RepoRegistry {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_registry() -> (tempfile::TempDir, RepoRegistry) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db");
+        let registry = RepoRegistry::new(&db_path).unwrap();
+        (tmp, registry)
+    }
+
+    #[test]
+    fn new_creates_database() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db");
+        let _registry = RepoRegistry::new(&db_path).unwrap();
+        assert!(db_path.exists());
+    }
+
+    #[test]
+    fn add_and_list_repo() {
+        let (tmp, registry) = make_registry();
+        // Create a directory to add as a repo
+        let repo_dir = tmp.path().join("my-repo");
+        std::fs::create_dir(&repo_dir).unwrap();
+
+        let repo = registry.add_repo(repo_dir.to_str().unwrap()).unwrap();
+        assert_eq!(repo.name, "my-repo");
+        assert!(!repo.pinned);
+
+        let repos = registry.list_repos().unwrap();
+        assert_eq!(repos.len(), 1);
+        assert_eq!(repos[0].name, "my-repo");
+    }
+
+    #[test]
+    fn add_duplicate_repo_fails() {
+        let (tmp, registry) = make_registry();
+        let repo_dir = tmp.path().join("my-repo");
+        std::fs::create_dir(&repo_dir).unwrap();
+
+        registry.add_repo(repo_dir.to_str().unwrap()).unwrap();
+        let result = registry.add_repo(repo_dir.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), RepoRegistryError::AlreadyExists(_)));
+    }
+
+    #[test]
+    fn add_nonexistent_path_fails() {
+        let (tmp, registry) = make_registry();
+        let bad_path = tmp.path().join("nonexistent");
+
+        let result = registry.add_repo(bad_path.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), RepoRegistryError::InvalidPath(_)));
+    }
+
+    #[test]
+    fn remove_repo() {
+        let (tmp, registry) = make_registry();
+        let repo_dir = tmp.path().join("my-repo");
+        std::fs::create_dir(&repo_dir).unwrap();
+
+        let repo = registry.add_repo(repo_dir.to_str().unwrap()).unwrap();
+        registry.remove_repo(&repo.repo_id).unwrap();
+
+        let repos = registry.list_repos().unwrap();
+        assert_eq!(repos.len(), 0);
+    }
+
+    #[test]
+    fn remove_nonexistent_repo_fails() {
+        let (_tmp, registry) = make_registry();
+        let result = registry.remove_repo("fake-id");
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), RepoRegistryError::NotFound(_)));
+    }
+
+    #[test]
+    fn toggle_pin() {
+        let (tmp, registry) = make_registry();
+        let repo_dir = tmp.path().join("my-repo");
+        std::fs::create_dir(&repo_dir).unwrap();
+
+        let repo = registry.add_repo(repo_dir.to_str().unwrap()).unwrap();
+        assert!(!repo.pinned);
+
+        registry.toggle_pin(&repo.repo_id).unwrap();
+        let repos = registry.list_repos().unwrap();
+        assert!(repos[0].pinned);
+
+        registry.toggle_pin(&repo.repo_id).unwrap();
+        let repos = registry.list_repos().unwrap();
+        assert!(!repos[0].pinned);
+    }
+
+    #[test]
+    fn toggle_pin_nonexistent_fails() {
+        let (_tmp, registry) = make_registry();
+        let result = registry.toggle_pin("fake-id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn update_last_opened() {
+        let (tmp, registry) = make_registry();
+        let repo_dir = tmp.path().join("my-repo");
+        std::fs::create_dir(&repo_dir).unwrap();
+
+        let repo = registry.add_repo(repo_dir.to_str().unwrap()).unwrap();
+        let original_time = repo.last_opened_at.clone();
+
+        // Small delay to ensure different timestamp
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        registry.update_last_opened(&repo.repo_id).unwrap();
+
+        let repos = registry.list_repos().unwrap();
+        assert_ne!(repos[0].last_opened_at, original_time);
+    }
+
+    #[test]
+    fn update_last_opened_nonexistent_fails() {
+        let (_tmp, registry) = make_registry();
+        let result = registry.update_last_opened("fake-id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn list_repos_ordered_by_pinned_then_recent() {
+        let (tmp, registry) = make_registry();
+
+        let repo_a_dir = tmp.path().join("aaa");
+        let repo_b_dir = tmp.path().join("bbb");
+        std::fs::create_dir(&repo_a_dir).unwrap();
+        std::fs::create_dir(&repo_b_dir).unwrap();
+
+        let repo_a = registry.add_repo(repo_a_dir.to_str().unwrap()).unwrap();
+        let _repo_b = registry.add_repo(repo_b_dir.to_str().unwrap()).unwrap();
+
+        // Pin repo_a - it should appear first
+        registry.toggle_pin(&repo_a.repo_id).unwrap();
+
+        let repos = registry.list_repos().unwrap();
+        assert_eq!(repos[0].name, "aaa");
+        assert!(repos[0].pinned);
+    }
+
+    #[test]
+    fn get_repo_status_nonexistent_path() {
+        let status = RepoRegistry::get_repo_status("/tmp/definitely-does-not-exist-xyz");
+        assert!(!status.exists);
+        assert!(!status.is_git_repo);
+        assert!(!status.has_claude_config);
+        assert!(!status.has_claude_md);
+        assert!(!status.has_agents);
+    }
+
+    #[test]
+    fn get_repo_status_with_claude_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo_dir = tmp.path().join("repo");
+        std::fs::create_dir(&repo_dir).unwrap();
+        std::fs::create_dir(repo_dir.join(".git")).unwrap();
+        std::fs::create_dir_all(repo_dir.join(".claude/agents")).unwrap();
+        std::fs::write(repo_dir.join("CLAUDE.md"), "# Test").unwrap();
+
+        let status = RepoRegistry::get_repo_status(repo_dir.to_str().unwrap());
+        assert!(status.exists);
+        assert!(status.is_git_repo);
+        assert!(status.has_claude_config);
+        assert!(status.has_claude_md);
+        assert!(status.has_agents);
+    }
+}
