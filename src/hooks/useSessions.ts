@@ -1,17 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
-import type { SessionEnvelope } from "@/types";
+import type { SessionEnvelope, SessionActivityMap } from "@/types";
 import * as api from "@/lib/tauri";
 
 export function useSessions() {
   const [sessions, setSessions] = useState<SessionEnvelope[]>([]);
+  const [activities, setActivities] = useState<SessionActivityMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await api.listSessions();
-      setSessions(result);
+      const [sessionList, activityMap] = await Promise.all([
+        api.listSessions(),
+        api.pollSessionStates(),
+      ]);
+      setSessions(sessionList);
+      setActivities(activityMap);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -47,5 +52,5 @@ export function useSessions() {
     [refresh]
   );
 
-  return { sessions, loading, error, launchSession, refresh };
+  return { sessions, activities, loading, error, launchSession, refresh };
 }

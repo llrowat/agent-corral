@@ -1643,6 +1643,135 @@ code {
   color: var(--text-muted);
 }
 
+/* -- Activity Badges -- */
+.activity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.activity-active {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--success);
+}
+
+.activity-active::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.activity-idle {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warning);
+}
+
+.activity-idle::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.activity-exited {
+  background: rgba(139, 143, 163, 0.15);
+  color: var(--text-muted);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* -- Repo Group Headers (multi-repo view) -- */
+.repo-group {
+  border-bottom: 1px solid var(--border);
+}
+
+.repo-group:last-child {
+  border-bottom: none;
+}
+
+.repo-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--bg-tertiary);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: left;
+}
+
+.repo-group-header:hover {
+  background: var(--bg-hover);
+}
+
+.repo-group-caret {
+  font-size: 9px;
+  color: var(--text-muted);
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.repo-group-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-group-counts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.repo-group-alive-count {
+  padding: 1px 6px;
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--success);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.repo-group-total-count {
+  padding: 1px 6px;
+  background: rgba(139, 143, 163, 0.12);
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+}
+
+/* Indent session items within groups */
+.repo-group .session-item {
+  padding-left: 28px;
+}
+
 /* -- Scrollbar -- */
 ::-webkit-scrollbar {
   width: 6px;

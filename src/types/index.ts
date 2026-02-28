@@ -40,6 +40,12 @@ export interface WorktreeStatus {
   latestCommitSummary: string | null;
 }
 
+/** Activity state for a running session, inferred from CPU usage between polls. */
+export type SessionActivity = "active" | "idle" | "exited";
+
+/** Map of session ID to activity state, returned by poll_session_states. */
+export type SessionActivityMap = Record<string, SessionActivity>;
+
 // -- Claude Adapter --
 
 export interface ClaudeDetection {

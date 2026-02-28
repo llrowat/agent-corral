@@ -81,6 +81,7 @@ pub fn run() {
             commands::repo::get_repo_status,
             // Session commands
             commands::session::list_sessions,
+            commands::session::poll_session_states,
             commands::session::delete_session,
             commands::session::focus_session,
             // Claude adapter commands
