@@ -1226,6 +1226,97 @@ code {
   color: var(--text-muted);
 }
 
+/* -- Settings -- */
+.settings-section {
+  max-width: 600px;
+  margin-bottom: 28px;
+}
+
+.settings-section h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.settings-saved {
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* -- Hooks -- */
+.hook-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+}
+
+.hook-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.hook-group-header h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.hook-handler {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--bg-tertiary);
+}
+
+.hook-handler-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.hook-group-detail {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+}
+
+.hook-group-detail h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.hook-handler-detail {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.hook-handler-detail:last-child {
+  border-bottom: none;
+}
+
+/* -- MCP / Key-Value Rows -- */
+.kv-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.kv-row input[type="text"] {
+  flex: 1;
+}
+
 /* -- Scrollbar -- */
 ::-webkit-scrollbar {
   width: 6px;

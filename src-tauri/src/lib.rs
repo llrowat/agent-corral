@@ -2,12 +2,16 @@ mod claude_adapter;
 mod command_templates;
 mod commands;
 mod pack_manager;
+mod plugin_manager;
+mod preferences;
 mod repo_registry;
 mod session_manager;
 mod terminal_launcher;
 
 use command_templates::TemplateEngine;
 use pack_manager::PackManager;
+use plugin_manager::PluginManager;
+use preferences::PreferencesManager;
 use repo_registry::RepoRegistry;
 use session_manager::SessionManager;
 use std::sync::Mutex;
@@ -16,7 +20,9 @@ pub struct AppState {
     pub repo_registry: Mutex<RepoRegistry>,
     pub session_manager: Mutex<SessionManager>,
     pub pack_manager: Mutex<PackManager>,
+    pub plugin_manager: Mutex<PluginManager>,
     pub template_engine: Mutex<TemplateEngine>,
+    pub preferences: Mutex<PreferencesManager>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -31,23 +37,32 @@ pub fn run() {
     std::fs::create_dir_all(app_data_dir.join("packs")).expect("Failed to create packs dir");
     std::fs::create_dir_all(app_data_dir.join("packs/library"))
         .expect("Failed to create library dir");
+    std::fs::create_dir_all(app_data_dir.join("plugins")).expect("Failed to create plugins dir");
+    std::fs::create_dir_all(app_data_dir.join("plugins/library"))
+        .expect("Failed to create plugins library dir");
 
     let db_path = app_data_dir.join("repos.db");
     let sessions_dir = app_data_dir.join("sessions");
     let packs_dir = app_data_dir.join("packs");
-    let library_dir = app_data_dir.join("packs/library");
+    let packs_library_dir = app_data_dir.join("packs/library");
+    let plugins_dir = app_data_dir.join("plugins");
+    let plugins_library_dir = app_data_dir.join("plugins/library");
 
     let repo_registry = RepoRegistry::new(&db_path).expect("Failed to initialize repo registry");
     let session_manager =
         SessionManager::new(sessions_dir).expect("Failed to initialize session manager");
-    let pack_manager = PackManager::new(packs_dir, library_dir);
+    let pack_manager = PackManager::new(packs_dir, packs_library_dir);
+    let plugin_manager = PluginManager::new(plugins_dir, plugins_library_dir);
     let template_engine = TemplateEngine::new(&app_data_dir);
+    let preferences_manager = PreferencesManager::new(&app_data_dir);
 
     let state = AppState {
         repo_registry: Mutex::new(repo_registry),
         session_manager: Mutex::new(session_manager),
         pack_manager: Mutex::new(pack_manager),
+        plugin_manager: Mutex::new(plugin_manager),
         template_engine: Mutex::new(template_engine),
+        preferences: Mutex::new(preferences_manager),
     };
 
     tauri::Builder::default()
@@ -82,7 +97,22 @@ pub fn run() {
             commands::claude::get_known_tools,
             // Terminal commands
             commands::terminal::launch_session,
-            // Pack commands
+            // Preferences commands
+            commands::preferences::get_preferences,
+            commands::preferences::set_terminal_preference,
+            commands::preferences::get_platform,
+            // Hooks commands
+            commands::hooks::read_hooks,
+            commands::hooks::write_hooks,
+            // Skills commands
+            commands::skills::read_skills,
+            commands::skills::write_skill,
+            commands::skills::delete_skill,
+            // MCP commands
+            commands::mcp::read_mcp_servers,
+            commands::mcp::write_mcp_server,
+            commands::mcp::delete_mcp_server,
+            // Pack commands (legacy, kept for migration)
             commands::pack::list_packs,
             commands::pack::export_pack,
             commands::pack::preview_import,
@@ -92,6 +122,17 @@ pub fn run() {
             commands::pack::install_pack_from_git,
             commands::pack::check_pack_updates,
             commands::pack::update_pack,
+            // Plugin commands
+            commands::plugin::list_plugins,
+            commands::plugin::export_plugin,
+            commands::plugin::preview_plugin_import,
+            commands::plugin::import_plugin,
+            commands::plugin::delete_plugin,
+            commands::plugin::read_plugin,
+            commands::plugin::install_plugin_from_git,
+            commands::plugin::check_plugin_updates,
+            commands::plugin::update_plugin,
+            commands::plugin::migrate_agentpack,
             // Template commands
             commands::template::list_templates,
             commands::template::save_template,

@@ -71,6 +71,12 @@ export function OverviewPage({ repo }: Props) {
           <StatusBadge label="Claude config" ok={detection?.hasSettingsJson} />
           <StatusBadge label="CLAUDE.md" ok={detection?.hasClaudeMd} />
           <StatusBadge label="Agents" ok={detection?.hasAgentsDir} />
+          <StatusBadge label="Skills" ok={detection?.hasSkillsDir} />
+          <StatusBadge label="MCP Servers" ok={detection?.hasMcpJson} />
+          <StatusBadge
+            label={`Hooks${detection?.hookCount ? ` (${detection.hookCount})` : ""}`}
+            ok={detection?.hookCount !== undefined && detection.hookCount > 0}
+          />
           <StatusBadge label="Memory" ok={detection?.hasMemoryDir} />
         </div>
       </section>

@@ -8,11 +8,18 @@ import type {
   Agent,
   MemoryStore,
   MemoryEntry,
+  HookEvent,
+  Skill,
+  McpServer,
   PackSummary,
   PackContents,
   ImportPreview,
   ImportMode,
   PackUpdateCheck,
+  PluginSummary,
+  PluginContents,
+  PluginImportPreview,
+  PluginUpdateCheck,
   CommandTemplate,
 } from "@/types";
 
@@ -141,6 +148,81 @@ export async function getKnownTools(): Promise<string[]> {
   return invoke("get_known_tools");
 }
 
+// -- Hooks commands --
+
+export async function readHooks(repoPath: string): Promise<HookEvent[]> {
+  return invoke("read_hooks", { repoPath });
+}
+
+export async function writeHooks(
+  repoPath: string,
+  hooks: HookEvent[]
+): Promise<void> {
+  return invoke("write_hooks", { repoPath, hooks });
+}
+
+// -- Skills commands --
+
+export async function readSkills(repoPath: string): Promise<Skill[]> {
+  return invoke("read_skills", { repoPath });
+}
+
+export async function writeSkill(
+  repoPath: string,
+  skill: Skill
+): Promise<void> {
+  return invoke("write_skill", { repoPath, skill });
+}
+
+export async function deleteSkill(
+  repoPath: string,
+  skillId: string
+): Promise<void> {
+  return invoke("delete_skill", { repoPath, skillId });
+}
+
+// -- MCP commands --
+
+export async function readMcpServers(
+  repoPath: string
+): Promise<McpServer[]> {
+  return invoke("read_mcp_servers", { repoPath });
+}
+
+export async function writeMcpServer(
+  repoPath: string,
+  server: McpServer
+): Promise<void> {
+  return invoke("write_mcp_server", { repoPath, server });
+}
+
+export async function deleteMcpServer(
+  repoPath: string,
+  serverId: string
+): Promise<void> {
+  return invoke("delete_mcp_server", { repoPath, serverId });
+}
+
+// -- Preferences commands --
+
+export interface AppPreferences {
+  terminal_emulator: string | null;
+}
+
+export async function getPreferences(): Promise<AppPreferences> {
+  return invoke("get_preferences");
+}
+
+export async function setTerminalPreference(
+  terminal: string | null
+): Promise<void> {
+  return invoke("set_terminal_preference", { terminal });
+}
+
+export async function getPlatform(): Promise<string> {
+  return invoke("get_platform");
+}
+
 // -- Terminal commands --
 
 export async function launchSession(
@@ -216,6 +298,89 @@ export async function checkPackUpdates(): Promise<PackUpdateCheck[]> {
 
 export async function updatePack(packPath: string): Promise<PackSummary> {
   return invoke("update_pack", { packPath });
+}
+
+// -- Plugin commands --
+
+export async function listPlugins(): Promise<PluginSummary[]> {
+  return invoke("list_plugins");
+}
+
+export async function exportPlugin(
+  repoPath: string,
+  name: string,
+  description: string,
+  author: string | null,
+  version: string | null,
+  includeConfig: boolean,
+  agentIds: string[],
+  skillIds: string[],
+  includeHooks: boolean,
+  includeMcp: boolean
+): Promise<string> {
+  return invoke("export_plugin", {
+    repoPath,
+    name,
+    description,
+    author,
+    version,
+    includeConfig,
+    agentIds,
+    skillIds,
+    includeHooks,
+    includeMcp,
+  });
+}
+
+export async function previewPluginImport(
+  pluginDir: string,
+  repoPath: string
+): Promise<PluginImportPreview> {
+  return invoke("preview_plugin_import", { pluginDir, repoPath });
+}
+
+export async function importPlugin(
+  pluginDir: string,
+  repoPath: string,
+  mode: ImportMode
+): Promise<void> {
+  return invoke("import_plugin", { pluginDir, repoPath, mode });
+}
+
+export async function deletePlugin(pluginDir: string): Promise<void> {
+  return invoke("delete_plugin", { pluginDir });
+}
+
+export async function readPlugin(
+  pluginDir: string
+): Promise<PluginContents> {
+  return invoke("read_plugin", { pluginDir });
+}
+
+export async function installPluginFromGit(
+  repoUrl: string,
+  branch?: string
+): Promise<PluginSummary[]> {
+  return invoke("install_plugin_from_git", {
+    repoUrl,
+    branch: branch || null,
+  });
+}
+
+export async function checkPluginUpdates(): Promise<PluginUpdateCheck[]> {
+  return invoke("check_plugin_updates");
+}
+
+export async function updatePlugin(
+  pluginDir: string
+): Promise<PluginSummary> {
+  return invoke("update_plugin", { pluginDir });
+}
+
+export async function migrateAgentpack(
+  agentpackPath: string
+): Promise<string> {
+  return invoke("migrate_agentpack", { agentpackPath });
 }
 
 // -- Template commands --

@@ -7,7 +7,12 @@ import { AgentsPage } from "./pages/AgentsPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { SessionsPage } from "./pages/SessionsPage";
+import { HooksPage } from "./pages/HooksPage";
+import { SkillsPage } from "./pages/SkillsPage";
+import { McpPage } from "./pages/McpPage";
 import { PacksPage } from "./pages/PacksPage";
+import { PluginsPage } from "./pages/PluginsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { useRepos } from "./hooks/useRepos";
 import type { Repo } from "./types";
 
@@ -47,6 +52,18 @@ function App() {
               element={<AgentsPage repo={selectedRepo} />}
             />
             <Route
+              path="/hooks"
+              element={<HooksPage repo={selectedRepo} />}
+            />
+            <Route
+              path="/skills"
+              element={<SkillsPage repo={selectedRepo} />}
+            />
+            <Route
+              path="/mcp"
+              element={<McpPage repo={selectedRepo} />}
+            />
+            <Route
               path="/config"
               element={<ConfigPage repo={selectedRepo} />}
             />
@@ -59,6 +76,8 @@ function App() {
               element={<SessionsPage repo={selectedRepo} />}
             />
             <Route path="/packs" element={<PacksPage repo={selectedRepo} />} />
+            <Route path="/plugins" element={<PluginsPage repo={selectedRepo} />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>
       </div>

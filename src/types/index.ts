@@ -39,6 +39,9 @@ export interface ClaudeDetection {
   hasClaudeMd: boolean;
   hasAgentsDir: boolean;
   hasMemoryDir: boolean;
+  hasSkillsDir: boolean;
+  hasMcpJson: boolean;
+  hookCount: number;
   configPath: string | null;
 }
 
@@ -70,7 +73,62 @@ export interface MemoryEntry {
   content: string;
 }
 
-// -- Pack Manager --
+// -- Hooks --
+
+export interface HookHandler {
+  hookType: string;
+  command?: string | null;
+  prompt?: string | null;
+  timeout?: number | null;
+}
+
+export interface HookGroup {
+  matcher?: string | null;
+  hooks: HookHandler[];
+}
+
+export interface HookEvent {
+  event: string;
+  groups: HookGroup[];
+}
+
+export const HOOK_EVENTS = [
+  "PreToolUse",
+  "PostToolUse",
+  "Notification",
+  "Stop",
+  "SubagentStop",
+] as const;
+
+// -- Skills --
+
+export interface Skill {
+  skillId: string;
+  name: string;
+  description?: string | null;
+  userInvocable?: boolean | null;
+  allowedTools: string[];
+  model?: string | null;
+  disableModelInvocation?: boolean | null;
+  context?: string | null;
+  agent?: string | null;
+  argumentHint?: string | null;
+  content: string;
+}
+
+// -- MCP Servers --
+
+export interface McpServer {
+  serverId: string;
+  serverType: string;
+  command?: string | null;
+  args?: string[] | null;
+  url?: string | null;
+  env?: Record<string, string> | null;
+  headers?: Record<string, string> | null;
+}
+
+// -- Pack Manager (legacy) --
 
 export interface PackManifest {
   packId: string;
@@ -128,6 +186,62 @@ export interface ImportPreview {
   configChanges: boolean;
 }
 
+// -- Plugin Manager --
+
+export interface PluginManifest {
+  name: string;
+  description: string;
+  version: string;
+  author: string | null;
+}
+
+export interface PluginSummary {
+  pluginId: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string | null;
+  agentCount: number;
+  skillCount: number;
+  hookCount: number;
+  mcpCount: number;
+  hasConfig: boolean;
+  dirPath: string;
+  source: "local" | "library" | "git";
+  gitSource: GitSource | null;
+}
+
+export interface PluginContents {
+  manifest: PluginManifest;
+  agents: Agent[];
+  skills: Skill[];
+  hooks: HookEvent[];
+  mcpServers: McpServer[];
+  config: NormalizedConfig | null;
+}
+
+export interface PluginImportPreview {
+  agentsToAdd: string[];
+  agentsToUpdate: string[];
+  skillsToAdd: string[];
+  skillsToUpdate: string[];
+  hooksToAdd: string[];
+  mcpToAdd: string[];
+  mcpToUpdate: string[];
+  configChanges: boolean;
+}
+
+export interface PluginUpdateCheck {
+  pluginId: string;
+  name: string;
+  currentVersion: string;
+  latestVersion: string | null;
+  installedCommit: string;
+  latestCommit: string;
+  updateAvailable: boolean;
+  dirPath: string;
+}
+
 // -- Command Templates --
 
 export interface CommandTemplate {
@@ -147,4 +261,7 @@ export type PageId =
   | "config"
   | "memory"
   | "sessions"
-  | "packs";
+  | "hooks"
+  | "skills"
+  | "mcp"
+  | "plugins";
