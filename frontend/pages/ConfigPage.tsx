@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { Scope, NormalizedConfig } from "@/types";
 import * as api from "@/lib/tauri";
 import { ScopeBanner } from "@/components/ScopeGuard";
+import { DocsLink } from "@/components/DocsLink";
 
 interface Props {
   scope: Scope | null;
@@ -85,7 +86,7 @@ export function ConfigPage({ scope }: Props) {
     <div className="page config-page">
       {scope && <ScopeBanner scope={scope} />}
       <div className="page-header">
-        <h2>Config Studio</h2>
+        <h2>Config Studio <DocsLink page="config" /></h2>
         {!editing && config && (
           <button className="btn" onClick={startEditing}>
             Edit

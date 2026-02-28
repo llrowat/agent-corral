@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope, MemoryStore, MemoryEntry } from "@/types";
 import * as api from "@/lib/tauri";
+import { DocsLink } from "@/components/DocsLink";
 
 interface Props {
   scope: Scope | null;
@@ -158,7 +159,7 @@ export function MemoryPage({ scope, homePath }: Props) {
 
   return (
     <div className="page memory-page">
-      <h2>Memory Studio</h2>
+      <h2>Memory Studio <DocsLink page="memory" /></h2>
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">

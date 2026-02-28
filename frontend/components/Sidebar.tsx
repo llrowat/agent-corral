@@ -25,12 +25,12 @@ const navGroups: NavGroup[] = [
   {
     label: "Claude Code",
     items: [
+      { path: "/config", label: "Config", icon: "settings" },
       { path: "/agents", label: "Agents", icon: "bot" },
       { path: "/hooks", label: "Hooks", icon: "hook" },
+      { path: "/memory", label: "Memory", icon: "database" },
       { path: "/skills", label: "Skills", icon: "skill" },
       { path: "/mcp", label: "MCP Servers", icon: "mcp" },
-      { path: "/config", label: "Config", icon: "settings" },
-      { path: "/memory", label: "Memory", icon: "database" },
     ],
   },
   {

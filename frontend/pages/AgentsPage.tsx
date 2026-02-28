@@ -11,6 +11,7 @@ import {
   FieldError,
   type ValidationError,
 } from "@/components/InlineValidation";
+import { DocsLink } from "@/components/DocsLink";
 
 interface Props {
   scope: Scope | null;
@@ -166,7 +167,7 @@ export function AgentsPage({ scope, homePath }: Props) {
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
-            <h3>Agents</h3>
+            <h3>Agents <DocsLink page="agents" /></h3>
             <div className="header-actions">
               <button
                 className="btn btn-sm"
