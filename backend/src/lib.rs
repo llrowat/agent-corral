@@ -1,5 +1,6 @@
 mod claude_adapter;
 mod command_templates;
+#[cfg(feature = "tauri-app")]
 mod commands;
 mod pack_manager;
 mod plugin_manager;
@@ -8,14 +9,22 @@ mod repo_registry;
 mod session_manager;
 mod terminal_launcher;
 
+#[cfg(feature = "tauri-app")]
 use command_templates::TemplateEngine;
+#[cfg(feature = "tauri-app")]
 use pack_manager::PackManager;
+#[cfg(feature = "tauri-app")]
 use plugin_manager::PluginManager;
+#[cfg(feature = "tauri-app")]
 use preferences::PreferencesManager;
+#[cfg(feature = "tauri-app")]
 use repo_registry::RepoRegistry;
+#[cfg(feature = "tauri-app")]
 use session_manager::SessionManager;
+#[cfg(feature = "tauri-app")]
 use std::sync::Mutex;
 
+#[cfg(feature = "tauri-app")]
 pub struct AppState {
     pub repo_registry: Mutex<RepoRegistry>,
     pub session_manager: Mutex<SessionManager>,
@@ -25,6 +34,7 @@ pub struct AppState {
     pub preferences: Mutex<PreferencesManager>,
 }
 
+#[cfg(feature = "tauri-app")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app_data_dir = dirs::data_dir()
