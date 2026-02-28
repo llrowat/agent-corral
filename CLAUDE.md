@@ -10,22 +10,63 @@ agent-corral/
 │   ├── src/
 │   │   ├── lib.rs              # App entry, state management
 │   │   ├── main.rs             # Binary entry
+│   │   ├── preferences.rs      # App preferences (terminal emulator, plugin sync interval)
 │   │   ├── commands/           # Tauri IPC command handlers
+│   │   │   ├── claude.rs       #   Agent CRUD
+│   │   │   ├── hooks.rs        #   Hooks management
+│   │   │   ├── mcp.rs          #   MCP servers
+│   │   │   ├── pack.rs         #   Legacy pack system
+│   │   │   ├── plugin.rs       #   Plugin system + import sync
+│   │   │   ├── preferences.rs  #   App preferences
+│   │   │   ├── repo.rs         #   Repository registry
+│   │   │   ├── session.rs      #   Session management
+│   │   │   ├── skills.rs       #   Skills
+│   │   │   ├── template.rs     #   Command templates
+│   │   │   ├── terminal.rs     #   Terminal launcher
+│   │   │   └── worktree.rs     #   Git worktree operations
 │   │   ├── repo_registry/      # SQLite repo management
 │   │   ├── session_manager/    # Session tracking, process lifecycle, window focus, git worktree lifecycle
 │   │   ├── claude_adapter/     # Claude Code file format adapter (agents, hooks, skills, MCP, memory)
-│   │   ├── plugin_manager/     # Plugin export/import/git install/update (directory-based)
+│   │   ├── plugin_manager/     # Plugin export/import/git install/update, import sync registry
 │   │   ├── pack_manager/       # Legacy pack system (.agentpack JSON, kept for migration)
 │   │   ├── command_templates/  # Template engine with variable substitution
 │   │   └── terminal_launcher/  # Native terminal spawning (per-platform)
 │   └── tauri.conf.json
 ├── frontend/           # React frontend
-│   ├── components/     # Shared UI components (Sidebar, ScopeSwitcher)
-│   ├── pages/          # Page components (Overview, Agents, Hooks, Skills, MCP, Config, Memory, Sessions, Plugins, Settings)
-│   ├── hooks/          # React hooks (useRepos, useSessions)
-│   ├── lib/            # Tauri API bindings
+│   ├── components/     # Shared UI components
+│   │   ├── Sidebar            # Navigation sidebar
+│   │   ├── ScopeSwitcher      # Global/Project scope selector
+│   │   ├── ScopeGuard         # Scope protection wrapper
+│   │   ├── RepoSwitcher       # Repository selection
+│   │   ├── ConfigSummary      # Configuration overview widget
+│   │   ├── DocsLink           # Links to Anthropic docs per feature
+│   │   ├── InlineValidation   # Form validation with auto-fix suggestions
+│   │   ├── PresetPicker       # Generic preset selection modal
+│   │   ├── QuickSetup         # First-run setup wizard with starter templates
+│   │   └── CreateWithAiModal  # AI-powered entity creation (spawns Claude)
+│   ├── pages/          # Page components
+│   │   ├── OverviewPage       # Dashboard with config summary
+│   │   ├── AgentsPage         # Agent studio (create/edit/delete)
+│   │   ├── HooksPage          # Hooks editor
+│   │   ├── SkillsPage         # Skills management
+│   │   ├── McpPage            # MCP servers configuration
+│   │   ├── ConfigPage         # Settings/configuration editor
+│   │   ├── MemoryPage         # Memory stores and entries
+│   │   ├── SessionsPage       # Session manager with worktree controls
+│   │   ├── PluginsPage        # Plugin system UI with import sync
+│   │   ├── PacksPage          # Legacy pack management
+│   │   ├── TemplatesPage      # Command templates
+│   │   └── SettingsPage       # App preferences (terminal, sync interval)
+│   ├── hooks/          # React hooks
+│   │   ├── useRepos           # Repository list
+│   │   ├── useSessions        # Active sessions
+│   │   └── usePluginSync      # Plugin import sync polling
+│   ├── lib/            # Shared libraries
+│   │   ├── tauri              # Tauri IPC API bindings
+│   │   └── presets            # Built-in presets (agents, hooks, skills, MCP, config, starter templates)
 │   ├── types/          # TypeScript type definitions
 │   └── styles.css      # Global styles (dark theme)
+├── .github/workflows/  # CI (test.yml runs Rust + frontend tests)
 ├── Cargo.toml          # Workspace root
 ├── package.json        # Frontend dependencies
 └── vite.config.ts      # Vite configuration
@@ -35,14 +76,21 @@ agent-corral/
 
 - **Global + Project Scope** — The app supports managing Claude Code config at both the global (`~/.claude/`) and project (`{repo}/.claude/`) level. Most adapters work for both by passing the appropriate base path. MCP is the exception: global uses `~/.claude.json`, project uses `{repo}/.mcp.json`.
 - **ClaudeRepoAdapter** isolates all Claude file format concerns. Never read/write Claude config files directly outside this module. Handles agents, hooks (settings.json), skills (.claude/skills/), MCP servers, and memory stores.
-- **Plugin Manager** uses a directory-based format (`.claude-plugin/plugin.json`) that bundles agents, skills, hooks, and MCP servers. Replaces the legacy `.agentpack` JSON format.
-- **Session Manager** tracks launched terminal sessions via JSON envelope files. Records PID on launch, auto-cleans dead sessions (via `GetExitCodeProcess` on Windows), and supports focusing/killing terminal windows. Manages git worktree lifecycle (create, status, cleanup) for isolated session working directories.
+- **Plugin Manager** uses a directory-based format (`.claude-plugin/plugin.json`) that bundles agents, skills, hooks, MCP servers, and command templates. Replaces the legacy `.agentpack` JSON format. Includes an **import sync registry** that tracks which plugins have been imported into a repo, their source commits, and supports auto-sync (periodic pull of updates from git-sourced plugins), pinning (lock a plugin to its current version), and unlink (remove tracking).
+- **Preferences Manager** (`preferences.rs`) stores app-level settings like terminal emulator choice and plugin sync interval. Uses atomic writes. Persisted to `{app_data_dir}/preferences.json`.
+- **Session Manager** tracks launched terminal sessions via JSON envelope files. Records PID on launch, auto-cleans dead sessions (via `GetExitCodeProcess` on Windows), and supports focusing/killing terminal windows. Manages git worktree lifecycle (create, status, cleanup) for isolated session working directories. Supports **session activity polling** (active/idle/exited based on CPU usage between polls), **session resume**, and **opening session folders**.
 - **Git Worktree Support** — Sessions can optionally run in an isolated git worktree. Each worktree gets its own branch (`worktree/{session-id}`), is stored in `{app_data_dir}/worktrees/{session_id}/`, and is automatically cleaned up (including branch deletion) when the session is deleted or detected as dead. The worktree feature can be enabled per-template (`useWorktree` flag) or toggled at launch time via the UI. Worktree sessions support status inspection (branch, dirty state, commit count), diff viewing, and merging back into a target branch.
 - **Terminal Launcher** spawns commands directly in a new console window. On Windows uses `CREATE_NEW_CONSOLE` flag.
 - **Atomic file writes** are used everywhere to prevent corruption (write to .tmp, then rename).
 - **Agent metadata sidecar files** (`.meta.json`) store tools, model override, and memory binding alongside `.md` agent files.
 - **Plugin git source sidecars** (`.claude-plugin/source.json`) track the git origin, branch, and installed commit for git-sourced plugins.
 - **Command Templates** use `{{variable}}` substitution with a `shell_quote` helper for safe command construction. Templates have a `useWorktree` boolean flag to default to worktree isolation.
+- **Built-in Presets** (`frontend/lib/presets.ts`) provide ready-made configurations for agents (code reviewer, test writer, doc writer, refactorer, etc.), hooks, skills, MCP servers, config, and starter templates for the QuickSetup wizard.
+- **Create with AI** (`CreateWithAiModal`) launches a Claude Code session with a tailored prompt to generate agents, skills, hooks, or MCP server configs from a natural-language description.
+- **QuickSetup Wizard** (`QuickSetup`) detects repos with no Claude config and offers starter templates to bootstrap a working setup in one click.
+- **Inline Validation** (`InlineValidation`) provides real-time form validation for agent IDs, skill IDs, and server IDs with auto-fix suggestions (e.g., converting invalid slugs to valid ones).
+- **Docs Links** (`DocsLink`) links each feature page to the corresponding Anthropic documentation (agents, hooks, skills, MCP, config, memory).
+- **Pack-to-Plugin Migration** — The `migrate_agentpack` command converts legacy `.agentpack` files to the new directory-based plugin format.
 
 ### Plugin Directory Format
 
@@ -53,6 +101,7 @@ my-plugin/
   agents/                       # agent .md + .meta.json files
   skills/                       # skill dirs with SKILL.md (YAML frontmatter + markdown)
   hooks/hooks.json              # { hooks: [...] }
+  templates/                    # command template JSON files
   .mcp.json                     # { mcpServers: { ... } }
   settings.json                 # repo config defaults
 ```
@@ -108,6 +157,7 @@ npm run test:watch
 - Phase 3: Memory Studio
 - Phase 4: Pack system (legacy, kept for migration)
 - Phase 5: Hooks, Skills, MCP management pages
-- Phase 6: Plugin system (directory-based, replaces packs)
+- Phase 6: Plugin system (directory-based, replaces packs), import sync, auto-update
 - Phase 7: Git worktree isolation for sessions (create, status, diff, merge, cleanup)
-- Phase 8: Polish, installer packaging
+- Phase 8: Built-in presets, QuickSetup wizard, Create with AI, inline validation, preferences
+- Phase 9: Polish, installer packaging
