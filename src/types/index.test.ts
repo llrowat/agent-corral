@@ -4,6 +4,8 @@ import type {
   RepoStatus,
   SessionEnvelope,
   WorktreeStatus,
+  SessionActivity,
+  SessionActivityMap,
   ClaudeDetection,
   NormalizedConfig,
   Agent,
@@ -272,6 +274,29 @@ describe("Type definitions", () => {
       };
       expect(summary.agentCount).toBe(2);
       expect(summary.source).toBe("library");
+    });
+  });
+
+  describe("SessionActivity type", () => {
+    it("accepts valid activity values", () => {
+      const active: SessionActivity = "active";
+      const idle: SessionActivity = "idle";
+      const exited: SessionActivity = "exited";
+      expect(active).toBe("active");
+      expect(idle).toBe("idle");
+      expect(exited).toBe("exited");
+    });
+  });
+
+  describe("SessionActivityMap type", () => {
+    it("creates a valid activity map", () => {
+      const map: SessionActivityMap = {
+        "sess-1": "active",
+        "sess-2": "idle",
+        "sess-3": "exited",
+      };
+      expect(map["sess-1"]).toBe("active");
+      expect(Object.keys(map)).toHaveLength(3);
     });
   });
 });

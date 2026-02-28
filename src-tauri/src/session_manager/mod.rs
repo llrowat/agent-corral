@@ -1,5 +1,6 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -55,9 +56,24 @@ pub struct WorktreeStatus {
     pub latest_commit_summary: Option<String>,
 }
 
+/// Activity state for a running session, inferred from CPU usage between polls.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum SessionActivity {
+    /// Process is actively consuming CPU (doing work).
+    Active,
+    /// Process is alive but not consuming CPU (likely waiting for user input).
+    Idle,
+    /// Process has exited.
+    Exited,
+}
+
 pub struct SessionManager {
     sessions_dir: PathBuf,
     worktrees_dir: PathBuf,
+    /// Tracks cumulative CPU time (in ms) per session from the previous poll,
+    /// used to determine if a process is actively working or idle.
+    cpu_times: HashMap<String, u64>,
 }
 
 impl SessionManager {
@@ -67,6 +83,7 @@ impl SessionManager {
         Ok(Self {
             sessions_dir,
             worktrees_dir,
+            cpu_times: HashMap::new(),
         })
     }
 
@@ -442,8 +459,160 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Poll activity state for all sessions. Compares current CPU time to
+    /// the previously recorded value to determine if a process is actively
+    /// working or idle (waiting for input).
+    pub fn poll_session_activities(
+        &mut self,
+        sessions: &[SessionEnvelope],
+    ) -> HashMap<String, SessionActivity> {
+        let mut result = HashMap::new();
+        let mut new_cpu_times = HashMap::new();
+
+        for session in sessions {
+            if !session.process_alive {
+                result.insert(session.session_id.clone(), SessionActivity::Exited);
+                continue;
+            }
+
+            let pid = match session.pid {
+                Some(pid) => pid,
+                None => {
+                    result.insert(session.session_id.clone(), SessionActivity::Exited);
+                    continue;
+                }
+            };
+
+            match get_process_cpu_time(pid) {
+                Some(current_cpu) => {
+                    let activity = if let Some(&prev_cpu) = self.cpu_times.get(&session.session_id) {
+                        if current_cpu > prev_cpu {
+                            SessionActivity::Active
+                        } else {
+                            SessionActivity::Idle
+                        }
+                    } else {
+                        // First poll — assume active if there's any CPU time
+                        if current_cpu > 0 {
+                            SessionActivity::Active
+                        } else {
+                            SessionActivity::Idle
+                        }
+                    };
+                    new_cpu_times.insert(session.session_id.clone(), current_cpu);
+                    result.insert(session.session_id.clone(), activity);
+                }
+                None => {
+                    // Can't read CPU time — process may have exited
+                    result.insert(session.session_id.clone(), SessionActivity::Exited);
+                }
+            }
+        }
+
+        self.cpu_times = new_cpu_times;
+        result
+    }
+
     pub fn sessions_dir(&self) -> &Path {
         &self.sessions_dir
+    }
+}
+
+/// Get cumulative CPU time in milliseconds for a process. Returns None if the
+/// process doesn't exist or the information can't be read.
+fn get_process_cpu_time(pid: u32) -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        // Read /proc/{pid}/stat — fields 14 (utime) and 15 (stime) are
+        // cumulative CPU ticks in user and kernel mode respectively.
+        let stat_path = format!("/proc/{}/stat", pid);
+        let contents = fs::read_to_string(&stat_path).ok()?;
+        // The comm field (field 2) may contain spaces/parens, so find the
+        // closing paren and parse from there.
+        let after_comm = contents.rfind(')')? + 2;
+        let fields: Vec<&str> = contents[after_comm..].split_whitespace().collect();
+        // After the closing paren and the state char, fields are 0-indexed:
+        // index 11 = utime (field 14), index 12 = stime (field 15)
+        if fields.len() < 13 {
+            return None;
+        }
+        let utime: u64 = fields[11].parse().ok()?;
+        let stime: u64 = fields[12].parse().ok()?;
+        // Convert from clock ticks to ms (assuming 100 Hz = 10ms per tick)
+        Some((utime + stime) * 10)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("ps")
+            .args(["-o", "cputime=", "-p", &pid.to_string()])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        // Format is HH:MM:SS or M:SS
+        let time_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        parse_cputime_to_ms(&time_str)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+            fn CloseHandle(handle: isize) -> i32;
+            fn GetProcessTimes(
+                handle: isize,
+                creation: *mut u64,
+                exit: *mut u64,
+                kernel: *mut u64,
+                user: *mut u64,
+            ) -> i32;
+        }
+        const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if handle == 0 {
+                return None;
+            }
+            let mut creation: u64 = 0;
+            let mut exit: u64 = 0;
+            let mut kernel: u64 = 0;
+            let mut user: u64 = 0;
+            let ok = GetProcessTimes(handle, &mut creation, &mut exit, &mut kernel, &mut user);
+            CloseHandle(handle);
+            if ok == 0 {
+                return None;
+            }
+            // kernel and user are in 100-nanosecond intervals, convert to ms
+            Some((kernel + user) / 10_000)
+        }
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        let _ = pid;
+        None
+    }
+}
+
+/// Parse a cputime string like "0:02.34" or "1:23:45" into milliseconds.
+#[cfg(target_os = "macos")]
+fn parse_cputime_to_ms(s: &str) -> Option<u64> {
+    let parts: Vec<&str> = s.split(':').collect();
+    match parts.len() {
+        2 => {
+            let mins: u64 = parts[0].parse().ok()?;
+            let secs: f64 = parts[1].parse().ok()?;
+            Some(mins * 60_000 + (secs * 1000.0) as u64)
+        }
+        3 => {
+            let hours: u64 = parts[0].parse().ok()?;
+            let mins: u64 = parts[1].parse().ok()?;
+            let secs: f64 = parts[2].parse().ok()?;
+            Some(hours * 3_600_000 + mins * 60_000 + (secs * 1000.0) as u64)
+        }
+        _ => None,
     }
 }
 
@@ -550,5 +719,122 @@ fn kill_process_tree(pid: u32) {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn make_manager() -> SessionManager {
+        let tmp = tempdir().unwrap();
+        let sessions_dir = tmp.path().join("sessions");
+        let worktrees_dir = tmp.path().join("worktrees");
+        // Keep the tempdir alive by leaking it (tests are short-lived)
+        let tmp = Box::leak(Box::new(tmp));
+        let _ = tmp;
+        SessionManager::new(sessions_dir, worktrees_dir).unwrap()
+    }
+
+    fn make_envelope(id: &str, repo: &str, alive: bool, pid: Option<u32>) -> SessionEnvelope {
+        SessionEnvelope {
+            session_id: id.to_string(),
+            repo_path: repo.to_string(),
+            command_name: "test".to_string(),
+            command: "echo hello".to_string(),
+            started_at: "2026-01-01T00:00:00Z".to_string(),
+            pid,
+            worktree_path: None,
+            worktree_branch: None,
+            worktree_base_branch: None,
+            process_alive: alive,
+        }
+    }
+
+    #[test]
+    fn poll_activities_exited_sessions_marked_exited() {
+        let mut mgr = make_manager();
+        let sessions = vec![
+            make_envelope("s1", "/repo1", false, Some(99999)),
+            make_envelope("s2", "/repo2", false, None),
+        ];
+
+        let activities = mgr.poll_session_activities(&sessions);
+
+        assert_eq!(activities.get("s1"), Some(&SessionActivity::Exited));
+        assert_eq!(activities.get("s2"), Some(&SessionActivity::Exited));
+    }
+
+    #[test]
+    fn poll_activities_no_pid_marked_exited() {
+        let mut mgr = make_manager();
+        let sessions = vec![make_envelope("s1", "/repo1", true, None)];
+
+        let activities = mgr.poll_session_activities(&sessions);
+        assert_eq!(activities.get("s1"), Some(&SessionActivity::Exited));
+    }
+
+    #[test]
+    fn poll_activities_nonexistent_pid_marked_exited() {
+        let mut mgr = make_manager();
+        // Use a very high PID that almost certainly doesn't exist
+        let sessions = vec![make_envelope("s1", "/repo1", true, Some(4_000_000))];
+
+        let activities = mgr.poll_session_activities(&sessions);
+        assert_eq!(activities.get("s1"), Some(&SessionActivity::Exited));
+    }
+
+    #[test]
+    fn poll_activities_cpu_times_cleaned_on_poll() {
+        let mut mgr = make_manager();
+        // Pre-populate cpu_times with a stale entry
+        mgr.cpu_times.insert("old-session".to_string(), 100);
+
+        let sessions = vec![make_envelope("s1", "/repo1", false, None)];
+        mgr.poll_session_activities(&sessions);
+
+        // Old entry should be cleared since it's not in the sessions list
+        assert!(!mgr.cpu_times.contains_key("old-session"));
+    }
+
+    #[test]
+    fn create_and_list_sessions() {
+        let mgr = make_manager();
+        mgr.create_session("s1", "/repo1", "test", "echo", 123, None, None, None)
+            .unwrap();
+        mgr.create_session("s2", "/repo2", "test2", "ls", 456, None, None, None)
+            .unwrap();
+
+        let sessions = mgr.list_sessions().unwrap();
+        assert_eq!(sessions.len(), 2);
+    }
+
+    #[test]
+    fn delete_session_removes_file() {
+        let mgr = make_manager();
+        mgr.create_session("s1", "/repo1", "test", "echo", 123, None, None, None)
+            .unwrap();
+
+        mgr.delete_session("s1").unwrap();
+        let sessions = mgr.list_sessions().unwrap();
+        assert_eq!(sessions.len(), 0);
+    }
+
+    #[test]
+    fn delete_nonexistent_session_fails() {
+        let mgr = make_manager();
+        let result = mgr.delete_session("nonexistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn session_activity_serializes_to_camel_case() {
+        let json = serde_json::to_string(&SessionActivity::Active).unwrap();
+        assert_eq!(json, "\"active\"");
+        let json = serde_json::to_string(&SessionActivity::Idle).unwrap();
+        assert_eq!(json, "\"idle\"");
+        let json = serde_json::to_string(&SessionActivity::Exited).unwrap();
+        assert_eq!(json, "\"exited\"");
     }
 }

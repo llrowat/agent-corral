@@ -3,6 +3,7 @@ import type {
   Repo,
   RepoStatus,
   SessionEnvelope,
+  SessionActivityMap,
   WorktreeStatus,
   ClaudeDetection,
   NormalizedConfig,
@@ -54,6 +55,10 @@ export async function deleteSession(sessionId: string): Promise<void> {
 
 export async function focusSession(pid: number): Promise<void> {
   return invoke("focus_session", { pid });
+}
+
+export async function pollSessionStates(): Promise<SessionActivityMap> {
+  return invoke("poll_session_states");
 }
 
 // -- Claude home --

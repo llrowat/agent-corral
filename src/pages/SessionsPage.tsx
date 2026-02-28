@@ -1,5 +1,10 @@
-import { useState, useCallback } from "react";
-import type { Scope, SessionEnvelope, WorktreeStatus } from "@/types";
+import { useState, useCallback, useMemo } from "react";
+import type {
+  Scope,
+  SessionEnvelope,
+  SessionActivity,
+  WorktreeStatus,
+} from "@/types";
 import { useSessions } from "@/hooks/useSessions";
 import * as api from "@/lib/tauri";
 
@@ -7,109 +12,202 @@ interface Props {
   scope: Scope | null;
 }
 
+/** Extract a short repo name from a full path (last path segment). */
+function repoNameFromPath(path: string): string {
+  const segments = path.replace(/[\\/]+$/, "").split(/[\\/]/);
+  return segments[segments.length - 1] || path;
+}
+
+/** Human-readable label for an activity state. */
+function activityLabel(activity: SessionActivity | undefined): string {
+  switch (activity) {
+    case "active":
+      return "working";
+    case "idle":
+      return "waiting";
+    case "exited":
+      return "exited";
+    default:
+      return "unknown";
+  }
+}
+
+/** CSS class for an activity badge. */
+function activityBadgeClass(activity: SessionActivity | undefined): string {
+  switch (activity) {
+    case "active":
+      return "activity-badge activity-active";
+    case "idle":
+      return "activity-badge activity-idle";
+    case "exited":
+      return "activity-badge activity-exited";
+    default:
+      return "activity-badge activity-exited";
+  }
+}
+
+/** Group sessions by repo path, preserving sort order within each group. */
+function groupByRepo(
+  sessions: SessionEnvelope[]
+): { repoPath: string; repoName: string; sessions: SessionEnvelope[] }[] {
+  const map = new Map<
+    string,
+    { repoPath: string; repoName: string; sessions: SessionEnvelope[] }
+  >();
+
+  for (const s of sessions) {
+    let group = map.get(s.repoPath);
+    if (!group) {
+      group = {
+        repoPath: s.repoPath,
+        repoName: repoNameFromPath(s.repoPath),
+        sessions: [],
+      };
+      map.set(s.repoPath, group);
+    }
+    group.sessions.push(s);
+  }
+
+  // Sort groups: repos with running sessions first, then alphabetically
+  return Array.from(map.values()).sort((a, b) => {
+    const aHasAlive = a.sessions.some((s) => s.processAlive);
+    const bHasAlive = b.sessions.some((s) => s.processAlive);
+    if (aHasAlive !== bHasAlive) return aHasAlive ? -1 : 1;
+    return a.repoName.localeCompare(b.repoName);
+  });
+}
+
 export function SessionsPage({ scope }: Props) {
-  const { sessions, loading, launchSession, refresh } = useSessions();
-  const [selectedSession, setSelectedSession] = useState<SessionEnvelope | null>(null);
-  const [worktreeStatus, setWorktreeStatus] = useState<WorktreeStatus | null>(null);
+  const { sessions, activities, loading, launchSession, refresh } =
+    useSessions();
+  const [selectedSession, setSelectedSession] =
+    useState<SessionEnvelope | null>(null);
+  const [worktreeStatus, setWorktreeStatus] =
+    useState<WorktreeStatus | null>(null);
   const [worktreeError, setWorktreeError] = useState<string | null>(null);
   const [worktreeDiff, setWorktreeDiff] = useState<string | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string>("");
   const [branches, setBranches] = useState<string[]>([]);
   const [mergeResult, setMergeResult] = useState<string | null>(null);
+  const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "idle" | "exited"
+  >("all");
 
-  const loadWorktreeInfo = useCallback(async (session: SessionEnvelope) => {
-    if (!session.worktreePath) {
-      setWorktreeStatus(null);
-      setWorktreeError(null);
-      setWorktreeDiff(null);
-      setBranches([]);
-      return;
-    }
-    try {
-      const [status, diff, branchList] = await Promise.all([
-        api.getWorktreeStatus(session.sessionId),
-        api.getWorktreeDiff(session.sessionId),
-        api.listBranches(session.repoPath),
-      ]);
-      setWorktreeStatus(status);
-      setWorktreeError(null);
-      setWorktreeDiff(diff);
-      setBranches(branchList.filter((b) => b !== session.worktreeBranch));
-      // Auto-fill merge target from the stored base branch
-      if (status.baseBranch) {
-        setMergeTarget(status.baseBranch);
-      }
-    } catch (e) {
-      setWorktreeStatus(null);
-      setWorktreeError(String(e));
-      setWorktreeDiff(null);
-    }
-  }, []);
-
-  const handleSelectSession = useCallback((session: SessionEnvelope) => {
-    setSelectedSession(session);
-    setMergeResult(null);
-    setMergeTarget(""); // Reset so the new session's base branch can auto-fill
-    loadWorktreeInfo(session);
-  }, [loadWorktreeInfo]);
-
-  const handleRerun = useCallback(async (session: SessionEnvelope) => {
-    await launchSession(
-      session.repoPath,
-      session.commandName,
-      session.command,
-      !!session.worktreePath,
-      session.worktreeBaseBranch // Preserve the original base branch
-    );
-  }, [launchSession]);
-
-  const handleResume = useCallback(async (session: SessionEnvelope) => {
-    try {
-      await api.resumeSession(session.sessionId, session.command);
-      await refresh();
-    } catch (e) {
-      alert(`Failed to resume session: ${e}`);
-    }
-  }, [refresh]);
-
-  const handleOpenFolder = useCallback(async (session: SessionEnvelope) => {
-    try {
-      await api.openSessionFolder(session.sessionId);
-    } catch (e) {
-      alert(`Failed to open folder: ${e}`);
-    }
-  }, []);
-
-  const handleDelete = useCallback(async (session: SessionEnvelope) => {
-    if (session.worktreePath) {
-      const hasWork = worktreeStatus
-        ? worktreeStatus.hasUncommittedChanges || worktreeStatus.commitCount > 0
-        : false;
-      const msg = hasWork
-        ? "This session has a worktree with unmerged work. Deleting will remove the worktree and discard all changes. Continue?"
-        : "This will remove the session's worktree and delete the branch. Continue?";
-      if (!confirm(msg)) return;
-    }
-    try {
-      await api.deleteSession(session.sessionId);
-      if (selectedSession?.sessionId === session.sessionId) {
-        setSelectedSession(null);
+  const loadWorktreeInfo = useCallback(
+    async (session: SessionEnvelope) => {
+      if (!session.worktreePath) {
         setWorktreeStatus(null);
         setWorktreeError(null);
         setWorktreeDiff(null);
+        setBranches([]);
+        return;
       }
-      await refresh();
-    } catch (e) {
-      alert(`Failed to delete session: ${e}`);
-    }
-  }, [worktreeStatus, selectedSession, refresh]);
+      try {
+        const [status, diff, branchList] = await Promise.all([
+          api.getWorktreeStatus(session.sessionId),
+          api.getWorktreeDiff(session.sessionId),
+          api.listBranches(session.repoPath),
+        ]);
+        setWorktreeStatus(status);
+        setWorktreeError(null);
+        setWorktreeDiff(diff);
+        setBranches(branchList.filter((b) => b !== session.worktreeBranch));
+        if (status.baseBranch) {
+          setMergeTarget(status.baseBranch);
+        }
+      } catch (e) {
+        setWorktreeStatus(null);
+        setWorktreeError(String(e));
+        setWorktreeDiff(null);
+      }
+    },
+    []
+  );
 
-  const handleFocus = useCallback((session: SessionEnvelope) => {
-    if (session.pid && session.processAlive) {
-      api.focusSession(session.pid);
-    }
-    handleSelectSession(session);
-  }, [handleSelectSession]);
+  const handleSelectSession = useCallback(
+    (session: SessionEnvelope) => {
+      setSelectedSession(session);
+      setMergeResult(null);
+      setMergeTarget("");
+      loadWorktreeInfo(session);
+    },
+    [loadWorktreeInfo]
+  );
+
+  const handleRerun = useCallback(
+    async (session: SessionEnvelope) => {
+      await launchSession(
+        session.repoPath,
+        session.commandName,
+        session.command,
+        !!session.worktreePath,
+        session.worktreeBaseBranch
+      );
+    },
+    [launchSession]
+  );
+
+  const handleResume = useCallback(
+    async (session: SessionEnvelope) => {
+      try {
+        await api.resumeSession(session.sessionId, session.command);
+        await refresh();
+      } catch (e) {
+        alert(`Failed to resume session: ${e}`);
+      }
+    },
+    [refresh]
+  );
+
+  const handleOpenFolder = useCallback(
+    async (session: SessionEnvelope) => {
+      try {
+        await api.openSessionFolder(session.sessionId);
+      } catch (e) {
+        alert(`Failed to open folder: ${e}`);
+      }
+    },
+    []
+  );
+
+  const handleDelete = useCallback(
+    async (session: SessionEnvelope) => {
+      if (session.worktreePath) {
+        const hasWork = worktreeStatus
+          ? worktreeStatus.hasUncommittedChanges ||
+            worktreeStatus.commitCount > 0
+          : false;
+        const msg = hasWork
+          ? "This session has a worktree with unmerged work. Deleting will remove the worktree and discard all changes. Continue?"
+          : "This will remove the session's worktree and delete the branch. Continue?";
+        if (!confirm(msg)) return;
+      }
+      try {
+        await api.deleteSession(session.sessionId);
+        if (selectedSession?.sessionId === session.sessionId) {
+          setSelectedSession(null);
+          setWorktreeStatus(null);
+          setWorktreeError(null);
+          setWorktreeDiff(null);
+        }
+        await refresh();
+      } catch (e) {
+        alert(`Failed to delete session: ${e}`);
+      }
+    },
+    [worktreeStatus, selectedSession, refresh]
+  );
+
+  const handleFocus = useCallback(
+    (session: SessionEnvelope) => {
+      if (session.pid && session.processAlive) {
+        api.focusSession(session.pid);
+      }
+      handleSelectSession(session);
+    },
+    [handleSelectSession]
+  );
 
   const handleMerge = useCallback(async () => {
     if (!selectedSession || !mergeTarget) return;
@@ -125,64 +223,176 @@ export function SessionsPage({ scope }: Props) {
     }
   }, [selectedSession, mergeTarget, loadWorktreeInfo]);
 
-  if (scope?.type === "global") {
+  const toggleRepoCollapsed = useCallback((repoPath: string) => {
+    setCollapsedRepos((prev) => {
+      const next = new Set(prev);
+      if (next.has(repoPath)) {
+        next.delete(repoPath);
+      } else {
+        next.add(repoPath);
+      }
+      return next;
+    });
+  }, []);
+
+  // Determine if we're in single-repo mode (project scope) or multi-repo mode
+  const repoPath = scope?.type === "project" ? scope.repo.path : null;
+  const isMultiRepo = !repoPath;
+
+  // Filter sessions by repo scope
+  const scopedSessions = useMemo(() => {
+    let filtered = sessions;
+    if (repoPath) {
+      filtered = filtered.filter((s) => s.repoPath === repoPath);
+    }
+    // Apply status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((s) => {
+        const activity = activities[s.sessionId];
+        if (statusFilter === "active") return activity === "active";
+        if (statusFilter === "idle") return activity === "idle";
+        if (statusFilter === "exited")
+          return activity === "exited" || !s.processAlive;
+        return true;
+      });
+    }
+    return filtered;
+  }, [sessions, repoPath, statusFilter, activities]);
+
+  // Group by repo for multi-repo view
+  const repoGroups = useMemo(
+    () => groupByRepo(scopedSessions),
+    [scopedSessions]
+  );
+
+  // Counts for filter pills
+  const counts = useMemo(() => {
+    const base = repoPath
+      ? sessions.filter((s) => s.repoPath === repoPath)
+      : sessions;
+    let active = 0;
+    let idle = 0;
+    let exited = 0;
+    for (const s of base) {
+      const a = activities[s.sessionId];
+      if (a === "active") active++;
+      else if (a === "idle") idle++;
+      else exited++;
+    }
+    return { all: base.length, active, idle, exited };
+  }, [sessions, repoPath, activities]);
+
+  // Render a single session list item
+  const renderSessionItem = (session: SessionEnvelope) => {
+    const activity = activities[session.sessionId];
     return (
-      <div className="page page-empty">
-        <p>Sessions are project-specific. Switch to a project scope to manage sessions.</p>
+      <div
+        key={session.sessionId}
+        className={`session-item ${
+          selectedSession?.sessionId === session.sessionId ? "active" : ""
+        }${!session.processAlive ? " session-item-dead" : ""}`}
+        onClick={() => handleSelectSession(session)}
+      >
+        <div className="session-item-header">
+          <span className="session-name">{session.commandName}</span>
+          <span className="session-badges">
+            {session.worktreeBranch && (
+              <span className="worktree-badge">{session.worktreeBranch}</span>
+            )}
+            <span className={activityBadgeClass(activity)}>
+              {activityLabel(activity)}
+            </span>
+          </span>
+        </div>
+        <div className="session-item-meta">
+          <span>{new Date(session.startedAt).toLocaleString()}</span>
+          <span className="text-muted">{session.command}</span>
+        </div>
       </div>
     );
-  }
-
-  const repoPath = scope?.type === "project" ? scope.repo.path : null;
-
-  const filteredSessions = sessions.filter((s) => {
-    if (repoPath && s.repoPath !== repoPath) return false;
-    return true;
-  });
+  };
 
   return (
     <div className="page sessions-page">
       <div className="page-header">
         <h2>Sessions</h2>
+        <div className="session-filters">
+          <button
+            className={`btn btn-sm ${statusFilter === "all" ? "active" : ""}`}
+            onClick={() => setStatusFilter("all")}
+          >
+            All ({counts.all})
+          </button>
+          <button
+            className={`btn btn-sm ${statusFilter === "active" ? "active" : ""}`}
+            onClick={() => setStatusFilter("active")}
+          >
+            Working ({counts.active})
+          </button>
+          <button
+            className={`btn btn-sm ${statusFilter === "idle" ? "active" : ""}`}
+            onClick={() => setStatusFilter("idle")}
+          >
+            Waiting ({counts.idle})
+          </button>
+          <button
+            className={`btn btn-sm ${statusFilter === "exited" ? "active" : ""}`}
+            onClick={() => setStatusFilter("exited")}
+          >
+            Exited ({counts.exited})
+          </button>
+        </div>
       </div>
 
-      {loading && <p className="text-muted">Loading sessions...</p>}
+      {loading && sessions.length === 0 && (
+        <p className="text-muted">Loading sessions...</p>
+      )}
 
       <div className="split-layout">
         <div className="panel-left">
           <div className="sessions-list">
-            {filteredSessions.map((session) => (
-              <div
-                key={session.sessionId}
-                className={`session-item ${
-                  selectedSession?.sessionId === session.sessionId ? "active" : ""
-                }${!session.processAlive ? " session-item-dead" : ""}`}
-                onClick={() => handleSelectSession(session)}
-              >
-                <div className="session-item-header">
-                  <span className="session-name">{session.commandName}</span>
-                  <span className="session-badges">
-                    {session.worktreeBranch && (
-                      <span className="worktree-badge">{session.worktreeBranch}</span>
-                    )}
-                    {session.processAlive ? (
-                      <span className="session-alive-badge">running</span>
-                    ) : (
-                      <span className="session-dead-badge">exited</span>
-                    )}
-                  </span>
-                </div>
-                <div className="session-item-meta">
-                  <span>{new Date(session.startedAt).toLocaleString()}</span>
-                  <span className="text-muted">{session.command}</span>
-                </div>
-              </div>
-            ))}
-            {filteredSessions.length === 0 && (
+            {isMultiRepo
+              ? repoGroups.map((group) => {
+                  const isCollapsed = collapsedRepos.has(group.repoPath);
+                  const aliveCount = group.sessions.filter(
+                    (s) => s.processAlive
+                  ).length;
+                  return (
+                    <div key={group.repoPath} className="repo-group">
+                      <button
+                        className="repo-group-header"
+                        onClick={() => toggleRepoCollapsed(group.repoPath)}
+                      >
+                        <span className="repo-group-caret">
+                          {isCollapsed ? "\u25B6" : "\u25BC"}
+                        </span>
+                        <span className="repo-group-name">
+                          {group.repoName}
+                        </span>
+                        <span className="repo-group-counts">
+                          {aliveCount > 0 && (
+                            <span className="repo-group-alive-count">
+                              {aliveCount} running
+                            </span>
+                          )}
+                          <span className="repo-group-total-count">
+                            {group.sessions.length}
+                          </span>
+                        </span>
+                      </button>
+                      {!isCollapsed &&
+                        group.sessions.map((s) => renderSessionItem(s))}
+                    </div>
+                  );
+                })
+              : scopedSessions.map((s) => renderSessionItem(s))}
+            {scopedSessions.length === 0 && (
               <div className="text-muted" style={{ padding: "16px" }}>
-                {repoPath
-                  ? "No sessions for this repo."
-                  : "No sessions yet. Launch a command to get started."}
+                {statusFilter !== "all"
+                  ? `No ${statusFilter} sessions.`
+                  : repoPath
+                    ? "No sessions for this repo."
+                    : "No sessions yet. Launch a command to get started."}
               </div>
             )}
           </div>
@@ -197,11 +407,14 @@ export function SessionsPage({ scope }: Props) {
             <div className="session-detail">
               <h3>
                 {selectedSession.commandName}
-                {!selectedSession.processAlive && (
-                  <span className="session-dead-badge" style={{ marginLeft: "8px" }}>
-                    Process exited
-                  </span>
-                )}
+                <span
+                  className={activityBadgeClass(
+                    activities[selectedSession.sessionId]
+                  )}
+                  style={{ marginLeft: "8px" }}
+                >
+                  {activityLabel(activities[selectedSession.sessionId])}
+                </span>
               </h3>
               <div className="detail-grid">
                 <div className="detail-field">
@@ -214,7 +427,9 @@ export function SessionsPage({ scope }: Props) {
                 </div>
                 <div className="detail-field">
                   <label>Launched</label>
-                  <span>{new Date(selectedSession.startedAt).toLocaleString()}</span>
+                  <span>
+                    {new Date(selectedSession.startedAt).toLocaleString()}
+                  </span>
                 </div>
                 {selectedSession.worktreePath && (
                   <div className="detail-field">
@@ -368,18 +583,24 @@ export function SessionsPage({ scope }: Props) {
                 </div>
               )}
 
-              {selectedSession.worktreePath && !worktreeStatus && worktreeError && (
-                <div className="worktree-section">
-                  <h4>Worktree Status</h4>
-                  <div className="worktree-merge-result worktree-merge-error">
-                    Worktree unavailable: {worktreeError}
+              {selectedSession.worktreePath &&
+                !worktreeStatus &&
+                worktreeError && (
+                  <div className="worktree-section">
+                    <h4>Worktree Status</h4>
+                    <div className="worktree-merge-result worktree-merge-error">
+                      Worktree unavailable: {worktreeError}
+                    </div>
+                    <p
+                      className="text-muted"
+                      style={{ marginTop: "8px", fontSize: "12px" }}
+                    >
+                      The worktree directory may have been removed. The branch (
+                      {selectedSession.worktreeBranch}) may still exist in the
+                      repo.
+                    </p>
                   </div>
-                  <p className="text-muted" style={{ marginTop: "8px", fontSize: "12px" }}>
-                    The worktree directory may have been removed. The branch
-                    ({selectedSession.worktreeBranch}) may still exist in the repo.
-                  </p>
-                </div>
-              )}
+                )}
             </div>
           )}
         </div>
