@@ -158,7 +158,7 @@ export function SkillsPage({ scope, homePath }: Props) {
   return (
     <div className="page skills-page">
       {scope && <ScopeBanner scope={scope} />}
-      <p className="page-description">Reusable slash commands that extend Claude Code. Skills define a prompt template with optional tool restrictions, so you can invoke complex workflows with a simple <code>/command</code>.</p>
+      <p className="page-description">Custom slash commands for Claude Code. Each skill defines a prompt template with optional tool restrictions — mark a skill as user-invocable and it becomes a <code>/command</code> you can run from the Claude Code CLI.</p>
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">

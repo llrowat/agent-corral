@@ -37,7 +37,7 @@ describe("Page descriptions", () => {
   it("SkillsPage renders a description for new users", async () => {
     render(<SkillsPage scope={globalScope} homePath="/home/user" />);
     expect(
-      screen.getByText(/reusable slash commands/i)
+      screen.getByText(/custom slash commands for claude code/i)
     ).toBeInTheDocument();
   });
 
