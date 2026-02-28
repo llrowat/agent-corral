@@ -12,15 +12,20 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
 - **Global + Project Scope** — Manage Claude Code configuration at the global (`~/.claude/`) or project (`{repo}/.claude/`) level with a scope selector in the header.
 - **Repo Registry** — Add and switch between multiple repositories. See at a glance which repos have Claude configs, agents, hooks, skills, MCP servers, and memory.
-- **Agent Studio** — Create, edit, and delete Claude Code agents with a visual editor. Configure tools, model overrides, and memory bindings.
-- **Hooks Editor** — Manage Claude Code hooks (PreToolUse, PostToolUse, etc.) with a form UI.
+- **Agent Studio** — Create, edit, and delete Claude Code agents with a visual editor. Configure tools, model overrides, and memory bindings. Includes built-in presets (code reviewer, test writer, doc writer, refactorer, and more).
+- **Hooks Editor** — Manage Claude Code hooks (PreToolUse, PostToolUse, Notification, Stop, SubagentStop) with a form UI. Built-in hook presets available.
 - **Skills Editor** — Create and manage skills with YAML frontmatter and markdown content.
 - **MCP Servers** — Configure Model Context Protocol servers at global or project scope.
 - **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. See raw JSON and shareability tags.
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
-- **Session Manager** — Launch terminal sessions, view active sessions, re-run commands, focus terminal windows, and auto-cleanup when terminals close.
-- **Plugin System** — Directory-based plugin format bundling agents, skills, hooks, and MCP servers. Import/export and install from git.
-- **Command Templates** — Built-in and custom command templates with variable substitution. Launch Claude Code sessions from the UI.
+- **Session Manager** — Launch terminal sessions, view active sessions, resume sessions, focus terminal windows, and auto-cleanup when terminals close. Supports **git worktree isolation** — run sessions in an isolated worktree with their own branch, view diffs, and merge changes back. Session activity monitoring (active/idle/exited).
+- **Plugin System** — Directory-based plugin format bundling agents, skills, hooks, MCP servers, and command templates. Import/export, install from git, auto-update, and import sync (track, pin, auto-sync imported plugins).
+- **Command Templates** — Built-in and custom command templates with variable substitution. Launch Claude Code sessions from the UI. Templates can default to worktree isolation.
+- **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code with a tailored prompt.
+- **Quick Setup** — First-run wizard detects repos with no Claude config and offers starter templates to bootstrap a working setup in one click.
+- **Settings** — Configure terminal emulator preference and plugin sync interval.
+- **Inline Validation** — Real-time form validation with auto-fix suggestions for IDs and slugs.
+- **Docs Links** — Each feature page links to the corresponding Anthropic documentation.
 
 ## Getting Started
 
@@ -57,22 +62,24 @@ agent-corral/
 │   ├── src/
 │   │   ├── lib.rs              # App entry, state management
 │   │   ├── main.rs             # Binary entry
-│   │   ├── commands/           # Tauri IPC command handlers
+│   │   ├── preferences.rs      # App preferences (terminal emulator, plugin sync interval)
+│   │   ├── commands/           # Tauri IPC command handlers (12 modules)
 │   │   ├── repo_registry/      # SQLite repo management
-│   │   ├── session_manager/    # Session tracking, process lifecycle, window focus
+│   │   ├── session_manager/    # Session tracking, process lifecycle, window focus, git worktree lifecycle
 │   │   ├── claude_adapter/     # Claude Code file format adapter (agents, hooks, skills, MCP, memory)
-│   │   ├── plugin_manager/     # Plugin import/export/git install (directory-based)
+│   │   ├── plugin_manager/     # Plugin export/import/git install/update, import sync registry
 │   │   ├── pack_manager/       # Legacy pack system (kept for migration)
 │   │   ├── command_templates/  # Template engine with variable substitution
 │   │   └── terminal_launcher/  # Native terminal spawning (per-platform)
 │   └── tauri.conf.json
 ├── frontend/           # React frontend
-│   ├── components/     # Shared UI components (Sidebar, ScopeSwitcher)
-│   ├── pages/          # Page components (Overview, Agents, Hooks, Skills, MCP, Config, Memory, Sessions, Plugins, Settings)
-│   ├── hooks/          # React hooks (useRepos, useSessions)
-│   ├── lib/            # Tauri API bindings
+│   ├── components/     # Shared UI components (10 components)
+│   ├── pages/          # Page components (12 pages)
+│   ├── hooks/          # React hooks (useRepos, useSessions, usePluginSync)
+│   ├── lib/            # Tauri API bindings + built-in presets
 │   ├── types/          # TypeScript type definitions
 │   └── styles.css      # Global styles (dark theme)
+├── .github/workflows/  # CI (Rust + frontend tests)
 ├── Cargo.toml          # Workspace root
 ├── package.json        # Frontend dependencies
 └── vite.config.ts      # Vite configuration
@@ -80,12 +87,14 @@ agent-corral/
 
 ## Plugin System
 
-Plugins use a directory-based format (`.claude-plugin/plugin.json`) bundling agents, skills, hooks, and MCP servers. They can be:
+Plugins use a directory-based format (`.claude-plugin/plugin.json`) bundling agents, skills, hooks, MCP servers, and command templates. They can be:
 
-- **Exported** from any repo
-- **Imported** into any repo
+- **Exported** from any repo (choose which agents, skills, hooks, MCP servers, and templates to include)
+- **Imported** into any repo (preview changes before applying, choose add-only or overwrite mode)
 - **Installed from Git** — point to any git repo containing a `.claude-plugin/` directory
 - **Updated** — git-sourced plugins track their source commit and can be checked for updates
+- **Auto-synced** — imported plugins can be tracked and automatically updated when the library version changes. Supports pinning (lock version) and auto-sync toggles per import.
+- **Migrated** — legacy `.agentpack` files can be converted to the new plugin format
 
 ## Contributing
 
