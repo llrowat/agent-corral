@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope, Skill } from "@/types";
 import * as api from "@/lib/tauri";
+import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 
 interface Props {
   scope: Scope | null;
@@ -44,6 +45,7 @@ export function SkillsPage({ scope, homePath }: Props) {
   const [selectedIsGlobal, setSelectedIsGlobal] = useState(false);
   const [editing, setEditing] = useState<Skill | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isProjectScope = scope?.type === "project";
@@ -147,15 +149,25 @@ export function SkillsPage({ scope, homePath }: Props) {
         <div className="panel-left">
           <div className="panel-header">
             <h3>Skills</h3>
-            <button
-              className="btn btn-sm"
-              onClick={() => {
-                setEditing(newSkill());
-                setSelected(null);
-              }}
-            >
-              + New
-            </button>
+            <div className="header-actions">
+              {basePath && (
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setShowAiModal(true)}
+                >
+                  AI Create
+                </button>
+              )}
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  setEditing(newSkill());
+                  setSelected(null);
+                }}
+              >
+                + New
+              </button>
+            </div>
           </div>
           <ul className="agent-list">
             {skills.map((skill) => (
@@ -456,6 +468,14 @@ export function SkillsPage({ scope, homePath }: Props) {
           )}
         </div>
       </div>
+      {showAiModal && basePath && (
+        <CreateWithAiModal
+          entityType="skill"
+          repoPath={basePath}
+          onClose={() => setShowAiModal(false)}
+          onCreated={() => loadSkills()}
+        />
+      )}
     </div>
   );
 }
