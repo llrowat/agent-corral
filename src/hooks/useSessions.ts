@@ -27,11 +27,19 @@ export function useSessions() {
   }, [refresh]);
 
   const launchSession = useCallback(
-    async (repoPath: string, commandName: string, command: string) => {
+    async (
+      repoPath: string,
+      commandName: string,
+      command: string,
+      useWorktree?: boolean,
+      baseBranch?: string | null
+    ) => {
       const sessionId = await api.launchSession(
         repoPath,
         commandName,
-        command
+        command,
+        useWorktree,
+        baseBranch
       );
       await refresh();
       return sessionId;

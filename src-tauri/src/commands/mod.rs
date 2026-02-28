@@ -9,3 +9,4 @@ pub mod session;
 pub mod skills;
 pub mod template;
 pub mod terminal;
+pub mod worktree;

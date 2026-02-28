@@ -12,7 +12,7 @@ agent-corral/
 │   │   ├── main.rs             # Binary entry
 │   │   ├── commands/           # Tauri IPC command handlers
 │   │   ├── repo_registry/      # SQLite repo management
-│   │   ├── session_manager/    # Session tracking, process lifecycle, window focus
+│   │   ├── session_manager/    # Session tracking, process lifecycle, window focus, git worktree lifecycle
 │   │   ├── claude_adapter/     # Claude Code file format adapter (agents, hooks, skills, MCP, memory)
 │   │   ├── plugin_manager/     # Plugin export/import/git install/update (directory-based)
 │   │   ├── pack_manager/       # Legacy pack system (.agentpack JSON, kept for migration)
@@ -36,12 +36,13 @@ agent-corral/
 - **Global + Project Scope** — The app supports managing Claude Code config at both the global (`~/.claude/`) and project (`{repo}/.claude/`) level. Most adapters work for both by passing the appropriate base path. MCP is the exception: global uses `~/.claude.json`, project uses `{repo}/.mcp.json`.
 - **ClaudeRepoAdapter** isolates all Claude file format concerns. Never read/write Claude config files directly outside this module. Handles agents, hooks (settings.json), skills (.claude/skills/), MCP servers, and memory stores.
 - **Plugin Manager** uses a directory-based format (`.claude-plugin/plugin.json`) that bundles agents, skills, hooks, and MCP servers. Replaces the legacy `.agentpack` JSON format.
-- **Session Manager** tracks launched terminal sessions via JSON envelope files. Records PID on launch, auto-cleans dead sessions (via `GetExitCodeProcess` on Windows), and supports focusing/killing terminal windows.
+- **Session Manager** tracks launched terminal sessions via JSON envelope files. Records PID on launch, auto-cleans dead sessions (via `GetExitCodeProcess` on Windows), and supports focusing/killing terminal windows. Manages git worktree lifecycle (create, status, cleanup) for isolated session working directories.
+- **Git Worktree Support** — Sessions can optionally run in an isolated git worktree. Each worktree gets its own branch (`worktree/{session-id}`), is stored in `{app_data_dir}/worktrees/{session_id}/`, and is automatically cleaned up (including branch deletion) when the session is deleted or detected as dead. The worktree feature can be enabled per-template (`useWorktree` flag) or toggled at launch time via the UI. Worktree sessions support status inspection (branch, dirty state, commit count), diff viewing, and merging back into a target branch.
 - **Terminal Launcher** spawns commands directly in a new console window (no bridge). On Windows uses `CREATE_NEW_CONSOLE` flag.
 - **Atomic file writes** are used everywhere to prevent corruption (write to .tmp, then rename).
 - **Agent metadata sidecar files** (`.meta.json`) store tools, model override, and memory binding alongside `.md` agent files.
 - **Plugin git source sidecars** (`.claude-plugin/source.json`) track the git origin, branch, and installed commit for git-sourced plugins.
-- **Command Templates** use `{{variable}}` substitution with a `shell_quote` helper for safe command construction.
+- **Command Templates** use `{{variable}}` substitution with a `shell_quote` helper for safe command construction. Templates have a `useWorktree` boolean flag to default to worktree isolation.
 
 ### Plugin Directory Format
 
@@ -77,4 +78,5 @@ npm run tauri build
 - Phase 4: Pack system (legacy, kept for migration)
 - Phase 5: Hooks, Skills, MCP management pages
 - Phase 6: Plugin system (directory-based, replaces packs)
-- Phase 7: Polish, installer packaging
+- Phase 7: Git worktree isolation for sessions (create, status, diff, merge, cleanup)
+- Phase 8: Polish, installer packaging
