@@ -1604,6 +1604,43 @@ code {
 .worktree-merge-error {
   background: rgba(248, 113, 113, 0.1);
   color: var(--danger);
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+}
+
+/* -- Session status badges -- */
+.session-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.session-alive-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--success);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.session-dead-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--danger);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.session-item-dead {
+  opacity: 0.7;
+}
+
+.session-item-dead .session-name {
+  color: var(--text-muted);
 }
 
 /* -- Scrollbar -- */

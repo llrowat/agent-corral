@@ -27,6 +27,8 @@ export interface SessionEnvelope {
   pid: number | null;
   worktreePath: string | null;
   worktreeBranch: string | null;
+  worktreeBaseBranch: string | null;
+  processAlive: boolean;
 }
 
 export interface WorktreeStatus {

@@ -20,15 +20,16 @@ pub fn launch_session(
         .get_terminal_emulator();
 
     // If worktree is requested, create one and use it as the working directory
-    let (effective_path, wt_path, wt_branch) = if use_worktree.unwrap_or(false) {
+    let (effective_path, wt_path, wt_branch, resolved_base) = if use_worktree.unwrap_or(false) {
         let mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
+        let resolved = mgr.resolve_base_branch(&repo_path, base_branch.as_deref());
         let (worktree_path, branch) = mgr
             .create_worktree(&session_id, &repo_path, base_branch.as_deref())
             .map_err(|e| e.to_string())?;
         let effective = worktree_path.clone();
-        (effective, Some(worktree_path), Some(branch))
+        (effective, Some(worktree_path), Some(branch), resolved)
     } else {
-        (repo_path.clone(), None, None)
+        (repo_path.clone(), None, None, None)
     };
 
     let pid = TerminalLauncher::launch(&effective_path, &command, terminal_pref.as_deref())
@@ -55,6 +56,7 @@ pub fn launch_session(
             pid,
             wt_path.as_deref(),
             wt_branch.as_deref(),
+            resolved_base.as_deref(),
         )
         .map_err(|e| e.to_string())?;
 

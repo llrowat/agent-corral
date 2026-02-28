@@ -11,6 +11,7 @@ export function SessionsPage({ scope }: Props) {
   const { sessions, loading, launchSession, refresh } = useSessions();
   const [selectedSession, setSelectedSession] = useState<SessionEnvelope | null>(null);
   const [worktreeStatus, setWorktreeStatus] = useState<WorktreeStatus | null>(null);
+  const [worktreeError, setWorktreeError] = useState<string | null>(null);
   const [worktreeDiff, setWorktreeDiff] = useState<string | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string>("");
   const [branches, setBranches] = useState<string[]>([]);
@@ -19,6 +20,7 @@ export function SessionsPage({ scope }: Props) {
   const loadWorktreeInfo = useCallback(async (session: SessionEnvelope) => {
     if (!session.worktreePath) {
       setWorktreeStatus(null);
+      setWorktreeError(null);
       setWorktreeDiff(null);
       setBranches([]);
       return;
@@ -30,20 +32,24 @@ export function SessionsPage({ scope }: Props) {
         api.listBranches(session.repoPath),
       ]);
       setWorktreeStatus(status);
+      setWorktreeError(null);
       setWorktreeDiff(diff);
       setBranches(branchList.filter((b) => b !== session.worktreeBranch));
-      if (status.baseBranch && !mergeTarget) {
+      // Auto-fill merge target from the stored base branch
+      if (status.baseBranch) {
         setMergeTarget(status.baseBranch);
       }
-    } catch {
+    } catch (e) {
       setWorktreeStatus(null);
+      setWorktreeError(String(e));
       setWorktreeDiff(null);
     }
-  }, [mergeTarget]);
+  }, []);
 
   const handleSelectSession = useCallback((session: SessionEnvelope) => {
     setSelectedSession(session);
     setMergeResult(null);
+    setMergeTarget(""); // Reset so the new session's base branch can auto-fill
     loadWorktreeInfo(session);
   }, [loadWorktreeInfo]);
 
@@ -52,14 +58,18 @@ export function SessionsPage({ scope }: Props) {
       session.repoPath,
       session.commandName,
       session.command,
-      !!session.worktreePath
+      !!session.worktreePath,
+      session.worktreeBaseBranch // Preserve the original base branch
     );
   }, [launchSession]);
 
   const handleDelete = useCallback(async (session: SessionEnvelope) => {
     if (session.worktreePath) {
-      const msg = worktreeStatus?.hasUncommittedChanges
-        ? "This session has a worktree with uncommitted changes. Deleting will remove the worktree and discard those changes. Continue?"
+      const hasWork = worktreeStatus
+        ? worktreeStatus.hasUncommittedChanges || worktreeStatus.commitCount > 0
+        : false;
+      const msg = hasWork
+        ? "This session has a worktree with unmerged work. Deleting will remove the worktree and discard all changes. Continue?"
         : "This will remove the session's worktree and delete the branch. Continue?";
       if (!confirm(msg)) return;
     }
@@ -68,6 +78,7 @@ export function SessionsPage({ scope }: Props) {
       if (selectedSession?.sessionId === session.sessionId) {
         setSelectedSession(null);
         setWorktreeStatus(null);
+        setWorktreeError(null);
         setWorktreeDiff(null);
       }
       await refresh();
@@ -77,7 +88,7 @@ export function SessionsPage({ scope }: Props) {
   }, [worktreeStatus, selectedSession, refresh]);
 
   const handleFocus = useCallback((session: SessionEnvelope) => {
-    if (session.pid) {
+    if (session.pid && session.processAlive) {
       api.focusSession(session.pid);
     }
     handleSelectSession(session);
@@ -128,14 +139,21 @@ export function SessionsPage({ scope }: Props) {
                 key={session.sessionId}
                 className={`session-item ${
                   selectedSession?.sessionId === session.sessionId ? "active" : ""
-                }`}
+                }${!session.processAlive ? " session-item-dead" : ""}`}
                 onClick={() => handleSelectSession(session)}
               >
                 <div className="session-item-header">
                   <span className="session-name">{session.commandName}</span>
-                  {session.worktreeBranch && (
-                    <span className="worktree-badge">{session.worktreeBranch}</span>
-                  )}
+                  <span className="session-badges">
+                    {session.worktreeBranch && (
+                      <span className="worktree-badge">{session.worktreeBranch}</span>
+                    )}
+                    {session.processAlive ? (
+                      <span className="session-alive-badge">running</span>
+                    ) : (
+                      <span className="session-dead-badge">exited</span>
+                    )}
+                  </span>
                 </div>
                 <div className="session-item-meta">
                   <span>{new Date(session.startedAt).toLocaleString()}</span>
@@ -160,7 +178,14 @@ export function SessionsPage({ scope }: Props) {
             </div>
           ) : (
             <div className="session-detail">
-              <h3>{selectedSession.commandName}</h3>
+              <h3>
+                {selectedSession.commandName}
+                {!selectedSession.processAlive && (
+                  <span className="session-dead-badge" style={{ marginLeft: "8px" }}>
+                    Process exited
+                  </span>
+                )}
+              </h3>
               <div className="detail-grid">
                 <div className="detail-field">
                   <label>Command</label>
@@ -180,15 +205,23 @@ export function SessionsPage({ scope }: Props) {
                     <code>{selectedSession.worktreePath}</code>
                   </div>
                 )}
+                {selectedSession.worktreeBaseBranch && (
+                  <div className="detail-field">
+                    <label>Base branch</label>
+                    <code>{selectedSession.worktreeBaseBranch}</code>
+                  </div>
+                )}
               </div>
 
               <div className="session-actions">
-                <button
-                  className="btn"
-                  onClick={() => handleFocus(selectedSession)}
-                >
-                  Focus Terminal
-                </button>
+                {selectedSession.processAlive && (
+                  <button
+                    className="btn"
+                    onClick={() => handleFocus(selectedSession)}
+                  >
+                    Focus Terminal
+                  </button>
+                )}
                 <button
                   className="btn"
                   onClick={() => handleRerun(selectedSession)}
@@ -247,7 +280,7 @@ export function SessionsPage({ scope }: Props) {
 
                   {worktreeDiff && worktreeDiff.trim() && (
                     <div className="worktree-diff">
-                      <h4>Working Changes</h4>
+                      <h4>Changes</h4>
                       <pre className="log-output">{worktreeDiff}</pre>
                     </div>
                   )}
@@ -296,6 +329,19 @@ export function SessionsPage({ scope }: Props) {
                       Refresh Status
                     </button>
                   </div>
+                </div>
+              )}
+
+              {selectedSession.worktreePath && !worktreeStatus && worktreeError && (
+                <div className="worktree-section">
+                  <h4>Worktree Status</h4>
+                  <div className="worktree-merge-result worktree-merge-error">
+                    Worktree unavailable: {worktreeError}
+                  </div>
+                  <p className="text-muted" style={{ marginTop: "8px", fontSize: "12px" }}>
+                    The worktree directory may have been removed. The branch
+                    ({selectedSession.worktreeBranch}) may still exist in the repo.
+                  </p>
                 </div>
               )}
             </div>

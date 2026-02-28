@@ -14,6 +14,7 @@ export function OverviewPage({ scope }: Props) {
   const [worktreeEnabled, setWorktreeEnabled] = useState(false);
   const [branches, setBranches] = useState<string[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string>("");
+  const [currentBranch, setCurrentBranch] = useState<string>("");
   const { sessions, launchSession, refresh } = useSessions();
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
@@ -45,7 +46,12 @@ export function OverviewPage({ scope }: Props) {
   // Load branches when worktree is enabled
   useEffect(() => {
     if (worktreeEnabled && basePath && isGitRepo) {
-      api.listBranches(basePath).then(setBranches).catch(() => setBranches([]));
+      api.listBranches(basePath).then((branchList) => {
+        setBranches(branchList);
+        // Detect current branch (first one that doesn't start with worktree/)
+        const main = branchList.find((b) => !b.startsWith("worktree/"));
+        if (main) setCurrentBranch(main);
+      }).catch(() => setBranches([]));
     }
   }, [worktreeEnabled, basePath, isGitRepo]);
 
@@ -89,6 +95,16 @@ export function OverviewPage({ scope }: Props) {
       useWt,
       useWt && selectedBranch ? selectedBranch : null
     );
+  };
+
+  const handleDeleteSession = async (sessionId: string, hasWorktree: boolean) => {
+    if (hasWorktree) {
+      if (!confirm("This session has a worktree. Deleting will remove the worktree and its branch. Continue?")) {
+        return;
+      }
+    }
+    await api.deleteSession(sessionId);
+    await refresh();
   };
 
   return (
@@ -138,7 +154,9 @@ export function OverviewPage({ scope }: Props) {
                     value={selectedBranch}
                     onChange={(e) => setSelectedBranch(e.target.value)}
                   >
-                    <option value="">Current HEAD</option>
+                    <option value="">
+                      Current HEAD{currentBranch ? ` (${currentBranch})` : ""}
+                    </option>
                     {branches.map((b) => (
                       <option key={b} value={b}>
                         {b}
@@ -192,13 +210,16 @@ export function OverviewPage({ scope }: Props) {
                     key={s.sessionId}
                     className="session-row-clickable"
                     onClick={() => {
-                      if (s.pid) api.focusSession(s.pid);
+                      if (s.pid && s.processAlive) api.focusSession(s.pid);
                     }}
                   >
                     <td>
                       {s.commandName}
                       {s.worktreeBranch && (
                         <span className="worktree-badge">{s.worktreeBranch}</span>
+                      )}
+                      {!s.processAlive && (
+                        <span className="session-dead-badge">exited</span>
                       )}
                     </td>
                     <td><code>{s.command}</code></td>
@@ -208,7 +229,7 @@ export function OverviewPage({ scope }: Props) {
                         className="btn btn-danger btn-sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          api.deleteSession(s.sessionId).then(() => refresh());
+                          handleDeleteSession(s.sessionId, !!s.worktreePath);
                         }}
                       >
                         Delete
