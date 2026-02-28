@@ -3,12 +3,14 @@ import type {
   Scope,
   PluginSummary,
   PluginImportPreview,
+  PluginSyncStatus,
   Agent,
   Skill,
   CommandTemplate,
   PluginUpdateCheck,
 } from "@/types";
 import * as api from "@/lib/tauri";
+import { usePluginSync } from "@/hooks/usePluginSync";
 
 interface Props {
   scope?: Scope | null;
@@ -18,6 +20,17 @@ type View = "list" | "export" | "import-preview" | "git-install";
 
 export function PluginsPage({ scope }: Props) {
   const repo = scope?.type === "project" ? scope.repo : null;
+  const {
+    syncStatuses,
+    updatesAvailable: syncUpdatesAvailable,
+    syncPlugin,
+    autoSyncAll,
+    setPinned,
+    setAutoSync,
+    unlinkImport,
+  } = usePluginSync(repo?.path ?? null);
+  const [syncingPlugin, setSyncingPlugin] = useState<string | null>(null);
+  const [autoSyncing, setAutoSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState<"my" | "library" | "git">("my");
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -197,6 +210,40 @@ export function PluginsPage({ scope }: Props) {
     } finally {
       setUpdatingPlugin(null);
     }
+  };
+
+  const handleSyncPlugin = async (status: PluginSyncStatus) => {
+    setSyncingPlugin(status.pluginName);
+    try {
+      await syncPlugin(status.pluginName);
+      alert(`Synced "${status.pluginName}" to latest.`);
+    } catch (e) {
+      alert(`Sync failed: ${e}`);
+    } finally {
+      setSyncingPlugin(null);
+    }
+  };
+
+  const handleAutoSyncAll = async () => {
+    setAutoSyncing(true);
+    try {
+      const synced = await autoSyncAll();
+      if (synced.length === 0) {
+        alert("Everything is up to date.");
+      } else {
+        alert(`Auto-synced ${synced.length} plugin(s): ${synced.join(", ")}`);
+      }
+    } catch (e) {
+      alert(`Auto-sync failed: ${e}`);
+    } finally {
+      setAutoSyncing(false);
+    }
+  };
+
+  const getSyncForPlugin = (
+    plugin: PluginSummary
+  ): PluginSyncStatus | undefined => {
+    return syncStatuses.find((s) => s.pluginDir === plugin.dirPath);
   };
 
   const startImport = async (plugin: PluginSummary) => {
@@ -716,6 +763,122 @@ export function PluginsPage({ scope }: Props) {
           )}
         </div>
       </div>
+
+      {/* Sync status banner for imported plugins */}
+      {repo && syncStatuses.length > 0 && (
+        <div className="sync-status-banner">
+          <div className="sync-banner-header">
+            <strong>
+              Imported Plugins ({syncStatuses.length})
+              {syncUpdatesAvailable > 0 && (
+                <span className="badge-update" style={{ marginLeft: 8 }}>
+                  {syncUpdatesAvailable} update(s)
+                </span>
+              )}
+            </strong>
+            {syncUpdatesAvailable > 0 && (
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={handleAutoSyncAll}
+                disabled={autoSyncing}
+              >
+                {autoSyncing ? "Syncing..." : "Sync All"}
+              </button>
+            )}
+          </div>
+          <div className="sync-status-list">
+            {syncStatuses.map((status) => (
+              <div
+                key={status.pluginName}
+                className={`sync-status-item ${status.updateAvailable ? "sync-has-update" : ""}`}
+              >
+                <div className="sync-status-info">
+                  <span className="sync-plugin-name">{status.pluginName}</span>
+                  {status.importedCommit && (
+                    <span
+                      className="pack-git-commit"
+                      title={status.importedCommit}
+                    >
+                      imported: {status.importedCommit.slice(0, 7)}
+                    </span>
+                  )}
+                  {status.libraryCommit &&
+                    status.importedCommit !== status.libraryCommit && (
+                      <span
+                        className="pack-git-commit"
+                        title={status.libraryCommit}
+                      >
+                        latest: {status.libraryCommit.slice(0, 7)}
+                      </span>
+                    )}
+                  {status.pinned && (
+                    <span className="badge-pinned">pinned</span>
+                  )}
+                  {!status.pluginExists && (
+                    <span className="badge-missing">plugin removed</span>
+                  )}
+                </div>
+                <div className="sync-status-actions">
+                  <select
+                    className="sync-policy-select"
+                    value={
+                      status.pinned
+                        ? "pinned"
+                        : status.autoSync
+                          ? "auto"
+                          : "manual"
+                    }
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      if (val === "pinned") {
+                        await setPinned(status.pluginName, true);
+                      } else {
+                        await setPinned(status.pluginName, false);
+                        await setAutoSync(
+                          status.pluginName,
+                          val === "auto"
+                        );
+                      }
+                    }}
+                  >
+                    <option value="auto">Auto-sync</option>
+                    <option value="manual">Manual</option>
+                    <option value="pinned">Pinned</option>
+                  </select>
+                  {status.updateAvailable &&
+                    !status.pinned &&
+                    status.pluginExists && (
+                      <button
+                        className="btn btn-sm btn-update"
+                        onClick={() => handleSyncPlugin(status)}
+                        disabled={syncingPlugin === status.pluginName}
+                      >
+                        {syncingPlugin === status.pluginName
+                          ? "Syncing..."
+                          : "Sync"}
+                      </button>
+                    )}
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `Unlink "${status.pluginName}"? This stops tracking sync for this import.`
+                        )
+                      ) {
+                        unlinkImport(status.pluginName);
+                      }
+                    }}
+                    title="Stop tracking this import"
+                  >
+                    Unlink
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-muted">Loading plugins...</p>

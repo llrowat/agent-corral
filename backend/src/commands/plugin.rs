@@ -1,6 +1,7 @@
 use crate::command_templates::CommandTemplate;
 use crate::plugin_manager::{
-    ImportMode, PluginContents, PluginImportPreview, PluginSummary, PluginUpdateCheck,
+    ImportMode, PluginContents, PluginImportPreview, PluginImportRegistry, PluginSummary,
+    PluginSyncStatus, PluginUpdateCheck,
 };
 use crate::AppState;
 
@@ -178,4 +179,136 @@ pub fn migrate_agentpack(
         .map_err(|e| e.to_string())?
         .migrate_agentpack(&agentpack_path)
         .map_err(|e| e.to_string())
+}
+
+// -- Import sync commands --
+
+#[tauri::command]
+pub fn get_import_sync_status(
+    state: tauri::State<AppState>,
+    repo_path: String,
+) -> Result<Vec<PluginSyncStatus>, String> {
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get_import_sync_status(&repo_path)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn sync_imported_plugin(
+    state: tauri::State<AppState>,
+    repo_path: String,
+    plugin_name: String,
+) -> Result<PluginSyncStatus, String> {
+    let template_engine = state.template_engine.lock().map_err(|e| e.to_string())?;
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .sync_imported_plugin(&repo_path, &plugin_name, &template_engine)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn auto_sync_repo(
+    state: tauri::State<AppState>,
+    repo_path: String,
+) -> Result<Vec<String>, String> {
+    let template_engine = state.template_engine.lock().map_err(|e| e.to_string())?;
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .auto_sync_repo(&repo_path, &template_engine)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_import_pinned(
+    state: tauri::State<AppState>,
+    repo_path: String,
+    plugin_name: String,
+    pinned: bool,
+) -> Result<(), String> {
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .set_import_pinned(&repo_path, &plugin_name, pinned)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_import_auto_sync(
+    state: tauri::State<AppState>,
+    repo_path: String,
+    plugin_name: String,
+    auto_sync: bool,
+) -> Result<(), String> {
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .set_import_auto_sync(&repo_path, &plugin_name, auto_sync)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_import_record(
+    state: tauri::State<AppState>,
+    repo_path: String,
+    plugin_name: String,
+) -> Result<(), String> {
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .remove_import_record(&repo_path, &plugin_name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn auto_update_library(state: tauri::State<AppState>) -> Result<Vec<String>, String> {
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .auto_update_library()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_import_registry(
+    state: tauri::State<AppState>,
+    repo_path: String,
+) -> Result<PluginImportRegistry, String> {
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .read_import_registry(&repo_path)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_plugin_sync_interval(
+    state: tauri::State<AppState>,
+    minutes: u32,
+) -> Result<(), String> {
+    state
+        .preferences
+        .lock()
+        .map_err(|e| e.to_string())?
+        .set_plugin_sync_interval(minutes)
+}
+
+#[tauri::command]
+pub fn get_plugin_sync_interval(state: tauri::State<AppState>) -> Result<u32, String> {
+    Ok(state
+        .preferences
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get_plugin_sync_interval())
 }

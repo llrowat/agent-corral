@@ -22,6 +22,8 @@ import type {
   PluginContents,
   PluginImportPreview,
   PluginUpdateCheck,
+  PluginSyncStatus,
+  PluginImportRegistry,
   CommandTemplate,
 } from "@/types";
 
@@ -443,6 +445,70 @@ export async function migrateAgentpack(
   agentpackPath: string
 ): Promise<string> {
   return invoke("migrate_agentpack", { agentpackPath });
+}
+
+// -- Plugin sync commands --
+
+export async function getImportSyncStatus(
+  repoPath: string
+): Promise<PluginSyncStatus[]> {
+  return invoke("get_import_sync_status", { repoPath });
+}
+
+export async function syncImportedPlugin(
+  repoPath: string,
+  pluginName: string
+): Promise<PluginSyncStatus> {
+  return invoke("sync_imported_plugin", { repoPath, pluginName });
+}
+
+export async function autoSyncRepo(
+  repoPath: string
+): Promise<string[]> {
+  return invoke("auto_sync_repo", { repoPath });
+}
+
+export async function setImportPinned(
+  repoPath: string,
+  pluginName: string,
+  pinned: boolean
+): Promise<void> {
+  return invoke("set_import_pinned", { repoPath, pluginName, pinned });
+}
+
+export async function setImportAutoSync(
+  repoPath: string,
+  pluginName: string,
+  autoSync: boolean
+): Promise<void> {
+  return invoke("set_import_auto_sync", { repoPath, pluginName, autoSync });
+}
+
+export async function removeImportRecord(
+  repoPath: string,
+  pluginName: string
+): Promise<void> {
+  return invoke("remove_import_record", { repoPath, pluginName });
+}
+
+export async function autoUpdateLibrary(): Promise<string[]> {
+  return invoke("auto_update_library");
+}
+
+export async function readImportRegistry(
+  repoPath: string
+): Promise<PluginImportRegistry> {
+  return invoke("read_import_registry", { repoPath });
+}
+
+export async function setPluginSyncInterval(
+  minutes: number
+): Promise<void> {
+  return invoke("set_plugin_sync_interval", { minutes });
+}
+
+export async function getPluginSyncInterval(): Promise<number> {
+  return invoke("get_plugin_sync_interval");
 }
 
 // -- Template commands --

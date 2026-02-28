@@ -118,6 +118,57 @@ pub struct PluginImportPreview {
     pub config_changes: bool,
 }
 
+// -- Import sync types --
+
+/// Tracks a single plugin import into a repo for sync purposes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginImportRecord {
+    /// Plugin name at time of import
+    pub plugin_name: String,
+    /// Library directory path the plugin was imported from
+    pub plugin_dir: String,
+    /// Git source at time of import (None if local plugin)
+    pub git_source: Option<GitSource>,
+    /// Commit hash of the library plugin at time of import
+    pub imported_commit: Option<String>,
+    /// When the import happened
+    pub imported_at: String,
+    /// Import mode used
+    pub import_mode: ImportMode,
+    /// If true, this import is pinned and won't auto-sync
+    pub pinned: bool,
+    /// If true, auto-sync is enabled (update repo automatically when plugin updates)
+    pub auto_sync: bool,
+}
+
+/// Stored in {repo}/.claude/plugin-imports.json
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginImportRegistry {
+    pub imports: Vec<PluginImportRecord>,
+}
+
+/// Status of a single plugin import's sync state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginSyncStatus {
+    pub plugin_name: String,
+    pub plugin_dir: String,
+    /// Whether the library plugin still exists
+    pub plugin_exists: bool,
+    /// Commit that was imported into this repo
+    pub imported_commit: Option<String>,
+    /// Current commit in the library
+    pub library_commit: Option<String>,
+    /// Whether an update is available (library has newer commit)
+    pub update_available: bool,
+    /// Whether auto-sync is enabled for this import
+    pub auto_sync: bool,
+    /// Whether this import is pinned (skip sync)
+    pub pinned: bool,
+}
+
 pub struct PluginManager {
     plugins_dir: PathBuf,
     library_dir: PathBuf,
@@ -617,6 +668,9 @@ impl PluginManager {
                 .map_err(|e| PluginError::Adapter(e.to_string()))?;
         }
 
+        // Record import lineage for sync tracking
+        self.record_import(repo_path, plugin_dir, &mode)?;
+
         Ok(())
     }
 
@@ -948,6 +1002,290 @@ impl PluginManager {
         }
 
         Ok(plugin_dir.to_string_lossy().to_string())
+    }
+
+    // -- Import sync --
+
+    /// Read the import registry for a repo (from {repo}/.claude/plugin-imports.json)
+    pub fn read_import_registry(&self, repo_path: &str) -> Result<PluginImportRegistry, PluginError> {
+        let path = Path::new(repo_path).join(".claude/plugin-imports.json");
+        if !path.exists() {
+            return Ok(PluginImportRegistry::default());
+        }
+        let json = fs::read_to_string(&path)?;
+        let registry: PluginImportRegistry = serde_json::from_str(&json)?;
+        Ok(registry)
+    }
+
+    /// Write the import registry for a repo
+    fn write_import_registry(
+        &self,
+        repo_path: &str,
+        registry: &PluginImportRegistry,
+    ) -> Result<(), PluginError> {
+        let claude_dir = Path::new(repo_path).join(".claude");
+        fs::create_dir_all(&claude_dir)?;
+        let json = serde_json::to_string_pretty(registry)?;
+        atomic_write(&claude_dir.join("plugin-imports.json"), &json)?;
+        Ok(())
+    }
+
+    /// Record an import in the repo's import registry.
+    /// Called internally by import_plugin.
+    fn record_import(
+        &self,
+        repo_path: &str,
+        plugin_dir: &str,
+        mode: &ImportMode,
+    ) -> Result<(), PluginError> {
+        let dir = Path::new(plugin_dir);
+        let manifest = self.read_manifest(dir)?;
+
+        // Read git source if available
+        let source_path = dir.join(".claude-plugin/source.json");
+        let git_source = if source_path.exists() {
+            let source_json = fs::read_to_string(&source_path)?;
+            serde_json::from_str::<GitSource>(&source_json).ok()
+        } else {
+            None
+        };
+
+        let imported_commit = git_source.as_ref().map(|gs| gs.installed_commit.clone());
+
+        let mut registry = self.read_import_registry(repo_path)?;
+
+        // Update existing record or add new one
+        if let Some(existing) = registry
+            .imports
+            .iter_mut()
+            .find(|r| r.plugin_name == manifest.name)
+        {
+            existing.plugin_dir = plugin_dir.to_string();
+            existing.git_source = git_source;
+            existing.imported_commit = imported_commit;
+            existing.imported_at = chrono::Utc::now().to_rfc3339();
+            existing.import_mode = mode.clone();
+            // Preserve pinned and auto_sync settings from previous import
+        } else {
+            registry.imports.push(PluginImportRecord {
+                plugin_name: manifest.name,
+                plugin_dir: plugin_dir.to_string(),
+                git_source,
+                imported_commit,
+                imported_at: chrono::Utc::now().to_rfc3339(),
+                import_mode: mode.clone(),
+                pinned: false,
+                auto_sync: true, // Default to auto-sync enabled
+            });
+        }
+
+        self.write_import_registry(repo_path, &registry)?;
+        Ok(())
+    }
+
+    /// Get sync status for all plugin imports in a repo
+    pub fn get_import_sync_status(
+        &self,
+        repo_path: &str,
+    ) -> Result<Vec<PluginSyncStatus>, PluginError> {
+        let registry = self.read_import_registry(repo_path)?;
+        let mut statuses = Vec::new();
+
+        for record in &registry.imports {
+            let plugin_dir = Path::new(&record.plugin_dir);
+            let plugin_exists = plugin_dir.exists();
+
+            let library_commit = if plugin_exists {
+                let source_path = plugin_dir.join(".claude-plugin/source.json");
+                if source_path.exists() {
+                    fs::read_to_string(&source_path)
+                        .ok()
+                        .and_then(|json| serde_json::from_str::<GitSource>(&json).ok())
+                        .map(|gs| gs.installed_commit)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let update_available = match (&record.imported_commit, &library_commit) {
+                (Some(imported), Some(library)) => imported != library,
+                _ => false,
+            };
+
+            statuses.push(PluginSyncStatus {
+                plugin_name: record.plugin_name.clone(),
+                plugin_dir: record.plugin_dir.clone(),
+                plugin_exists,
+                imported_commit: record.imported_commit.clone(),
+                library_commit,
+                update_available,
+                auto_sync: record.auto_sync,
+                pinned: record.pinned,
+            });
+        }
+
+        Ok(statuses)
+    }
+
+    /// Sync a single imported plugin: re-import it from the library using Overwrite mode.
+    /// Returns the updated sync status.
+    pub fn sync_imported_plugin(
+        &self,
+        repo_path: &str,
+        plugin_name: &str,
+        template_engine: &crate::command_templates::TemplateEngine,
+    ) -> Result<PluginSyncStatus, PluginError> {
+        let registry = self.read_import_registry(repo_path)?;
+        let record = registry
+            .imports
+            .iter()
+            .find(|r| r.plugin_name == plugin_name)
+            .ok_or_else(|| {
+                PluginError::NotFound(format!("No import record for plugin '{}'", plugin_name))
+            })?;
+
+        if record.pinned {
+            return Err(PluginError::Invalid(format!(
+                "Plugin '{}' is pinned and cannot be synced",
+                plugin_name
+            )));
+        }
+
+        let plugin_dir = record.plugin_dir.clone();
+
+        if !Path::new(&plugin_dir).exists() {
+            return Err(PluginError::NotFound(format!(
+                "Library plugin directory no longer exists: {}",
+                plugin_dir
+            )));
+        }
+
+        // Re-import with Overwrite mode
+        self.import_plugin(&plugin_dir, repo_path, ImportMode::Overwrite, template_engine)?;
+
+        // Return fresh sync status for this plugin
+        let statuses = self.get_import_sync_status(repo_path)?;
+        statuses
+            .into_iter()
+            .find(|s| s.plugin_name == plugin_name)
+            .ok_or_else(|| {
+                PluginError::NotFound(format!(
+                    "Sync status not found after sync for '{}'",
+                    plugin_name
+                ))
+            })
+    }
+
+    /// Run auto-sync for all imported plugins in a repo that have auto_sync enabled.
+    /// Returns list of plugin names that were synced.
+    pub fn auto_sync_repo(
+        &self,
+        repo_path: &str,
+        template_engine: &crate::command_templates::TemplateEngine,
+    ) -> Result<Vec<String>, PluginError> {
+        let statuses = self.get_import_sync_status(repo_path)?;
+        let mut synced = Vec::new();
+
+        for status in &statuses {
+            if status.auto_sync && !status.pinned && status.update_available && status.plugin_exists
+            {
+                match self.sync_imported_plugin(repo_path, &status.plugin_name, template_engine) {
+                    Ok(_) => synced.push(status.plugin_name.clone()),
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: auto-sync failed for '{}': {}",
+                            status.plugin_name, e
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(synced)
+    }
+
+    /// Set the pinned flag for an imported plugin
+    pub fn set_import_pinned(
+        &self,
+        repo_path: &str,
+        plugin_name: &str,
+        pinned: bool,
+    ) -> Result<(), PluginError> {
+        let mut registry = self.read_import_registry(repo_path)?;
+        let record = registry
+            .imports
+            .iter_mut()
+            .find(|r| r.plugin_name == plugin_name)
+            .ok_or_else(|| {
+                PluginError::NotFound(format!("No import record for plugin '{}'", plugin_name))
+            })?;
+        record.pinned = pinned;
+        self.write_import_registry(repo_path, &registry)?;
+        Ok(())
+    }
+
+    /// Set the auto_sync flag for an imported plugin
+    pub fn set_import_auto_sync(
+        &self,
+        repo_path: &str,
+        plugin_name: &str,
+        auto_sync: bool,
+    ) -> Result<(), PluginError> {
+        let mut registry = self.read_import_registry(repo_path)?;
+        let record = registry
+            .imports
+            .iter_mut()
+            .find(|r| r.plugin_name == plugin_name)
+            .ok_or_else(|| {
+                PluginError::NotFound(format!("No import record for plugin '{}'", plugin_name))
+            })?;
+        record.auto_sync = auto_sync;
+        self.write_import_registry(repo_path, &registry)?;
+        Ok(())
+    }
+
+    /// Remove an import record (e.g., if user wants to unlink)
+    pub fn remove_import_record(
+        &self,
+        repo_path: &str,
+        plugin_name: &str,
+    ) -> Result<(), PluginError> {
+        let mut registry = self.read_import_registry(repo_path)?;
+        let before = registry.imports.len();
+        registry.imports.retain(|r| r.plugin_name != plugin_name);
+        if registry.imports.len() == before {
+            return Err(PluginError::NotFound(format!(
+                "No import record for plugin '{}'",
+                plugin_name
+            )));
+        }
+        self.write_import_registry(repo_path, &registry)?;
+        Ok(())
+    }
+
+    /// Check for updates on all git-sourced plugins and auto-update the library copies.
+    /// Returns the list of plugins that were updated in the library.
+    pub fn auto_update_library(&self) -> Result<Vec<String>, PluginError> {
+        let updates = self.check_updates()?;
+        let mut updated = Vec::new();
+
+        for check in &updates {
+            if check.update_available {
+                match self.update_plugin(&check.dir_path) {
+                    Ok(summary) => updated.push(summary.name),
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: auto-update failed for '{}': {}",
+                            check.name, e
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(updated)
     }
 
     pub fn plugins_dir(&self) -> &Path {
@@ -1448,5 +1786,381 @@ fn parse_skill_contents(contents: &str, skill_id: &str) -> Skill {
             .and_then(|v| v.as_str())
             .map(String::from),
         content: body,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_manager() -> (tempfile::TempDir, PluginManager) {
+        let tmp = tempfile::tempdir().unwrap();
+        let plugins_dir = tmp.path().join("plugins");
+        let library_dir = tmp.path().join("library");
+        fs::create_dir_all(&plugins_dir).unwrap();
+        fs::create_dir_all(&library_dir).unwrap();
+        (tmp, PluginManager::new(plugins_dir, library_dir))
+    }
+
+    fn create_test_plugin(dir: &Path, name: &str) {
+        let claude_dir = dir.join(".claude-plugin");
+        fs::create_dir_all(&claude_dir).unwrap();
+        let manifest = PluginManifest {
+            name: name.to_string(),
+            description: "Test plugin".to_string(),
+            version: "1.0.0".to_string(),
+            author: None,
+        };
+        let json = serde_json::to_string_pretty(&manifest).unwrap();
+        atomic_write(&claude_dir.join("plugin.json"), &json).unwrap();
+    }
+
+    fn create_test_plugin_with_git(dir: &Path, name: &str, commit: &str) {
+        create_test_plugin(dir, name);
+        let gs = GitSource {
+            repo_url: "https://github.com/test/repo.git".to_string(),
+            branch: Some("main".to_string()),
+            installed_commit: commit.to_string(),
+            installed_at: chrono::Utc::now().to_rfc3339(),
+        };
+        let json = serde_json::to_string_pretty(&gs).unwrap();
+        atomic_write(&dir.join(".claude-plugin/source.json"), &json).unwrap();
+    }
+
+    fn create_test_repo(tmp: &Path) -> PathBuf {
+        let repo = tmp.join("test-repo");
+        fs::create_dir_all(repo.join(".claude")).unwrap();
+        repo
+    }
+
+    #[test]
+    fn read_import_registry_returns_empty_when_no_file() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let registry = mgr.read_import_registry(&repo.to_string_lossy()).unwrap();
+        assert!(registry.imports.is_empty());
+    }
+
+    #[test]
+    fn record_import_creates_registry_file() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("test-plugin");
+        create_test_plugin(&plugin_dir, "test-plugin");
+
+        mgr.record_import(
+            &repo.to_string_lossy(),
+            &plugin_dir.to_string_lossy(),
+            &ImportMode::Overwrite,
+        )
+        .unwrap();
+
+        let registry_path = repo.join(".claude/plugin-imports.json");
+        assert!(registry_path.exists());
+
+        let registry = mgr
+            .read_import_registry(&repo.to_string_lossy())
+            .unwrap();
+        assert_eq!(registry.imports.len(), 1);
+        assert_eq!(registry.imports[0].plugin_name, "test-plugin");
+        assert!(registry.imports[0].auto_sync);
+        assert!(!registry.imports[0].pinned);
+    }
+
+    #[test]
+    fn record_import_with_git_source_tracks_commit() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("git-plugin");
+        create_test_plugin_with_git(&plugin_dir, "git-plugin", "abc1234");
+
+        mgr.record_import(
+            &repo.to_string_lossy(),
+            &plugin_dir.to_string_lossy(),
+            &ImportMode::Overwrite,
+        )
+        .unwrap();
+
+        let registry = mgr
+            .read_import_registry(&repo.to_string_lossy())
+            .unwrap();
+        assert_eq!(registry.imports[0].imported_commit.as_deref(), Some("abc1234"));
+        assert!(registry.imports[0].git_source.is_some());
+    }
+
+    #[test]
+    fn record_import_replaces_existing_for_same_plugin() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("my-plugin");
+        create_test_plugin(&plugin_dir, "my-plugin");
+
+        // First import
+        mgr.record_import(
+            &repo.to_string_lossy(),
+            &plugin_dir.to_string_lossy(),
+            &ImportMode::AddOnly,
+        )
+        .unwrap();
+
+        // Second import (should update, not duplicate)
+        mgr.record_import(
+            &repo.to_string_lossy(),
+            &plugin_dir.to_string_lossy(),
+            &ImportMode::Overwrite,
+        )
+        .unwrap();
+
+        let registry = mgr
+            .read_import_registry(&repo.to_string_lossy())
+            .unwrap();
+        assert_eq!(registry.imports.len(), 1);
+    }
+
+    #[test]
+    fn record_import_preserves_pinned_on_reimport() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("pinned-plugin");
+        create_test_plugin(&plugin_dir, "pinned-plugin");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        // Import and pin
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+        mgr.set_import_pinned(&repo_path, "pinned-plugin", true)
+            .unwrap();
+
+        // Re-import
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+
+        let registry = mgr.read_import_registry(&repo_path).unwrap();
+        assert!(registry.imports[0].pinned);
+    }
+
+    #[test]
+    fn get_import_sync_status_empty_repo() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let statuses = mgr
+            .get_import_sync_status(&repo.to_string_lossy())
+            .unwrap();
+        assert!(statuses.is_empty());
+    }
+
+    #[test]
+    fn get_import_sync_status_detects_update() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("sync-test");
+        create_test_plugin_with_git(&plugin_dir, "sync-test", "commit_v1");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        // Record import at commit_v1
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+
+        // Simulate library plugin being updated to commit_v2
+        let gs = GitSource {
+            repo_url: "https://github.com/test/repo.git".to_string(),
+            branch: Some("main".to_string()),
+            installed_commit: "commit_v2".to_string(),
+            installed_at: chrono::Utc::now().to_rfc3339(),
+        };
+        let gs_json = serde_json::to_string_pretty(&gs).unwrap();
+        atomic_write(&plugin_dir.join(".claude-plugin/source.json"), &gs_json).unwrap();
+
+        let statuses = mgr.get_import_sync_status(&repo_path).unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert!(statuses[0].update_available);
+        assert_eq!(statuses[0].imported_commit.as_deref(), Some("commit_v1"));
+        assert_eq!(statuses[0].library_commit.as_deref(), Some("commit_v2"));
+    }
+
+    #[test]
+    fn get_import_sync_status_no_update_when_same_commit() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("same-commit");
+        create_test_plugin_with_git(&plugin_dir, "same-commit", "abc123");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+
+        let statuses = mgr.get_import_sync_status(&repo_path).unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert!(!statuses[0].update_available);
+    }
+
+    #[test]
+    fn get_import_sync_status_handles_deleted_plugin() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("will-delete");
+        create_test_plugin(&plugin_dir, "will-delete");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+
+        // Delete the plugin
+        fs::remove_dir_all(&plugin_dir).unwrap();
+
+        let statuses = mgr.get_import_sync_status(&repo_path).unwrap();
+        assert_eq!(statuses.len(), 1);
+        assert!(!statuses[0].plugin_exists);
+        assert!(!statuses[0].update_available);
+    }
+
+    #[test]
+    fn set_import_pinned_works() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("pin-test");
+        create_test_plugin(&plugin_dir, "pin-test");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+
+        mgr.set_import_pinned(&repo_path, "pin-test", true).unwrap();
+
+        let registry = mgr.read_import_registry(&repo_path).unwrap();
+        assert!(registry.imports[0].pinned);
+
+        mgr.set_import_pinned(&repo_path, "pin-test", false).unwrap();
+
+        let registry = mgr.read_import_registry(&repo_path).unwrap();
+        assert!(!registry.imports[0].pinned);
+    }
+
+    #[test]
+    fn set_import_pinned_fails_for_unknown_plugin() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let result = mgr.set_import_pinned(&repo.to_string_lossy(), "nonexistent", true);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn set_import_auto_sync_works() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("autosync-test");
+        create_test_plugin(&plugin_dir, "autosync-test");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+
+        // Default is auto_sync=true
+        let registry = mgr.read_import_registry(&repo_path).unwrap();
+        assert!(registry.imports[0].auto_sync);
+
+        // Disable
+        mgr.set_import_auto_sync(&repo_path, "autosync-test", false).unwrap();
+        let registry = mgr.read_import_registry(&repo_path).unwrap();
+        assert!(!registry.imports[0].auto_sync);
+    }
+
+    #[test]
+    fn remove_import_record_works() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("remove-test");
+        create_test_plugin(&plugin_dir, "remove-test");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+
+        mgr.remove_import_record(&repo_path, "remove-test").unwrap();
+
+        let registry = mgr.read_import_registry(&repo_path).unwrap();
+        assert!(registry.imports.is_empty());
+    }
+
+    #[test]
+    fn remove_import_record_fails_for_unknown_plugin() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let result = mgr.remove_import_record(&repo.to_string_lossy(), "nonexistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn import_registry_handles_corrupt_json() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let registry_path = repo.join(".claude/plugin-imports.json");
+        fs::write(&registry_path, "not valid json!!!").unwrap();
+
+        let result = mgr.read_import_registry(&repo.to_string_lossy());
+        // Should return an error, not panic
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn multiple_plugins_tracked_independently() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let repo_path = repo.to_string_lossy().to_string();
+
+        let plugin1 = mgr.library_dir().join("plugin-a");
+        create_test_plugin_with_git(&plugin1, "plugin-a", "aaa111");
+
+        let plugin2 = mgr.library_dir().join("plugin-b");
+        create_test_plugin_with_git(&plugin2, "plugin-b", "bbb222");
+
+        mgr.record_import(&repo_path, &plugin1.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+        mgr.record_import(&repo_path, &plugin2.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+
+        let registry = mgr.read_import_registry(&repo_path).unwrap();
+        assert_eq!(registry.imports.len(), 2);
+
+        // Pin only plugin-a
+        mgr.set_import_pinned(&repo_path, "plugin-a", true).unwrap();
+
+        let registry = mgr.read_import_registry(&repo_path).unwrap();
+        let a = registry.imports.iter().find(|r| r.plugin_name == "plugin-a").unwrap();
+        let b = registry.imports.iter().find(|r| r.plugin_name == "plugin-b").unwrap();
+        assert!(a.pinned);
+        assert!(!b.pinned);
+    }
+
+    #[test]
+    fn sync_status_respects_pinned_flag() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let plugin_dir = mgr.library_dir().join("pinned-sync");
+        create_test_plugin_with_git(&plugin_dir, "pinned-sync", "v1");
+        let repo_path = repo.to_string_lossy().to_string();
+
+        mgr.record_import(&repo_path, &plugin_dir.to_string_lossy(), &ImportMode::Overwrite)
+            .unwrap();
+        mgr.set_import_pinned(&repo_path, "pinned-sync", true).unwrap();
+
+        // Simulate update
+        let gs = GitSource {
+            repo_url: "https://github.com/test/repo.git".to_string(),
+            branch: Some("main".to_string()),
+            installed_commit: "v2".to_string(),
+            installed_at: chrono::Utc::now().to_rfc3339(),
+        };
+        atomic_write(
+            &plugin_dir.join(".claude-plugin/source.json"),
+            &serde_json::to_string_pretty(&gs).unwrap(),
+        )
+        .unwrap();
+
+        let statuses = mgr.get_import_sync_status(&repo_path).unwrap();
+        assert_eq!(statuses.len(), 1);
+        // Update is technically available but plugin is pinned
+        assert!(statuses[0].update_available);
+        assert!(statuses[0].pinned);
     }
 }
