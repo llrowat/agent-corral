@@ -10,14 +10,12 @@ const BUILTIN_IDS = [
   "run-review",
 ];
 
-const REQUIRE_OPTIONS = ["repo", "agent", "prompt"] as const;
-
 function emptyTemplate(): CommandTemplate {
   return {
     templateId: "",
     name: "",
     description: "",
-    requires: ["repo"],
+    requires: [],
     command: "",
     cwd: "{{repoPath}}",
     useWorktree: false,
@@ -34,6 +32,16 @@ function slugify(name: string): string {
     "-" +
     Date.now()
   );
+}
+
+/** Auto-detect required variables from command and cwd strings */
+function detectRequires(command: string, cwd: string | null): string[] {
+  const combined = command + (cwd ?? "");
+  const requires: string[] = [];
+  if (combined.includes("{{repoPath}}")) requires.push("repo");
+  if (combined.includes("{{agentId}}")) requires.push("agent");
+  if (combined.includes("{{prompt}}")) requires.push("prompt");
+  return requires;
 }
 
 export function TemplatesPage() {
@@ -71,7 +79,10 @@ export function TemplatesPage() {
     if (!editing) return;
     setSaving(true);
     try {
-      const toSave = { ...editing };
+      const toSave = {
+        ...editing,
+        requires: detectRequires(editing.command, editing.cwd),
+      };
       if (isNew && !toSave.templateId) {
         toSave.templateId = slugify(toSave.name || "template");
       }
@@ -81,7 +92,7 @@ export function TemplatesPage() {
       setEditing(null);
       setIsNew(false);
     } catch (e) {
-      alert(`Failed to save template: ${e}`);
+      alert(`Failed to save launcher: ${e}`);
     } finally {
       setSaving(false);
     }
@@ -89,24 +100,15 @@ export function TemplatesPage() {
 
   const handleDelete = async (id: string) => {
     if (isBuiltin(id)) return;
-    if (!confirm(`Delete this template?`)) return;
+    if (!confirm(`Delete this launcher?`)) return;
     try {
       await api.deleteTemplate(id);
       await loadTemplates();
       if (selectedId === id) setSelectedId(null);
       if (editing?.templateId === id) setEditing(null);
     } catch (e) {
-      alert(`Failed to delete template: ${e}`);
+      alert(`Failed to delete launcher: ${e}`);
     }
-  };
-
-  const toggleRequire = (req: string) => {
-    if (!editing) return;
-    const has = editing.requires.includes(req);
-    const requires = has
-      ? editing.requires.filter((r) => r !== req)
-      : [...editing.requires, req];
-    setEditing({ ...editing, requires });
   };
 
   return (
@@ -114,7 +116,7 @@ export function TemplatesPage() {
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
-            <h3>Templates</h3>
+            <h3>Launchers</h3>
             <button className="btn btn-sm" onClick={startNew}>
               + New
             </button>
@@ -156,7 +158,7 @@ export function TemplatesPage() {
             ))}
             {templates.length === 0 && (
               <li className="text-muted" style={{ padding: "12px" }}>
-                No templates found
+                No launchers found
               </li>
             )}
           </ul>
@@ -165,11 +167,11 @@ export function TemplatesPage() {
         <div className="panel-right">
           {!current ? (
             <div className="panel-empty">
-              <p>Select a template or create a new one.</p>
+              <p>Select a launcher or create a new one.</p>
             </div>
           ) : editing ? (
             <div className="agent-editor">
-              <h3>{isNew ? "New Template" : `Edit: ${editing.name}`}</h3>
+              <h3>{isNew ? "New Launcher" : `Edit: ${editing.name}`}</h3>
 
               <div className="form-group">
                 <label>Name</label>
@@ -179,7 +181,7 @@ export function TemplatesPage() {
                   onChange={(e) =>
                     setEditing({ ...editing, name: e.target.value })
                   }
-                  placeholder="My Custom Template"
+                  placeholder="My Custom Launcher"
                 />
               </div>
 
@@ -191,7 +193,7 @@ export function TemplatesPage() {
                   onChange={(e) =>
                     setEditing({ ...editing, description: e.target.value })
                   }
-                  placeholder="What this template does"
+                  placeholder="What this launcher does"
                 />
               </div>
 
@@ -226,30 +228,6 @@ export function TemplatesPage() {
               </div>
 
               <div className="form-group">
-                <label>Requires</label>
-                <div style={{ display: "flex", gap: "12px" }}>
-                  {REQUIRE_OPTIONS.map((req) => (
-                    <label
-                      key={req}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={editing.requires.includes(req)}
-                        onChange={() => toggleRequire(req)}
-                      />
-                      {req}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="form-group">
                 <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
                   <input
                     type="checkbox"
@@ -269,7 +247,7 @@ export function TemplatesPage() {
                   onClick={handleSave}
                   disabled={saving || !editing.name.trim() || !editing.command.trim()}
                 >
-                  {saving ? "Saving..." : "Save Template"}
+                  {saving ? "Saving..." : "Save"}
                 </button>
                 <button
                   className="btn"
@@ -303,31 +281,28 @@ export function TemplatesPage() {
                 </div>
               )}
 
-              <div className="detail-field">
-                <label>Requires</label>
-                <div style={{ display: "flex", gap: "6px" }}>
-                  {selected!.requires.length > 0 ? (
-                    selected!.requires.map((r) => (
-                      <span key={r} className="tool-tag">
-                        {r}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-muted">None</span>
-                  )}
-                </div>
-              </div>
+              {(() => {
+                const vars = detectRequires(selected!.command, selected!.cwd);
+                return vars.length > 0 ? (
+                  <div className="detail-field">
+                    <label>Variables</label>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      {vars.map((r) => (
+                        <span key={r} className="tool-tag">
+                          {r === "repo" ? "repoPath" : r === "agent" ? "agentId" : r}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null;
+              })()}
 
-              <div className="detail-field">
-                <label>Git Worktree</label>
-                <span>
-                  {selected!.useWorktree ? (
-                    <span className="worktree-badge">Enabled</span>
-                  ) : (
-                    <span className="text-muted">Disabled</span>
-                  )}
-                </span>
-              </div>
+              {selected!.useWorktree && (
+                <div className="detail-field">
+                  <label>Git Worktree</label>
+                  <span className="worktree-badge">Enabled</span>
+                </div>
+              )}
 
               {!isBuiltin(selected!.templateId) && (
                 <div className="form-actions">

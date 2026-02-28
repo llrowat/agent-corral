@@ -15,8 +15,12 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: "",
-    items: [{ path: "/overview", label: "Overview", icon: "grid" }],
+    label: "Project",
+    items: [
+      { path: "/overview", label: "Overview", icon: "grid" },
+      { path: "/sessions", label: "Sessions", icon: "terminal", projectOnly: true },
+      { path: "/templates", label: "Launchers", icon: "template" },
+    ],
   },
   {
     label: "Claude Code",
@@ -27,13 +31,6 @@ const navGroups: NavGroup[] = [
       { path: "/mcp", label: "MCP Servers", icon: "mcp" },
       { path: "/config", label: "Config", icon: "settings" },
       { path: "/memory", label: "Memory", icon: "database" },
-    ],
-  },
-  {
-    label: "Project",
-    items: [
-      { path: "/sessions", label: "Sessions", icon: "terminal", projectOnly: true },
-      { path: "/templates", label: "Templates", icon: "template" },
     ],
   },
   {
