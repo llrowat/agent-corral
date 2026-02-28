@@ -163,6 +163,7 @@ impl ClaudeRepoAdapter {
         let memory_dir = claude_dir.join("memory");
         let skills_dir = claude_dir.join("skills");
         let mcp_json = base.join(".mcp.json");
+        let claude_json = base.join(".claude.json");
 
         // Count hooks from settings.json
         let hook_count = if settings_json.exists() {
@@ -182,7 +183,7 @@ impl ClaudeRepoAdapter {
             has_agents_dir: agents_dir.exists(),
             has_memory_dir: memory_dir.exists(),
             has_skills_dir: skills_dir.exists(),
-            has_mcp_json: mcp_json.exists(),
+            has_mcp_json: mcp_json.exists() || claude_json.exists(),
             hook_count,
             config_path: if settings_json.exists() {
                 Some(settings_json.to_string_lossy().to_string())
@@ -771,9 +772,13 @@ impl ClaudeRepoAdapter {
 
     // -- MCP --
 
-    /// Read MCP servers from .mcp.json at repo root
-    pub fn read_mcp_servers(repo_path: &str) -> Result<Vec<McpServer>, ClaudeAdapterError> {
-        let mcp_path = Path::new(repo_path).join(".mcp.json");
+    /// Read MCP servers from .mcp.json (project) or .claude.json (global)
+    pub fn read_mcp_servers(repo_path: &str, is_global: bool) -> Result<Vec<McpServer>, ClaudeAdapterError> {
+        let mcp_path = if is_global {
+            Path::new(repo_path).join(".claude.json")
+        } else {
+            Path::new(repo_path).join(".mcp.json")
+        };
         if !mcp_path.exists() {
             return Ok(vec![]);
         }
@@ -826,12 +831,17 @@ impl ClaudeRepoAdapter {
         Ok(servers)
     }
 
-    /// Write (upsert) an MCP server to .mcp.json
+    /// Write (upsert) an MCP server to .mcp.json (project) or .claude.json (global)
     pub fn write_mcp_server(
         repo_path: &str,
         server: &McpServer,
+        is_global: bool,
     ) -> Result<(), ClaudeAdapterError> {
-        let mcp_path = Path::new(repo_path).join(".mcp.json");
+        let mcp_path = if is_global {
+            Path::new(repo_path).join(".claude.json")
+        } else {
+            Path::new(repo_path).join(".mcp.json")
+        };
 
         let mut raw: serde_json::Value = if mcp_path.exists() {
             let contents = fs::read_to_string(&mcp_path)?;
@@ -885,12 +895,17 @@ impl ClaudeRepoAdapter {
         Ok(())
     }
 
-    /// Delete an MCP server from .mcp.json
+    /// Delete an MCP server from .mcp.json (project) or .claude.json (global)
     pub fn delete_mcp_server(
         repo_path: &str,
         server_id: &str,
+        is_global: bool,
     ) -> Result<(), ClaudeAdapterError> {
-        let mcp_path = Path::new(repo_path).join(".mcp.json");
+        let mcp_path = if is_global {
+            Path::new(repo_path).join(".claude.json")
+        } else {
+            Path::new(repo_path).join(".mcp.json")
+        };
         if !mcp_path.exists() {
             return Err(ClaudeAdapterError::McpServerNotFound(
                 server_id.to_string(),

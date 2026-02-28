@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
-import { RepoSwitcher } from "./components/RepoSwitcher";
+import { ScopeSwitcher } from "./components/ScopeSwitcher";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { ConfigPage } from "./pages/ConfigPage";
@@ -14,11 +14,17 @@ import { PacksPage } from "./pages/PacksPage";
 import { PluginsPage } from "./pages/PluginsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { useRepos } from "./hooks/useRepos";
-import type { Repo } from "./types";
+import { getClaudeHome } from "./lib/tauri";
+import type { Scope } from "./types";
 
 function App() {
   const { repos, addRepo, removeRepo } = useRepos();
-  const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null);
+  const [scope, setScope] = useState<Scope | null>(null);
+  const [homePath, setHomePath] = useState<string | null>(null);
+
+  useEffect(() => {
+    getClaudeHome().then(setHomePath).catch(() => {});
+  }, []);
 
   return (
     <div className="app-layout">
@@ -27,16 +33,17 @@ function App() {
           <h1>AgentCorral</h1>
           <span className="app-subtitle">Claude Code Command Center</span>
         </div>
-        <RepoSwitcher
+        <ScopeSwitcher
           repos={repos}
-          selected={selectedRepo}
-          onSelect={setSelectedRepo}
-          onAdd={addRepo}
-          onRemove={removeRepo}
+          scope={scope}
+          onScopeChange={setScope}
+          homePath={homePath}
+          onAddRepo={addRepo}
+          onRemoveRepo={removeRepo}
         />
       </header>
       <div className="app-body">
-        <Sidebar />
+        <Sidebar scope={scope} />
         <main className="app-main">
           <Routes>
             <Route
@@ -45,38 +52,38 @@ function App() {
             />
             <Route
               path="/overview"
-              element={<OverviewPage repo={selectedRepo} />}
+              element={<OverviewPage scope={scope} />}
             />
             <Route
               path="/agents"
-              element={<AgentsPage repo={selectedRepo} />}
+              element={<AgentsPage scope={scope} />}
             />
             <Route
               path="/hooks"
-              element={<HooksPage repo={selectedRepo} />}
+              element={<HooksPage scope={scope} />}
             />
             <Route
               path="/skills"
-              element={<SkillsPage repo={selectedRepo} />}
+              element={<SkillsPage scope={scope} />}
             />
             <Route
               path="/mcp"
-              element={<McpPage repo={selectedRepo} />}
+              element={<McpPage scope={scope} />}
             />
             <Route
               path="/config"
-              element={<ConfigPage repo={selectedRepo} />}
+              element={<ConfigPage scope={scope} />}
             />
             <Route
               path="/memory"
-              element={<MemoryPage repo={selectedRepo} />}
+              element={<MemoryPage scope={scope} />}
             />
             <Route
               path="/sessions"
-              element={<SessionsPage repo={selectedRepo} />}
+              element={<SessionsPage scope={scope} />}
             />
-            <Route path="/packs" element={<PacksPage repo={selectedRepo} />} />
-            <Route path="/plugins" element={<PluginsPage repo={selectedRepo} />} />
+            <Route path="/packs" element={<PacksPage scope={scope} />} />
+            <Route path="/plugins" element={<PluginsPage scope={scope} />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

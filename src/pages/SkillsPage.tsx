@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Repo, Skill } from "@/types";
+import type { Scope, Skill } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
-  repo: Repo | null;
+  scope: Scope | null;
 }
 
 function newSkill(): Skill {
@@ -36,32 +36,34 @@ const KNOWN_TOOLS = [
   "Task",
 ];
 
-export function SkillsPage({ repo }: Props) {
+export function SkillsPage({ scope }: Props) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [selected, setSelected] = useState<Skill | null>(null);
   const [editing, setEditing] = useState<Skill | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+
   const loadSkills = useCallback(async () => {
-    if (!repo) return;
+    if (!basePath) return;
     try {
-      const result = await api.readSkills(repo.path);
+      const result = await api.readSkills(basePath);
       setSkills(result);
     } catch {
       setSkills([]);
     }
-  }, [repo]);
+  }, [basePath]);
 
   useEffect(() => {
     setSelected(null);
     setEditing(null);
     loadSkills();
-  }, [loadSkills, repo]);
+  }, [loadSkills, basePath]);
 
-  if (!repo) {
+  if (!scope) {
     return (
       <div className="page page-empty">
-        <p>Select a repository to manage skills.</p>
+        <p>Select a scope to manage skills.</p>
       </div>
     );
   }
@@ -70,7 +72,7 @@ export function SkillsPage({ repo }: Props) {
     editing !== null && !skills.some((s) => s.skillId === editing.skillId);
 
   const handleSave = async () => {
-    if (!editing || !repo) return;
+    if (!editing || !basePath) return;
     if (!editing.skillId.trim()) {
       alert("Skill ID is required");
       return;
@@ -86,7 +88,7 @@ export function SkillsPage({ repo }: Props) {
 
     setSaving(true);
     try {
-      await api.writeSkill(repo.path, editing);
+      await api.writeSkill(basePath, editing);
       await loadSkills();
       setSelected(editing);
       setEditing(null);
@@ -98,10 +100,10 @@ export function SkillsPage({ repo }: Props) {
   };
 
   const handleDelete = async (skillId: string) => {
-    if (!repo) return;
+    if (!basePath) return;
     if (!confirm(`Delete skill "${skillId}"?`)) return;
     try {
-      await api.deleteSkill(repo.path, skillId);
+      await api.deleteSkill(basePath, skillId);
       await loadSkills();
       if (selected?.skillId === skillId) setSelected(null);
       if (editing?.skillId === skillId) setEditing(null);

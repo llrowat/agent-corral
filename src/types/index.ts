@@ -253,6 +253,12 @@ export interface CommandTemplate {
   cwd: string | null;
 }
 
+// -- Scope --
+
+export type Scope =
+  | { type: "global"; homePath: string }
+  | { type: "project"; repo: Repo };
+
 // -- Navigation --
 
 export type PageId =

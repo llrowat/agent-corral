@@ -101,6 +101,19 @@ body {
   flex-shrink: 0;
 }
 
+.sidebar-group {
+  margin-bottom: 4px;
+}
+
+.sidebar-group-label {
+  padding: 12px 20px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
 .sidebar ul {
   list-style: none;
 }
@@ -125,6 +138,12 @@ body {
   background: var(--bg-active);
   color: var(--accent);
   font-weight: 600;
+}
+
+.sidebar-link.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .sidebar-icon {
@@ -224,6 +243,16 @@ body {
 
 .repo-item-remove:hover {
   color: var(--danger);
+}
+
+.repo-dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0;
+}
+
+.scope-icon {
+  color: var(--accent);
 }
 
 .repo-empty {

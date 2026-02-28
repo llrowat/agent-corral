@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Repo, HookEvent, HookGroup, HookHandler } from "@/types";
+import type { Scope, HookEvent, HookGroup, HookHandler } from "@/types";
 import { HOOK_EVENTS } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
-  repo: Repo | null;
+  scope: Scope | null;
 }
 
 function newHandler(): HookHandler {
@@ -15,33 +15,35 @@ function newGroup(): HookGroup {
   return { matcher: null, hooks: [newHandler()] };
 }
 
-export function HooksPage({ repo }: Props) {
+export function HooksPage({ scope }: Props) {
   const [hooks, setHooks] = useState<HookEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [editing, setEditing] = useState<HookEvent | null>(null);
   const [saving, setSaving] = useState(false);
   const [isNew, setIsNew] = useState(false);
 
+  const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+
   const loadHooks = useCallback(async () => {
-    if (!repo) return;
+    if (!basePath) return;
     try {
-      const result = await api.readHooks(repo.path);
+      const result = await api.readHooks(basePath);
       setHooks(result);
     } catch {
       setHooks([]);
     }
-  }, [repo]);
+  }, [basePath]);
 
   useEffect(() => {
     setSelectedEvent(null);
     setEditing(null);
     loadHooks();
-  }, [loadHooks, repo]);
+  }, [loadHooks, basePath]);
 
-  if (!repo) {
+  if (!scope) {
     return (
       <div className="page page-empty">
-        <p>Select a repository to manage hooks.</p>
+        <p>Select a scope to manage hooks.</p>
       </div>
     );
   }
@@ -50,16 +52,14 @@ export function HooksPage({ repo }: Props) {
   const currentEvent = editing ?? selected;
 
   const handleSave = async () => {
-    if (!editing || !repo) return;
+    if (!editing || !basePath) return;
     setSaving(true);
     try {
-      // Replace or add this event in the hooks array
       const updated = hooks.filter((h) => h.event !== editing.event);
-      // Only add if there are groups with hooks
       if (editing.groups.length > 0) {
         updated.push(editing);
       }
-      await api.writeHooks(repo.path, updated);
+      await api.writeHooks(basePath, updated);
       await loadHooks();
       setSelectedEvent(editing.event);
       setEditing(null);
@@ -72,11 +72,11 @@ export function HooksPage({ repo }: Props) {
   };
 
   const handleDelete = async (eventName: string) => {
-    if (!repo) return;
+    if (!basePath) return;
     if (!confirm(`Remove all hooks for "${eventName}"?`)) return;
     try {
       const updated = hooks.filter((h) => h.event !== eventName);
-      await api.writeHooks(repo.path, updated);
+      await api.writeHooks(basePath, updated);
       await loadHooks();
       if (selectedEvent === eventName) setSelectedEvent(null);
       if (editing?.event === eventName) setEditing(null);
@@ -86,7 +86,6 @@ export function HooksPage({ repo }: Props) {
   };
 
   const startNew = () => {
-    // Find first unused event
     const usedEvents = hooks.map((h) => h.event);
     const available = HOOK_EVENTS.find((e) => !usedEvents.includes(e));
     setEditing({

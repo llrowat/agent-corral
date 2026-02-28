@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Repo, Agent, MemoryStore } from "@/types";
+import type { Scope, Agent, MemoryStore } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
-  repo: Repo | null;
+  scope: Scope | null;
 }
 
 function newAgent(): Agent {
@@ -17,7 +17,7 @@ function newAgent(): Agent {
   };
 }
 
-export function AgentsPage({ repo }: Props) {
+export function AgentsPage({ scope }: Props) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState<Agent | null>(null);
   const [editing, setEditing] = useState<Agent | null>(null);
@@ -25,32 +25,34 @@ export function AgentsPage({ repo }: Props) {
   const [knownTools, setKnownTools] = useState<string[]>([]);
   const [memoryStores, setMemoryStores] = useState<MemoryStore[]>([]);
 
+  const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+
   const loadAgents = useCallback(async () => {
-    if (!repo) return;
-    const result = await api.readAgents(repo.path);
+    if (!basePath) return;
+    const result = await api.readAgents(basePath);
     setAgents(result);
-  }, [repo]);
+  }, [basePath]);
 
   useEffect(() => {
     setSelected(null);
     setEditing(null);
     loadAgents();
     api.getKnownTools().then(setKnownTools);
-    if (repo) {
-      api.readMemoryStores(repo.path).then(setMemoryStores).catch(() => setMemoryStores([]));
+    if (basePath) {
+      api.readMemoryStores(basePath).then(setMemoryStores).catch(() => setMemoryStores([]));
     }
-  }, [loadAgents, repo]);
+  }, [loadAgents, basePath]);
 
-  if (!repo) {
+  if (!scope) {
     return (
       <div className="page page-empty">
-        <p>Select a repository to manage agents.</p>
+        <p>Select a scope to manage agents.</p>
       </div>
     );
   }
 
   const handleSave = async () => {
-    if (!editing || !repo) return;
+    if (!editing || !basePath) return;
 
     if (!editing.agentId.trim()) {
       alert("Agent ID is required");
@@ -71,7 +73,7 @@ export function AgentsPage({ repo }: Props) {
 
     setSaving(true);
     try {
-      await api.writeAgent(repo.path, editing);
+      await api.writeAgent(basePath, editing);
       await loadAgents();
       setSelected(editing);
       setEditing(null);
@@ -83,10 +85,10 @@ export function AgentsPage({ repo }: Props) {
   };
 
   const handleDelete = async (agentId: string) => {
-    if (!repo) return;
+    if (!basePath) return;
     if (!confirm(`Delete agent "${agentId}"?`)) return;
     try {
-      await api.deleteAgent(repo.path, agentId);
+      await api.deleteAgent(basePath, agentId);
       await loadAgents();
       if (selected?.agentId === agentId) setSelected(null);
       if (editing?.agentId === agentId) setEditing(null);

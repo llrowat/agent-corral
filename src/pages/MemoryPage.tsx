@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Repo, MemoryStore, MemoryEntry } from "@/types";
+import type { Scope, MemoryStore, MemoryEntry } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
-  repo: Repo | null;
+  scope: Scope | null;
 }
 
-export function MemoryPage({ repo }: Props) {
+export function MemoryPage({ scope }: Props) {
   const [stores, setStores] = useState<MemoryStore[]>([]);
   const [selectedStore, setSelectedStore] = useState<MemoryStore | null>(null);
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
@@ -16,15 +16,17 @@ export function MemoryPage({ repo }: Props) {
   const [showCreateStore, setShowCreateStore] = useState(false);
   const [newStoreName, setNewStoreName] = useState("");
 
+  const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+
   const loadStores = useCallback(async () => {
-    if (!repo) return;
+    if (!basePath) return;
     try {
-      const result = await api.readMemoryStores(repo.path);
+      const result = await api.readMemoryStores(basePath);
       setStores(result);
     } catch {
       setStores([]);
     }
-  }, [repo]);
+  }, [basePath]);
 
   useEffect(() => {
     setSelectedStore(null);
@@ -48,10 +50,10 @@ export function MemoryPage({ repo }: Props) {
     }
   }, [selectedStore, loadEntries]);
 
-  if (!repo) {
+  if (!scope) {
     return (
       <div className="page page-empty">
-        <p>Select a repository to manage memory.</p>
+        <p>Select a scope to manage memory.</p>
       </div>
     );
   }
@@ -114,13 +116,13 @@ export function MemoryPage({ repo }: Props) {
   };
 
   const handleCreateStore = async () => {
-    if (!repo || !newStoreName.trim()) return;
+    if (!basePath || !newStoreName.trim()) return;
     if (!/^[a-z0-9-]+$/.test(newStoreName.trim())) {
       alert("Store name must be a lowercase slug (letters, numbers, hyphens)");
       return;
     }
     try {
-      const store = await api.createMemoryStore(repo.path, newStoreName.trim());
+      const store = await api.createMemoryStore(basePath, newStoreName.trim());
       setNewStoreName("");
       setShowCreateStore(false);
       await loadStores();

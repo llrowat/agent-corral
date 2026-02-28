@@ -253,7 +253,7 @@ impl PluginManager {
 
         // Export MCP
         if include_mcp {
-            let mcp_servers = ClaudeRepoAdapter::read_mcp_servers(repo_path)
+            let mcp_servers = ClaudeRepoAdapter::read_mcp_servers(repo_path, false)
                 .map_err(|e| PluginError::Adapter(e.to_string()))?;
             if !mcp_servers.is_empty() {
                 let mut servers_obj = serde_json::Map::new();
@@ -424,7 +424,7 @@ impl PluginManager {
         let existing_skill_ids: Vec<String> =
             existing_skills.iter().map(|s| s.skill_id.clone()).collect();
 
-        let existing_mcp = ClaudeRepoAdapter::read_mcp_servers(repo_path)
+        let existing_mcp = ClaudeRepoAdapter::read_mcp_servers(repo_path, false)
             .map_err(|e| PluginError::Adapter(e.to_string()))?;
         let existing_mcp_ids: Vec<String> =
             existing_mcp.iter().map(|m| m.server_id.clone()).collect();
@@ -541,7 +541,7 @@ impl PluginManager {
 
         // Import MCP servers
         for server in &contents.mcp_servers {
-            ClaudeRepoAdapter::write_mcp_server(repo_path, server)
+            ClaudeRepoAdapter::write_mcp_server(repo_path, server, false)
                 .map_err(|e| PluginError::Adapter(e.to_string()))?;
         }
 

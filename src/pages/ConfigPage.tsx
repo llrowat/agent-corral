@@ -1,26 +1,28 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Repo, NormalizedConfig } from "@/types";
+import type { Scope, NormalizedConfig } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
-  repo: Repo | null;
+  scope: Scope | null;
 }
 
-export function ConfigPage({ repo }: Props) {
+export function ConfigPage({ scope }: Props) {
   const [config, setConfig] = useState<NormalizedConfig | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<NormalizedConfig | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+
   const loadConfig = useCallback(async () => {
-    if (!repo) return;
+    if (!basePath) return;
     try {
-      const result = await api.readClaudeConfig(repo.path);
+      const result = await api.readClaudeConfig(basePath);
       setConfig(result);
     } catch (e) {
       console.error("Failed to load config:", e);
     }
-  }, [repo]);
+  }, [basePath]);
 
   useEffect(() => {
     setEditing(false);
@@ -28,19 +30,19 @@ export function ConfigPage({ repo }: Props) {
     loadConfig();
   }, [loadConfig]);
 
-  if (!repo) {
+  if (!scope) {
     return (
       <div className="page page-empty">
-        <p>Select a repository to manage config.</p>
+        <p>Select a scope to manage config.</p>
       </div>
     );
   }
 
   const handleSave = async () => {
-    if (!draft || !repo) return;
+    if (!draft || !basePath) return;
     setSaving(true);
     try {
-      await api.writeClaudeConfig(repo.path, draft);
+      await api.writeClaudeConfig(basePath, draft);
       await loadConfig();
       setEditing(false);
       setDraft(null);
@@ -91,7 +93,6 @@ export function ConfigPage({ repo }: Props) {
               <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
               <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
             </select>
-            <span className="field-tag shareable">shareable</span>
           </div>
 
           <div className="form-group">
@@ -114,7 +115,6 @@ export function ConfigPage({ repo }: Props) {
               }
               placeholder="node_modules&#10;.git&#10;dist"
             />
-            <span className="field-tag shareable">shareable</span>
           </div>
 
           <div className="form-group">

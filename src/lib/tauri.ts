@@ -60,6 +60,12 @@ export async function readSessionLog(
   return invoke("read_session_log", { sessionId, tailLines });
 }
 
+// -- Claude home --
+
+export async function getClaudeHome(): Promise<string> {
+  return invoke("get_claude_home");
+}
+
 // -- Claude adapter commands --
 
 export async function detectClaudeConfig(
@@ -184,23 +190,26 @@ export async function deleteSkill(
 // -- MCP commands --
 
 export async function readMcpServers(
-  repoPath: string
+  repoPath: string,
+  isGlobal: boolean = false
 ): Promise<McpServer[]> {
-  return invoke("read_mcp_servers", { repoPath });
+  return invoke("read_mcp_servers", { repoPath, isGlobal });
 }
 
 export async function writeMcpServer(
   repoPath: string,
-  server: McpServer
+  server: McpServer,
+  isGlobal: boolean = false
 ): Promise<void> {
-  return invoke("write_mcp_server", { repoPath, server });
+  return invoke("write_mcp_server", { repoPath, server, isGlobal });
 }
 
 export async function deleteMcpServer(
   repoPath: string,
-  serverId: string
+  serverId: string,
+  isGlobal: boolean = false
 ): Promise<void> {
-  return invoke("delete_mcp_server", { repoPath, serverId });
+  return invoke("delete_mcp_server", { repoPath, serverId, isGlobal });
 }
 
 // -- Preferences commands --

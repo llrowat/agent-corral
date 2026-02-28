@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import type {
-  Repo,
+  Scope,
   PackSummary,
   ImportPreview,
   Agent,
@@ -9,12 +9,13 @@ import type {
 import * as api from "@/lib/tauri";
 
 interface Props {
-  repo?: Repo | null;
+  scope?: Scope | null;
 }
 
 type View = "list" | "export" | "import-preview" | "git-install";
 
-export function PacksPage({ repo }: Props) {
+export function PacksPage({ scope }: Props) {
+  const repo = scope?.type === "project" ? scope.repo : null;
   const [activeTab, setActiveTab] = useState<"my" | "library" | "git">("my");
   const [packs, setPacks] = useState<PackSummary[]>([]);
   const [loading, setLoading] = useState(true);

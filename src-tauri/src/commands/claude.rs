@@ -3,6 +3,13 @@ use crate::claude_adapter::{
 };
 
 #[tauri::command]
+pub fn get_claude_home() -> Result<String, String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "Could not determine home directory".to_string())
+}
+
+#[tauri::command]
 pub fn detect_claude_config(repo_path: String) -> ClaudeDetection {
     ClaudeRepoAdapter::detect(&repo_path)
 }

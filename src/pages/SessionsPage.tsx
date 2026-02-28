@@ -1,19 +1,29 @@
 import { useState } from "react";
-import type { Repo, SessionEnvelope } from "@/types";
+import type { Scope, SessionEnvelope } from "@/types";
 import { useSessions } from "@/hooks/useSessions";
 
 interface Props {
-  repo: Repo | null;
+  scope: Scope | null;
 }
 
-export function SessionsPage({ repo }: Props) {
+export function SessionsPage({ scope }: Props) {
   const { sessions, loading, getLog, launchSession } = useSessions();
   const [selectedSession, setSelectedSession] = useState<SessionEnvelope | null>(null);
   const [logContent, setLogContent] = useState<string>("");
   const [filter, setFilter] = useState<"all" | "running" | "success" | "failed">("all");
 
+  if (scope?.type === "global") {
+    return (
+      <div className="page page-empty">
+        <p>Sessions are project-specific. Switch to a project scope to manage sessions.</p>
+      </div>
+    );
+  }
+
+  const repoPath = scope?.type === "project" ? scope.repo.path : null;
+
   const filteredSessions = sessions.filter((s) => {
-    if (repo && s.repoPath !== repo.path) return false;
+    if (repoPath && s.repoPath !== repoPath) return false;
     if (filter !== "all" && s.status !== filter) return false;
     return true;
   });
@@ -78,7 +88,7 @@ export function SessionsPage({ repo }: Props) {
             ))}
             {filteredSessions.length === 0 && (
               <div className="text-muted" style={{ padding: "16px" }}>
-                {repo
+                {repoPath
                   ? "No sessions for this repo."
                   : "No sessions yet. Launch a command to get started."}
               </div>

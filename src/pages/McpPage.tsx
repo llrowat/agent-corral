@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Repo, McpServer } from "@/types";
+import type { Scope, McpServer } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
-  repo: Repo | null;
+  scope: Scope | null;
 }
 
 function newServer(): McpServer {
@@ -20,7 +20,7 @@ function newServer(): McpServer {
 
 type View = "list" | "edit";
 
-export function McpPage({ repo }: Props) {
+export function McpPage({ scope }: Props) {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("list");
@@ -36,29 +36,32 @@ export function McpPage({ repo }: Props) {
     { key: string; value: string }[]
   >([]);
 
+  const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+  const isGlobal = scope?.type === "global";
+
   const loadServers = useCallback(async () => {
-    if (!repo) return;
+    if (!basePath) return;
     try {
       setLoading(true);
-      const result = await api.readMcpServers(repo.path);
+      const result = await api.readMcpServers(basePath, isGlobal);
       setServers(result);
     } catch {
       setServers([]);
     } finally {
       setLoading(false);
     }
-  }, [repo]);
+  }, [basePath, isGlobal]);
 
   useEffect(() => {
     setView("list");
     setEditing(null);
     loadServers();
-  }, [loadServers, repo]);
+  }, [loadServers, basePath]);
 
-  if (!repo) {
+  if (!scope) {
     return (
       <div className="page page-empty">
-        <p>Select a repository to manage MCP servers.</p>
+        <p>Select a scope to manage MCP servers.</p>
       </div>
     );
   }
@@ -81,7 +84,7 @@ export function McpPage({ repo }: Props) {
   };
 
   const handleSave = async () => {
-    if (!editing || !repo) return;
+    if (!editing || !basePath) return;
     if (!editing.serverId.trim()) {
       alert("Server ID is required");
       return;
@@ -100,7 +103,7 @@ export function McpPage({ repo }: Props) {
         env: pairsToObj(envPairs),
         headers: pairsToObj(headerPairs),
       };
-      await api.writeMcpServer(repo.path, server);
+      await api.writeMcpServer(basePath, server, isGlobal);
       await loadServers();
       setView("list");
       setEditing(null);
@@ -112,10 +115,10 @@ export function McpPage({ repo }: Props) {
   };
 
   const handleDelete = async (serverId: string) => {
-    if (!repo) return;
+    if (!basePath) return;
     if (!confirm(`Delete MCP server "${serverId}"?`)) return;
     try {
-      await api.deleteMcpServer(repo.path, serverId);
+      await api.deleteMcpServer(basePath, serverId, isGlobal);
       await loadServers();
     } catch (e) {
       alert(`Failed to delete server: ${e}`);

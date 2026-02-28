@@ -81,6 +81,7 @@ pub fn run() {
             commands::session::get_session,
             commands::session::read_session_log,
             // Claude adapter commands
+            commands::claude::get_claude_home,
             commands::claude::detect_claude_config,
             commands::claude::read_claude_config,
             commands::claude::write_claude_config,

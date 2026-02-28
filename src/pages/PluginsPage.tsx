@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import type {
-  Repo,
+  Scope,
   PluginSummary,
   PluginImportPreview,
   Agent,
@@ -10,12 +10,13 @@ import type {
 import * as api from "@/lib/tauri";
 
 interface Props {
-  repo?: Repo | null;
+  scope?: Scope | null;
 }
 
 type View = "list" | "export" | "import-preview" | "git-install";
 
-export function PluginsPage({ repo }: Props) {
+export function PluginsPage({ scope }: Props) {
+  const repo = scope?.type === "project" ? scope.repo : null;
   const [activeTab, setActiveTab] = useState<"my" | "library" | "git">("my");
   const [plugins, setPlugins] = useState<PluginSummary[]>([]);
   const [loading, setLoading] = useState(true);
