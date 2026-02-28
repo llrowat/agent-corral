@@ -240,12 +240,6 @@ export function PluginsPage({ scope }: Props) {
     }
   };
 
-  const getSyncForPlugin = (
-    plugin: PluginSummary
-  ): PluginSyncStatus | undefined => {
-    return syncStatuses.find((s) => s.pluginDir === plugin.dirPath);
-  };
-
   const startImport = async (plugin: PluginSummary) => {
     if (!repo) {
       alert("Select a repository to import into");
