@@ -1,10 +1,18 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope, NormalizedConfig } from "@/types";
 import * as api from "@/lib/tauri";
+import { ScopeBanner } from "@/components/ScopeGuard";
 
 interface Props {
   scope: Scope | null;
 }
+
+const DEFAULT_CONFIG: NormalizedConfig = {
+  model: "claude-sonnet-4-6",
+  permissions: null,
+  ignorePatterns: ["node_modules", ".git", "dist", ".env"],
+  raw: {},
+};
 
 export function ConfigPage({ scope }: Props) {
   const [config, setConfig] = useState<NormalizedConfig | null>(null);
@@ -60,11 +68,25 @@ export function ConfigPage({ scope }: Props) {
 
   const displayConfig = editing ? draft : config;
 
+  const handleInitWithDefaults = async () => {
+    if (!basePath) return;
+    setSaving(true);
+    try {
+      await api.writeClaudeConfig(basePath, DEFAULT_CONFIG);
+      await loadConfig();
+    } catch (e) {
+      console.error("Failed to initialize config:", e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="page config-page">
+      {scope && <ScopeBanner scope={scope} />}
       <div className="page-header">
         <h2>Config Studio</h2>
-        {!editing && (
+        {!editing && config && (
           <button className="btn" onClick={startEditing}>
             Edit
           </button>
@@ -72,7 +94,31 @@ export function ConfigPage({ scope }: Props) {
       </div>
 
       {!displayConfig ? (
-        <p className="text-muted">Loading config...</p>
+        <div className="config-init-card">
+          <h3>No config found</h3>
+          <p className="text-muted" style={{ marginBottom: 16 }}>
+            Create a <code>settings.json</code> with sensible defaults to get
+            started quickly.
+          </p>
+          <div className="config-init-defaults">
+            <div className="config-init-preview">
+              <div><strong>Model:</strong> Claude Sonnet 4.6</div>
+              <div><strong>Ignore:</strong> node_modules, .git, dist, .env</div>
+            </div>
+          </div>
+          <div className="form-actions">
+            <button
+              className="btn btn-primary"
+              onClick={handleInitWithDefaults}
+              disabled={saving}
+            >
+              {saving ? "Creating..." : "Initialize with Defaults"}
+            </button>
+            <button className="btn" onClick={startEditing}>
+              Customize First
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="config-form">
           <div className="form-group">

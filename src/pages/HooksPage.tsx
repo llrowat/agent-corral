@@ -3,6 +3,9 @@ import type { Scope, HookEvent, HookGroup, HookHandler } from "@/types";
 import { HOOK_EVENTS } from "@/types";
 import * as api from "@/lib/tauri";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
+import { PresetPicker } from "@/components/PresetPicker";
+import { HOOK_PRESETS, type HookPreset } from "@/lib/presets";
+import { ScopeBanner } from "@/components/ScopeGuard";
 
 interface Props {
   scope: Scope | null;
@@ -26,6 +29,7 @@ export function HooksPage({ scope, homePath }: Props) {
   const [saving, setSaving] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isProjectScope = scope?.type === "project";
@@ -119,6 +123,12 @@ export function HooksPage({ scope, homePath }: Props) {
     setIsNew(true);
   };
 
+  const handleSelectPreset = (preset: HookPreset) => {
+    setEditing({ ...preset.hookEvent });
+    setSelectedEvent(null);
+    setIsNew(true);
+  };
+
   const updateGroup = (groupIdx: number, updater: (g: HookGroup) => HookGroup) => {
     if (!editing) return;
     const groups = editing.groups.map((g, i) => (i === groupIdx ? updater(g) : g));
@@ -159,11 +169,18 @@ export function HooksPage({ scope, homePath }: Props) {
 
   return (
     <div className="page hooks-page">
+      {scope && <ScopeBanner scope={scope} />}
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
             <h3>Hooks</h3>
             <div className="header-actions">
+              <button
+                className="btn btn-sm"
+                onClick={() => setShowPresets(true)}
+              >
+                From Template
+              </button>
               {basePath && (
                 <button
                   className="btn btn-sm"
@@ -496,6 +513,14 @@ export function HooksPage({ scope, homePath }: Props) {
           repoPath={basePath}
           onClose={() => setShowAiModal(false)}
           onCreated={() => loadHooks()}
+        />
+      )}
+      {showPresets && (
+        <PresetPicker
+          title="Hook Templates"
+          presets={HOOK_PRESETS}
+          onSelect={handleSelectPreset}
+          onClose={() => setShowPresets(false)}
         />
       )}
     </div>

@@ -2,6 +2,15 @@ import { useEffect, useState, useCallback } from "react";
 import type { Scope, Skill } from "@/types";
 import * as api from "@/lib/tauri";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
+import { PresetPicker } from "@/components/PresetPicker";
+import { SKILL_PRESETS, type SkillPreset } from "@/lib/presets";
+import { ScopeBanner } from "@/components/ScopeGuard";
+import {
+  validateSkillId,
+  validateRequired,
+  FieldError,
+  type ValidationError,
+} from "@/components/InlineValidation";
 
 interface Props {
   scope: Scope | null;
@@ -46,6 +55,8 @@ export function SkillsPage({ scope, homePath }: Props) {
   const [editing, setEditing] = useState<Skill | null>(null);
   const [saving, setSaving] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [errors, setErrors] = useState<Record<string, ValidationError | null>>({});
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isProjectScope = scope?.type === "project";
@@ -92,20 +103,20 @@ export function SkillsPage({ scope, homePath }: Props) {
   const isNewSkill =
     editing !== null && !skills.some((s) => s.skillId === editing.skillId);
 
+  const handleSelectPreset = (preset: SkillPreset) => {
+    setEditing({ ...preset.skill });
+    setSelected(null);
+    setErrors({});
+  };
+
   const handleSave = async () => {
     if (!editing || !basePath) return;
-    if (!editing.skillId.trim()) {
-      alert("Skill ID is required");
-      return;
-    }
-    if (!editing.name.trim()) {
-      alert("Skill name is required");
-      return;
-    }
-    if (!/^[a-z0-9-]+$/.test(editing.skillId)) {
-      alert("Skill ID must be a lowercase slug (letters, numbers, hyphens)");
-      return;
-    }
+
+    const newErrors: Record<string, ValidationError | null> = {};
+    newErrors.skillId = validateSkillId(editing.skillId);
+    newErrors.name = validateRequired("name", editing.name, "Skill name");
+    setErrors(newErrors);
+    if (Object.values(newErrors).some((e) => e !== null)) return;
 
     setSaving(true);
     try {
@@ -145,11 +156,18 @@ export function SkillsPage({ scope, homePath }: Props) {
 
   return (
     <div className="page skills-page">
+      {scope && <ScopeBanner scope={scope} />}
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
             <h3>Skills</h3>
             <div className="header-actions">
+              <button
+                className="btn btn-sm"
+                onClick={() => setShowPresets(true)}
+              >
+                From Template
+              </button>
               {basePath && (
                 <button
                   className="btn btn-sm"
@@ -163,6 +181,7 @@ export function SkillsPage({ scope, homePath }: Props) {
                 onClick={() => {
                   setEditing(newSkill());
                   setSelected(null);
+                  setErrors({});
                 }}
               >
                 + New
@@ -268,11 +287,20 @@ export function SkillsPage({ scope, homePath }: Props) {
                 <input
                   type="text"
                   value={editing.skillId}
-                  onChange={(e) =>
-                    setEditing({ ...editing, skillId: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setEditing({ ...editing, skillId: e.target.value });
+                    setErrors({ ...errors, skillId: null });
+                  }}
                   placeholder="my-skill"
                   disabled={!isNewSkill}
+                  className={errors.skillId ? "input-error" : ""}
+                />
+                <FieldError
+                  error={errors.skillId ?? null}
+                  onAutoFix={(val) => {
+                    setEditing({ ...editing, skillId: val });
+                    setErrors({ ...errors, skillId: null });
+                  }}
                 />
               </div>
 
@@ -281,11 +309,14 @@ export function SkillsPage({ scope, homePath }: Props) {
                 <input
                   type="text"
                   value={editing.name}
-                  onChange={(e) =>
-                    setEditing({ ...editing, name: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setEditing({ ...editing, name: e.target.value });
+                    setErrors({ ...errors, name: null });
+                  }}
                   placeholder="My Skill"
+                  className={errors.name ? "input-error" : ""}
                 />
+                <FieldError error={errors.name ?? null} />
               </div>
 
               <div className="form-group">
@@ -474,6 +505,14 @@ export function SkillsPage({ scope, homePath }: Props) {
           repoPath={basePath}
           onClose={() => setShowAiModal(false)}
           onCreated={() => loadSkills()}
+        />
+      )}
+      {showPresets && (
+        <PresetPicker
+          title="Skill Templates"
+          presets={SKILL_PRESETS}
+          onSelect={handleSelectPreset}
+          onClose={() => setShowPresets(false)}
         />
       )}
     </div>
