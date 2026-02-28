@@ -23,8 +23,10 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) v18+
-- [Rust](https://www.rust-lang.org/tools/install) (stable toolchain)
+- [Rust](https://www.rust-lang.org/tools/install) (stable toolchain) — after installing, restart your terminal so `cargo` is in your PATH
 - Platform-specific Tauri v2 dependencies — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
+
+> **Note:** The first build will download and compile ~300 Rust crates, which can take several minutes. Subsequent builds are incremental and much faster.
 
 ### Install & Run
 

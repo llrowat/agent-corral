@@ -10,7 +10,6 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "title": "AgentCorral",
     "windows": [
       {
         "title": "AgentCorral — Claude Code Command Center",
