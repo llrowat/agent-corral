@@ -6,6 +6,7 @@ import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { PresetPicker } from "@/components/PresetPicker";
 import { HOOK_PRESETS, type HookPreset } from "@/lib/presets";
 import { ScopeBanner } from "@/components/ScopeGuard";
+import { DocsLink } from "@/components/DocsLink";
 
 interface Props {
   scope: Scope | null;
@@ -173,7 +174,7 @@ export function HooksPage({ scope, homePath }: Props) {
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
-            <h3>Hooks</h3>
+            <h3>Hooks <DocsLink page="hooks" /></h3>
             <div className="header-actions">
               <button
                 className="btn btn-sm"

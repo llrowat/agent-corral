@@ -5,6 +5,7 @@ import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { PresetPicker } from "@/components/PresetPicker";
 import { MCP_PRESETS, type McpPreset } from "@/lib/presets";
 import { ScopeBanner, McpFileIndicator } from "@/components/ScopeGuard";
+import { DocsLink } from "@/components/DocsLink";
 import {
   validateServerId,
   FieldError,
@@ -384,6 +385,7 @@ export function McpPage({ scope, homePath }: Props) {
         <h2>
           MCP Servers{" "}
           <McpFileIndicator scope={scope} />
+          <DocsLink page="mcp" />
         </h2>
         <div className="header-actions">
           <button
