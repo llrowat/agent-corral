@@ -164,6 +164,7 @@ export function AgentsPage({ scope, homePath }: Props) {
   return (
     <div className="page agents-page">
       {scope && <ScopeBanner scope={scope} />}
+      <p className="page-description">Custom personas for Claude Code. Each agent has its own system prompt, tool permissions, and optional model override — use them to create specialized assistants for different tasks.</p>
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">

@@ -93,6 +93,7 @@ export function ConfigPage({ scope }: Props) {
           </button>
         )}
       </div>
+      <p className="page-description">Project and global settings for Claude Code, including the default model, permission mode, and file ignore patterns.</p>
 
       {!displayConfig ? (
         <div className="config-init-card">

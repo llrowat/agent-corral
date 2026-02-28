@@ -160,6 +160,7 @@ export function MemoryPage({ scope, homePath }: Props) {
   return (
     <div className="page memory-page">
       <h2>Memory Studio <DocsLink page="memory" /></h2>
+      <p className="page-description">Persistent notes that Claude Code can read and write across sessions. Organize entries into named stores to capture project conventions, learned preferences, or any context you want Claude to remember.</p>
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">

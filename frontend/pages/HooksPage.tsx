@@ -171,6 +171,7 @@ export function HooksPage({ scope, homePath }: Props) {
   return (
     <div className="page hooks-page">
       {scope && <ScopeBanner scope={scope} />}
+      <p className="page-description">Shell commands that run automatically in response to Claude Code events. Use hooks to enforce linting, run tests, send notifications, or guard against unwanted changes.</p>
       <div className="split-layout">
         <div className="panel-left">
           <div className="panel-header">
