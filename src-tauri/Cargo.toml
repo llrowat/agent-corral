@@ -3,6 +3,8 @@ name = "agent-corral"
 version = "0.1.0"
 edition = "2021"
 description = "Claude Code Command Center"
+license = "MIT"
+repository = "https://github.com/llrowat/agent-corral"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

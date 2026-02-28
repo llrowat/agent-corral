@@ -1,8 +1,14 @@
 {
   "name": "agent-corral",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
   "type": "module",
+  "license": "MIT",
+  "description": "Claude Code Command Center — desktop app for managing agents, configs, memory, and packs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/llrowat/agent-corral.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",

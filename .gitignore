@@ -22,6 +22,12 @@ src-tauri/gen/
 # Env files
 .env
 .env.*
+.env.local
 
 # Logs
 *.log
+
+# Secrets / credentials
+*.pem
+*.key
+credentials.json

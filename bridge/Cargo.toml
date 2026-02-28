@@ -3,6 +3,8 @@ name = "agentcorral-bridge"
 version = "0.1.0"
 edition = "2021"
 description = "AgentCorral Bridge CLI - session envelope and process management"
+license = "MIT"
+repository = "https://github.com/llrowat/agent-corral"
 
 [[bin]]
 name = "agentcorral-bridge"
