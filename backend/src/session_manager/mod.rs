@@ -813,8 +813,23 @@ mod tests {
     #[test]
     fn delete_session_removes_file() {
         let mgr = make_manager();
-        mgr.create_session("s1", "/repo1", "test", "echo", 123, None, None, None)
-            .unwrap();
+        // Write the session file directly with process_alive: false to avoid
+        // delete_session calling kill_process_tree (which sends a real signal
+        // and can kill the test runner in CI).
+        let envelope = SessionEnvelope {
+            session_id: "s1".to_string(),
+            repo_path: "/repo1".to_string(),
+            command_name: "test".to_string(),
+            command: "echo".to_string(),
+            started_at: "2026-01-01T00:00:00Z".to_string(),
+            pid: Some(123),
+            worktree_path: None,
+            worktree_branch: None,
+            worktree_base_branch: None,
+            process_alive: false,
+        };
+        let path = mgr.sessions_dir().join("s1.json");
+        fs::write(&path, serde_json::to_string_pretty(&envelope).unwrap()).unwrap();
 
         mgr.delete_session("s1").unwrap();
         let sessions = mgr.list_sessions().unwrap();
