@@ -59,19 +59,19 @@ function App() {
             />
             <Route
               path="/agents"
-              element={<AgentsPage scope={scope} />}
+              element={<AgentsPage scope={scope} homePath={homePath} />}
             />
             <Route
               path="/hooks"
-              element={<HooksPage scope={scope} />}
+              element={<HooksPage scope={scope} homePath={homePath} />}
             />
             <Route
               path="/skills"
-              element={<SkillsPage scope={scope} />}
+              element={<SkillsPage scope={scope} homePath={homePath} />}
             />
             <Route
               path="/mcp"
-              element={<McpPage scope={scope} />}
+              element={<McpPage scope={scope} homePath={homePath} />}
             />
             <Route
               path="/config"
@@ -79,7 +79,7 @@ function App() {
             />
             <Route
               path="/memory"
-              element={<MemoryPage scope={scope} />}
+              element={<MemoryPage scope={scope} homePath={homePath} />}
             />
             <Route
               path="/sessions"

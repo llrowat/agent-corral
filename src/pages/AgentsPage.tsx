@@ -4,6 +4,7 @@ import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
+  homePath: string | null;
 }
 
 function newAgent(): Agent {
@@ -17,15 +18,18 @@ function newAgent(): Agent {
   };
 }
 
-export function AgentsPage({ scope }: Props) {
+export function AgentsPage({ scope, homePath }: Props) {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [globalAgents, setGlobalAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState<Agent | null>(null);
+  const [selectedIsGlobal, setSelectedIsGlobal] = useState(false);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [saving, setSaving] = useState(false);
   const [knownTools, setKnownTools] = useState<string[]>([]);
   const [memoryStores, setMemoryStores] = useState<MemoryStore[]>([]);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+  const isProjectScope = scope?.type === "project";
 
   const loadAgents = useCallback(async () => {
     if (!basePath) return;
@@ -33,15 +37,30 @@ export function AgentsPage({ scope }: Props) {
     setAgents(result);
   }, [basePath]);
 
+  const loadGlobalAgents = useCallback(async () => {
+    if (!isProjectScope || !homePath) {
+      setGlobalAgents([]);
+      return;
+    }
+    try {
+      const result = await api.readAgents(homePath);
+      setGlobalAgents(result);
+    } catch {
+      setGlobalAgents([]);
+    }
+  }, [isProjectScope, homePath]);
+
   useEffect(() => {
     setSelected(null);
+    setSelectedIsGlobal(false);
     setEditing(null);
     loadAgents();
+    loadGlobalAgents();
     api.getKnownTools().then(setKnownTools);
     if (basePath) {
       api.readMemoryStores(basePath).then(setMemoryStores).catch(() => setMemoryStores([]));
     }
-  }, [loadAgents, basePath]);
+  }, [loadAgents, loadGlobalAgents, basePath]);
 
   if (!scope) {
     return (
@@ -129,13 +148,14 @@ export function AgentsPage({ scope }: Props) {
               <li
                 key={agent.agentId}
                 className={`agent-list-item ${
-                  currentAgent?.agentId === agent.agentId ? "active" : ""
+                  currentAgent?.agentId === agent.agentId && !selectedIsGlobal ? "active" : ""
                 }`}
               >
                 <button
                   className="agent-select"
                   onClick={() => {
                     setSelected(agent);
+                    setSelectedIsGlobal(false);
                     setEditing(null);
                   }}
                 >
@@ -151,12 +171,49 @@ export function AgentsPage({ scope }: Props) {
                 </button>
               </li>
             ))}
-            {agents.length === 0 && (
+            {agents.length === 0 && !isProjectScope && (
+              <li className="text-muted" style={{ padding: "12px" }}>
+                No agents defined
+              </li>
+            )}
+            {isProjectScope && agents.length === 0 && globalAgents.length === 0 && (
               <li className="text-muted" style={{ padding: "12px" }}>
                 No agents defined
               </li>
             )}
           </ul>
+          {isProjectScope && globalAgents.length > 0 && (
+            <>
+              <div className="global-section-header">
+                <span className="global-section-label">Global</span>
+              </div>
+              <ul className="agent-list">
+                {globalAgents.map((agent) => (
+                  <li
+                    key={`global-${agent.agentId}`}
+                    className={`agent-list-item global-item ${
+                      currentAgent?.agentId === agent.agentId && selectedIsGlobal ? "active" : ""
+                    }`}
+                  >
+                    <button
+                      className="agent-select"
+                      onClick={() => {
+                        setSelected(agent);
+                        setSelectedIsGlobal(true);
+                        setEditing(null);
+                      }}
+                    >
+                      <span className="agent-name">
+                        {agent.name}
+                        <span className="badge-global">global</span>
+                      </span>
+                      <span className="agent-id">{agent.agentId}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
 
         <div className="panel-right">
@@ -276,7 +333,15 @@ export function AgentsPage({ scope }: Props) {
             </div>
           ) : (
             <div className="agent-detail">
-              <h3>{selected!.name}</h3>
+              <h3>
+                {selected!.name}
+                {selectedIsGlobal && <span className="badge-global" style={{ marginLeft: 8 }}>global</span>}
+              </h3>
+              {selectedIsGlobal && (
+                <p className="global-readonly-hint">
+                  This agent is defined in the global scope. Switch to Global Settings to edit it.
+                </p>
+              )}
               <div className="detail-field">
                 <label>ID</label>
                 <code>{selected!.agentId}</code>
@@ -309,14 +374,16 @@ export function AgentsPage({ scope }: Props) {
                   <code>{selected!.memoryBinding}</code>
                 </div>
               )}
-              <div className="form-actions">
-                <button
-                  className="btn"
-                  onClick={() => setEditing({ ...selected! })}
-                >
-                  Edit
-                </button>
-              </div>
+              {!selectedIsGlobal && (
+                <div className="form-actions">
+                  <button
+                    className="btn"
+                    onClick={() => setEditing({ ...selected! })}
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

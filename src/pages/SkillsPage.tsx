@@ -4,6 +4,7 @@ import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
+  homePath: string | null;
 }
 
 function newSkill(): Skill {
@@ -36,13 +37,16 @@ const KNOWN_TOOLS = [
   "Task",
 ];
 
-export function SkillsPage({ scope }: Props) {
+export function SkillsPage({ scope, homePath }: Props) {
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [globalSkills, setGlobalSkills] = useState<Skill[]>([]);
   const [selected, setSelected] = useState<Skill | null>(null);
+  const [selectedIsGlobal, setSelectedIsGlobal] = useState(false);
   const [editing, setEditing] = useState<Skill | null>(null);
   const [saving, setSaving] = useState(false);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+  const isProjectScope = scope?.type === "project";
 
   const loadSkills = useCallback(async () => {
     if (!basePath) return;
@@ -54,11 +58,26 @@ export function SkillsPage({ scope }: Props) {
     }
   }, [basePath]);
 
+  const loadGlobalSkills = useCallback(async () => {
+    if (!isProjectScope || !homePath) {
+      setGlobalSkills([]);
+      return;
+    }
+    try {
+      const result = await api.readSkills(homePath);
+      setGlobalSkills(result);
+    } catch {
+      setGlobalSkills([]);
+    }
+  }, [isProjectScope, homePath]);
+
   useEffect(() => {
     setSelected(null);
+    setSelectedIsGlobal(false);
     setEditing(null);
     loadSkills();
-  }, [loadSkills, basePath]);
+    loadGlobalSkills();
+  }, [loadSkills, loadGlobalSkills, basePath]);
 
   if (!scope) {
     return (
@@ -143,13 +162,14 @@ export function SkillsPage({ scope }: Props) {
               <li
                 key={skill.skillId}
                 className={`agent-list-item ${
-                  currentSkill?.skillId === skill.skillId ? "active" : ""
+                  currentSkill?.skillId === skill.skillId && !selectedIsGlobal ? "active" : ""
                 }`}
               >
                 <button
                   className="agent-select"
                   onClick={() => {
                     setSelected(skill);
+                    setSelectedIsGlobal(false);
                     setEditing(null);
                   }}
                 >
@@ -172,12 +192,54 @@ export function SkillsPage({ scope }: Props) {
                 </button>
               </li>
             ))}
-            {skills.length === 0 && (
+            {skills.length === 0 && !isProjectScope && (
+              <li className="text-muted" style={{ padding: "12px" }}>
+                No skills defined
+              </li>
+            )}
+            {isProjectScope && skills.length === 0 && globalSkills.length === 0 && (
               <li className="text-muted" style={{ padding: "12px" }}>
                 No skills defined
               </li>
             )}
           </ul>
+          {isProjectScope && globalSkills.length > 0 && (
+            <>
+              <div className="global-section-header">
+                <span className="global-section-label">Global</span>
+              </div>
+              <ul className="agent-list">
+                {globalSkills.map((skill) => (
+                  <li
+                    key={`global-${skill.skillId}`}
+                    className={`agent-list-item global-item ${
+                      currentSkill?.skillId === skill.skillId && selectedIsGlobal ? "active" : ""
+                    }`}
+                  >
+                    <button
+                      className="agent-select"
+                      onClick={() => {
+                        setSelected(skill);
+                        setSelectedIsGlobal(true);
+                        setEditing(null);
+                      }}
+                    >
+                      <span className="agent-name">
+                        {skill.name}
+                        <span className="badge-global">global</span>
+                        {skill.userInvocable && (
+                          <span className="badge-new" style={{ marginLeft: 6 }}>
+                            invocable
+                          </span>
+                        )}
+                      </span>
+                      <span className="agent-id">{skill.skillId}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
 
         <div className="panel-right">
@@ -330,12 +392,18 @@ export function SkillsPage({ scope }: Props) {
             <div className="agent-detail">
               <h3>
                 {selected!.name}
+                {selectedIsGlobal && <span className="badge-global" style={{ marginLeft: 8 }}>global</span>}
                 {selected!.userInvocable && (
                   <span className="badge-new" style={{ marginLeft: 8 }}>
                     invocable
                   </span>
                 )}
               </h3>
+              {selectedIsGlobal && (
+                <p className="global-readonly-hint">
+                  This skill is defined in the global scope. Switch to Global Settings to edit it.
+                </p>
+              )}
               <div className="detail-field">
                 <label>ID</label>
                 <code>{selected!.skillId}</code>
@@ -374,14 +442,16 @@ export function SkillsPage({ scope }: Props) {
                 <label>Content</label>
                 <pre className="prompt-preview">{selected!.content}</pre>
               </div>
-              <div className="form-actions">
-                <button
-                  className="btn"
-                  onClick={() => setEditing({ ...selected! })}
-                >
-                  Edit
-                </button>
-              </div>
+              {!selectedIsGlobal && (
+                <div className="form-actions">
+                  <button
+                    className="btn"
+                    onClick={() => setEditing({ ...selected! })}
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -4,11 +4,14 @@ import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
+  homePath: string | null;
 }
 
-export function MemoryPage({ scope }: Props) {
+export function MemoryPage({ scope, homePath }: Props) {
   const [stores, setStores] = useState<MemoryStore[]>([]);
+  const [globalStores, setGlobalStores] = useState<MemoryStore[]>([]);
   const [selectedStore, setSelectedStore] = useState<MemoryStore | null>(null);
+  const [selectedIsGlobal, setSelectedIsGlobal] = useState(false);
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [newEntry, setNewEntry] = useState("");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -17,6 +20,7 @@ export function MemoryPage({ scope }: Props) {
   const [newStoreName, setNewStoreName] = useState("");
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
+  const isProjectScope = scope?.type === "project";
 
   const loadStores = useCallback(async () => {
     if (!basePath) return;
@@ -28,12 +32,27 @@ export function MemoryPage({ scope }: Props) {
     }
   }, [basePath]);
 
+  const loadGlobalStores = useCallback(async () => {
+    if (!isProjectScope || !homePath) {
+      setGlobalStores([]);
+      return;
+    }
+    try {
+      const result = await api.readMemoryStores(homePath);
+      setGlobalStores(result);
+    } catch {
+      setGlobalStores([]);
+    }
+  }, [isProjectScope, homePath]);
+
   useEffect(() => {
     setSelectedStore(null);
+    setSelectedIsGlobal(false);
     setEntries([]);
     setEditingIndex(null);
     loadStores();
-  }, [loadStores]);
+    loadGlobalStores();
+  }, [loadStores, loadGlobalStores]);
 
   const loadEntries = useCallback(async (store: MemoryStore) => {
     try {
@@ -182,10 +201,10 @@ export function MemoryPage({ scope }: Props) {
               <li
                 key={store.storeId}
                 className={`store-item ${
-                  selectedStore?.storeId === store.storeId ? "active" : ""
+                  selectedStore?.storeId === store.storeId && !selectedIsGlobal ? "active" : ""
                 }`}
               >
-                <button onClick={() => { setSelectedStore(store); setEditingIndex(null); }}>
+                <button onClick={() => { setSelectedStore(store); setSelectedIsGlobal(false); setEditingIndex(null); }}>
                   <span className="store-name">{store.name}</span>
                   <span className="store-count">
                     {store.entryCount} entries
@@ -193,12 +212,44 @@ export function MemoryPage({ scope }: Props) {
                 </button>
               </li>
             ))}
-            {stores.length === 0 && (
+            {stores.length === 0 && !isProjectScope && (
+              <li className="text-muted" style={{ padding: "12px" }}>
+                No memory stores found
+              </li>
+            )}
+            {isProjectScope && stores.length === 0 && globalStores.length === 0 && (
               <li className="text-muted" style={{ padding: "12px" }}>
                 No memory stores found
               </li>
             )}
           </ul>
+          {isProjectScope && globalStores.length > 0 && (
+            <>
+              <div className="global-section-header">
+                <span className="global-section-label">Global</span>
+              </div>
+              <ul className="store-list">
+                {globalStores.map((store) => (
+                  <li
+                    key={`global-${store.storeId}`}
+                    className={`store-item global-item ${
+                      selectedStore?.storeId === store.storeId && selectedIsGlobal ? "active" : ""
+                    }`}
+                  >
+                    <button onClick={() => { setSelectedStore(store); setSelectedIsGlobal(true); setEditingIndex(null); }}>
+                      <span className="store-name">
+                        {store.name}
+                        <span className="badge-global" style={{ marginLeft: 6 }}>global</span>
+                      </span>
+                      <span className="store-count">
+                        {store.entryCount} entries
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
 
         <div className="panel-right">
@@ -209,47 +260,60 @@ export function MemoryPage({ scope }: Props) {
           ) : (
             <div className="memory-detail">
               <div className="panel-header">
-                <h3>{selectedStore.name}</h3>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-sm" onClick={handleReset}>
-                    Reset
-                  </button>
-                  <button className="btn btn-danger btn-sm" onClick={handleDeleteStore}>
-                    Delete
-                  </button>
-                </div>
+                <h3>
+                  {selectedStore.name}
+                  {selectedIsGlobal && <span className="badge-global" style={{ marginLeft: 8 }}>global</span>}
+                </h3>
+                {!selectedIsGlobal && (
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button className="btn btn-sm" onClick={handleReset}>
+                      Reset
+                    </button>
+                    <button className="btn btn-danger btn-sm" onClick={handleDeleteStore}>
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
+
+              {selectedIsGlobal && (
+                <p className="global-readonly-hint">
+                  This memory store is defined in the global scope. Switch to Global Settings to edit it.
+                </p>
+              )}
 
               <div className="memory-entries">
                 {entries.map((entry, index) => (
                   <div key={entry.key} className="memory-entry">
                     <div className="entry-header">
                       <span className="entry-key">#{index + 1}</span>
-                      <div className="entry-actions">
-                        {editingIndex !== index && (
-                          <>
-                            <button
-                              className="btn-icon"
-                              onClick={() => {
-                                setEditingIndex(index);
-                                setEditContent(entry.content);
-                              }}
-                              title="Edit"
-                            >
-                              E
-                            </button>
-                            <button
-                              className="btn-icon"
-                              onClick={() => handleDeleteEntry(index)}
-                              title="Delete"
-                            >
-                              x
-                            </button>
-                          </>
-                        )}
-                      </div>
+                      {!selectedIsGlobal && (
+                        <div className="entry-actions">
+                          {editingIndex !== index && (
+                            <>
+                              <button
+                                className="btn-icon"
+                                onClick={() => {
+                                  setEditingIndex(index);
+                                  setEditContent(entry.content);
+                                }}
+                                title="Edit"
+                              >
+                                E
+                              </button>
+                              <button
+                                className="btn-icon"
+                                onClick={() => handleDeleteEntry(index)}
+                                title="Delete"
+                              >
+                                x
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {editingIndex === index ? (
+                    {editingIndex === index && !selectedIsGlobal ? (
                       <div className="entry-edit">
                         <textarea
                           rows={3}
@@ -285,22 +349,24 @@ export function MemoryPage({ scope }: Props) {
                 )}
               </div>
 
-              <div className="memory-add-entry">
-                <textarea
-                  rows={3}
-                  value={newEntry}
-                  onChange={(e) => setNewEntry(e.target.value)}
-                  placeholder="Add a new memory entry..."
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                      handleAddEntry();
-                    }
-                  }}
-                />
-                <button className="btn btn-primary" onClick={handleAddEntry}>
-                  Add Entry
-                </button>
-              </div>
+              {!selectedIsGlobal && (
+                <div className="memory-add-entry">
+                  <textarea
+                    rows={3}
+                    value={newEntry}
+                    onChange={(e) => setNewEntry(e.target.value)}
+                    placeholder="Add a new memory entry..."
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                        handleAddEntry();
+                      }
+                    }}
+                  />
+                  <button className="btn btn-primary" onClick={handleAddEntry}>
+                    Add Entry
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
