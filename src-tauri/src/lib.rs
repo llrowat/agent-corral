@@ -34,6 +34,8 @@ pub fn run() {
     std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data directory");
     std::fs::create_dir_all(app_data_dir.join("sessions"))
         .expect("Failed to create sessions dir");
+    std::fs::create_dir_all(app_data_dir.join("worktrees"))
+        .expect("Failed to create worktrees dir");
     std::fs::create_dir_all(app_data_dir.join("packs")).expect("Failed to create packs dir");
     std::fs::create_dir_all(app_data_dir.join("packs/library"))
         .expect("Failed to create library dir");
@@ -43,14 +45,15 @@ pub fn run() {
 
     let db_path = app_data_dir.join("repos.db");
     let sessions_dir = app_data_dir.join("sessions");
+    let worktrees_dir = app_data_dir.join("worktrees");
     let packs_dir = app_data_dir.join("packs");
     let packs_library_dir = app_data_dir.join("packs/library");
     let plugins_dir = app_data_dir.join("plugins");
     let plugins_library_dir = app_data_dir.join("plugins/library");
 
     let repo_registry = RepoRegistry::new(&db_path).expect("Failed to initialize repo registry");
-    let session_manager =
-        SessionManager::new(sessions_dir).expect("Failed to initialize session manager");
+    let session_manager = SessionManager::new(sessions_dir, worktrees_dir)
+        .expect("Failed to initialize session manager");
     let pack_manager = PackManager::new(packs_dir, packs_library_dir);
     let plugin_manager = PluginManager::new(plugins_dir, plugins_library_dir);
     let template_engine = TemplateEngine::new(&app_data_dir);
@@ -140,6 +143,12 @@ pub fn run() {
             commands::template::save_template,
             commands::template::delete_template,
             commands::template::render_template,
+            // Worktree commands
+            commands::worktree::get_worktree_status,
+            commands::worktree::get_worktree_diff,
+            commands::worktree::list_branches,
+            commands::worktree::merge_worktree_branch,
+            commands::worktree::prune_worktrees,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

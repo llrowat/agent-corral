@@ -20,6 +20,7 @@ function emptyTemplate(): CommandTemplate {
     requires: ["repo"],
     command: "",
     cwd: "{{repoPath}}",
+    useWorktree: false,
   };
 }
 
@@ -248,6 +249,20 @@ export function TemplatesPage() {
                 </div>
               </div>
 
+              <div className="form-group">
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={editing.useWorktree}
+                    onChange={(e) =>
+                      setEditing({ ...editing, useWorktree: e.target.checked })
+                    }
+                    style={{ width: "auto" }}
+                  />
+                  Use git worktree (isolate each session in its own working copy)
+                </label>
+              </div>
+
               <div className="form-actions">
                 <button
                   className="btn btn-primary"
@@ -301,6 +316,17 @@ export function TemplatesPage() {
                     <span className="text-muted">None</span>
                   )}
                 </div>
+              </div>
+
+              <div className="detail-field">
+                <label>Git Worktree</label>
+                <span>
+                  {selected!.useWorktree ? (
+                    <span className="worktree-badge">Enabled</span>
+                  ) : (
+                    <span className="text-muted">Disabled</span>
+                  )}
+                </span>
               </div>
 
               {!isBuiltin(selected!.templateId) && (

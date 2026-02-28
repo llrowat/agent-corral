@@ -3,6 +3,7 @@ import type {
   Repo,
   RepoStatus,
   SessionEnvelope,
+  WorktreeStatus,
   ClaudeDetection,
   NormalizedConfig,
   Agent,
@@ -236,9 +237,44 @@ export async function getPlatform(): Promise<string> {
 export async function launchSession(
   repoPath: string,
   commandName: string,
-  command: string
+  command: string,
+  useWorktree?: boolean,
+  baseBranch?: string | null
 ): Promise<string> {
-  return invoke("launch_session", { repoPath, commandName, command });
+  return invoke("launch_session", {
+    repoPath,
+    commandName,
+    command,
+    useWorktree: useWorktree || false,
+    baseBranch: baseBranch || null,
+  });
+}
+
+// -- Worktree commands --
+
+export async function getWorktreeStatus(
+  sessionId: string
+): Promise<WorktreeStatus> {
+  return invoke("get_worktree_status", { sessionId });
+}
+
+export async function getWorktreeDiff(sessionId: string): Promise<string> {
+  return invoke("get_worktree_diff", { sessionId });
+}
+
+export async function listBranches(repoPath: string): Promise<string[]> {
+  return invoke("list_branches", { repoPath });
+}
+
+export async function mergeWorktreeBranch(
+  sessionId: string,
+  targetBranch: string
+): Promise<string> {
+  return invoke("merge_worktree_branch", { sessionId, targetBranch });
+}
+
+export async function pruneWorktrees(): Promise<void> {
+  return invoke("prune_worktrees");
 }
 
 // -- Pack commands --

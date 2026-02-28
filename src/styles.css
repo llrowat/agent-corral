@@ -1458,6 +1458,154 @@ code {
   margin-bottom: 8px;
 }
 
+/* -- Worktree -- */
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-header-row h3 {
+  margin-bottom: 0;
+}
+
+.worktree-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.worktree-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.worktree-checkbox-label input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.worktree-branch-select {
+  width: auto;
+  min-width: 140px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.worktree-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(108, 122, 255, 0.15);
+  color: var(--accent);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.template-card-worktree {
+  border-color: rgba(108, 122, 255, 0.3);
+}
+
+.worktree-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.worktree-section h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.worktree-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.worktree-status-wide {
+  grid-column: 1 / -1;
+}
+
+.worktree-status-item {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.worktree-status-item label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.worktree-branch-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.worktree-dirty {
+  color: var(--warning);
+}
+
+.worktree-clean {
+  color: var(--success);
+}
+
+.worktree-diff {
+  margin-top: 12px;
+  margin-bottom: 16px;
+}
+
+.worktree-merge {
+  margin-top: 12px;
+}
+
+.worktree-merge-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.worktree-merge-controls select {
+  width: auto;
+  min-width: 160px;
+}
+
+.worktree-merge-result {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.worktree-merge-success {
+  background: rgba(74, 222, 128, 0.1);
+  color: var(--success);
+}
+
+.worktree-merge-error {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--danger);
+}
+
 /* -- Scrollbar -- */
 ::-webkit-scrollbar {
   width: 6px;

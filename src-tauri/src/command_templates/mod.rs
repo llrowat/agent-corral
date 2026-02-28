@@ -27,6 +27,8 @@ pub struct CommandTemplate {
     pub requires: Vec<String>,
     pub command: String,
     pub cwd: Option<String>,
+    #[serde(default)]
+    pub use_worktree: bool,
 }
 
 pub struct TemplateEngine {
@@ -49,6 +51,7 @@ impl TemplateEngine {
                 requires: vec!["repo".to_string()],
                 command: "claude".to_string(),
                 cwd: Some("{{repoPath}}".to_string()),
+                use_worktree: false,
             },
             CommandTemplate {
                 template_id: "run-chat".to_string(),
@@ -57,6 +60,7 @@ impl TemplateEngine {
                 requires: vec!["repo".to_string()],
                 command: "claude --chat".to_string(),
                 cwd: Some("{{repoPath}}".to_string()),
+                use_worktree: false,
             },
             CommandTemplate {
                 template_id: "run-agent".to_string(),
@@ -65,6 +69,7 @@ impl TemplateEngine {
                 requires: vec!["repo".to_string(), "agent".to_string()],
                 command: "claude --agent {{agentId}}".to_string(),
                 cwd: Some("{{repoPath}}".to_string()),
+                use_worktree: false,
             },
             CommandTemplate {
                 template_id: "run-prompt".to_string(),
@@ -73,6 +78,7 @@ impl TemplateEngine {
                 requires: vec!["repo".to_string(), "prompt".to_string()],
                 command: "claude -p {{prompt}}".to_string(),
                 cwd: Some("{{repoPath}}".to_string()),
+                use_worktree: false,
             },
             CommandTemplate {
                 template_id: "run-review".to_string(),
@@ -81,6 +87,7 @@ impl TemplateEngine {
                 requires: vec!["repo".to_string()],
                 command: "claude -p 'Review the recent changes in this repository. Focus on code quality, potential bugs, and suggestions for improvement.'".to_string(),
                 cwd: Some("{{repoPath}}".to_string()),
+                use_worktree: false,
             },
         ]
     }

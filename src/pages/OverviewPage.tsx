@@ -11,10 +11,14 @@ export function OverviewPage({ scope }: Props) {
   const [status, setStatus] = useState<RepoStatus | null>(null);
   const [detection, setDetection] = useState<ClaudeDetection | null>(null);
   const [templates, setTemplates] = useState<CommandTemplate[]>([]);
+  const [worktreeEnabled, setWorktreeEnabled] = useState(false);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState<string>("");
   const { sessions, launchSession, refresh } = useSessions();
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isGlobal = scope?.type === "global";
+  const isGitRepo = status?.is_git_repo ?? false;
 
   useEffect(() => {
     if (!basePath) {
@@ -37,6 +41,13 @@ export function OverviewPage({ scope }: Props) {
       setTemplates([]);
     }
   }, [isGlobal]);
+
+  // Load branches when worktree is enabled
+  useEffect(() => {
+    if (worktreeEnabled && basePath && isGitRepo) {
+      api.listBranches(basePath).then(setBranches).catch(() => setBranches([]));
+    }
+  }, [worktreeEnabled, basePath, isGitRepo]);
 
   if (!scope) {
     return (
@@ -70,7 +81,14 @@ export function OverviewPage({ scope }: Props) {
       if (!promptText) return;
       cmd = cmd.replace("{{prompt}}", promptText);
     }
-    await launchSession(basePath, template.name, cmd);
+    const useWt = worktreeEnabled || template.useWorktree;
+    await launchSession(
+      basePath,
+      template.name,
+      cmd,
+      useWt,
+      useWt && selectedBranch ? selectedBranch : null
+    );
   };
 
   return (
@@ -102,15 +120,50 @@ export function OverviewPage({ scope }: Props) {
 
       {!isGlobal && (
         <section className="overview-section">
-          <h3>Command Templates</h3>
+          <div className="section-header-row">
+            <h3>Command Templates</h3>
+            {isGitRepo && (
+              <div className="worktree-toggle">
+                <label className="worktree-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={worktreeEnabled}
+                    onChange={(e) => setWorktreeEnabled(e.target.checked)}
+                  />
+                  <span>Use worktree</span>
+                </label>
+                {worktreeEnabled && branches.length > 0 && (
+                  <select
+                    className="worktree-branch-select"
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                  >
+                    <option value="">Current HEAD</option>
+                    {branches.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+          </div>
           <div className="templates-grid">
             {templates.map((t) => (
               <button
                 key={t.templateId}
-                className="template-card"
+                className={`template-card${
+                  (worktreeEnabled || t.useWorktree) ? " template-card-worktree" : ""
+                }`}
                 onClick={() => handleRunTemplate(t)}
               >
-                <span className="template-name">{t.name}</span>
+                <span className="template-name">
+                  {t.name}
+                  {t.useWorktree && (
+                    <span className="worktree-badge">worktree</span>
+                  )}
+                </span>
                 <span className="template-desc">{t.description}</span>
               </button>
             ))}
@@ -142,7 +195,12 @@ export function OverviewPage({ scope }: Props) {
                       if (s.pid) api.focusSession(s.pid);
                     }}
                   >
-                    <td>{s.commandName}</td>
+                    <td>
+                      {s.commandName}
+                      {s.worktreeBranch && (
+                        <span className="worktree-badge">{s.worktreeBranch}</span>
+                      )}
+                    </td>
                     <td><code>{s.command}</code></td>
                     <td>{new Date(s.startedAt).toLocaleString()}</td>
                     <td>

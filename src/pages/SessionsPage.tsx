@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { Scope, SessionEnvelope } from "@/types";
+import { useState, useCallback } from "react";
+import type { Scope, SessionEnvelope, WorktreeStatus } from "@/types";
 import { useSessions } from "@/hooks/useSessions";
 import * as api from "@/lib/tauri";
 
@@ -10,6 +10,92 @@ interface Props {
 export function SessionsPage({ scope }: Props) {
   const { sessions, loading, launchSession, refresh } = useSessions();
   const [selectedSession, setSelectedSession] = useState<SessionEnvelope | null>(null);
+  const [worktreeStatus, setWorktreeStatus] = useState<WorktreeStatus | null>(null);
+  const [worktreeDiff, setWorktreeDiff] = useState<string | null>(null);
+  const [mergeTarget, setMergeTarget] = useState<string>("");
+  const [branches, setBranches] = useState<string[]>([]);
+  const [mergeResult, setMergeResult] = useState<string | null>(null);
+
+  const loadWorktreeInfo = useCallback(async (session: SessionEnvelope) => {
+    if (!session.worktreePath) {
+      setWorktreeStatus(null);
+      setWorktreeDiff(null);
+      setBranches([]);
+      return;
+    }
+    try {
+      const [status, diff, branchList] = await Promise.all([
+        api.getWorktreeStatus(session.sessionId),
+        api.getWorktreeDiff(session.sessionId),
+        api.listBranches(session.repoPath),
+      ]);
+      setWorktreeStatus(status);
+      setWorktreeDiff(diff);
+      setBranches(branchList.filter((b) => b !== session.worktreeBranch));
+      if (status.baseBranch && !mergeTarget) {
+        setMergeTarget(status.baseBranch);
+      }
+    } catch {
+      setWorktreeStatus(null);
+      setWorktreeDiff(null);
+    }
+  }, [mergeTarget]);
+
+  const handleSelectSession = useCallback((session: SessionEnvelope) => {
+    setSelectedSession(session);
+    setMergeResult(null);
+    loadWorktreeInfo(session);
+  }, [loadWorktreeInfo]);
+
+  const handleRerun = useCallback(async (session: SessionEnvelope) => {
+    await launchSession(
+      session.repoPath,
+      session.commandName,
+      session.command,
+      !!session.worktreePath
+    );
+  }, [launchSession]);
+
+  const handleDelete = useCallback(async (session: SessionEnvelope) => {
+    if (session.worktreePath) {
+      const msg = worktreeStatus?.hasUncommittedChanges
+        ? "This session has a worktree with uncommitted changes. Deleting will remove the worktree and discard those changes. Continue?"
+        : "This will remove the session's worktree and delete the branch. Continue?";
+      if (!confirm(msg)) return;
+    }
+    try {
+      await api.deleteSession(session.sessionId);
+      if (selectedSession?.sessionId === session.sessionId) {
+        setSelectedSession(null);
+        setWorktreeStatus(null);
+        setWorktreeDiff(null);
+      }
+      await refresh();
+    } catch (e) {
+      alert(`Failed to delete session: ${e}`);
+    }
+  }, [worktreeStatus, selectedSession, refresh]);
+
+  const handleFocus = useCallback((session: SessionEnvelope) => {
+    if (session.pid) {
+      api.focusSession(session.pid);
+    }
+    handleSelectSession(session);
+  }, [handleSelectSession]);
+
+  const handleMerge = useCallback(async () => {
+    if (!selectedSession || !mergeTarget) return;
+    try {
+      const result = await api.mergeWorktreeBranch(
+        selectedSession.sessionId,
+        mergeTarget
+      );
+      setMergeResult(result);
+      loadWorktreeInfo(selectedSession);
+    } catch (e) {
+      setMergeResult(`Error: ${e}`);
+    }
+  }, [selectedSession, mergeTarget, loadWorktreeInfo]);
 
   if (scope?.type === "global") {
     return (
@@ -25,29 +111,6 @@ export function SessionsPage({ scope }: Props) {
     if (repoPath && s.repoPath !== repoPath) return false;
     return true;
   });
-
-  const handleRerun = async (session: SessionEnvelope) => {
-    await launchSession(session.repoPath, session.commandName, session.command);
-  };
-
-  const handleDelete = async (session: SessionEnvelope) => {
-    try {
-      await api.deleteSession(session.sessionId);
-      if (selectedSession?.sessionId === session.sessionId) {
-        setSelectedSession(null);
-      }
-      await refresh();
-    } catch (e) {
-      alert(`Failed to delete session: ${e}`);
-    }
-  };
-
-  const handleFocus = (session: SessionEnvelope) => {
-    if (session.pid) {
-      api.focusSession(session.pid);
-    }
-    setSelectedSession(session);
-  };
 
   return (
     <div className="page sessions-page">
@@ -66,10 +129,13 @@ export function SessionsPage({ scope }: Props) {
                 className={`session-item ${
                   selectedSession?.sessionId === session.sessionId ? "active" : ""
                 }`}
-                onClick={() => setSelectedSession(session)}
+                onClick={() => handleSelectSession(session)}
               >
                 <div className="session-item-header">
                   <span className="session-name">{session.commandName}</span>
+                  {session.worktreeBranch && (
+                    <span className="worktree-badge">{session.worktreeBranch}</span>
+                  )}
                 </div>
                 <div className="session-item-meta">
                   <span>{new Date(session.startedAt).toLocaleString()}</span>
@@ -108,6 +174,12 @@ export function SessionsPage({ scope }: Props) {
                   <label>Launched</label>
                   <span>{new Date(selectedSession.startedAt).toLocaleString()}</span>
                 </div>
+                {selectedSession.worktreePath && (
+                  <div className="detail-field">
+                    <label>Worktree</label>
+                    <code>{selectedSession.worktreePath}</code>
+                  </div>
+                )}
               </div>
 
               <div className="session-actions">
@@ -130,6 +202,102 @@ export function SessionsPage({ scope }: Props) {
                   Delete
                 </button>
               </div>
+
+              {selectedSession.worktreePath && worktreeStatus && (
+                <div className="worktree-section">
+                  <h4>Worktree Status</h4>
+                  <div className="worktree-status-grid">
+                    <div className="worktree-status-item">
+                      <label>Branch</label>
+                      <span className="worktree-branch-name">
+                        {worktreeStatus.branch}
+                      </span>
+                    </div>
+                    {worktreeStatus.baseBranch && (
+                      <div className="worktree-status-item">
+                        <label>Base</label>
+                        <span>{worktreeStatus.baseBranch}</span>
+                      </div>
+                    )}
+                    <div className="worktree-status-item">
+                      <label>Commits</label>
+                      <span>{worktreeStatus.commitCount} ahead</span>
+                    </div>
+                    <div className="worktree-status-item">
+                      <label>Working tree</label>
+                      <span
+                        className={
+                          worktreeStatus.hasUncommittedChanges
+                            ? "worktree-dirty"
+                            : "worktree-clean"
+                        }
+                      >
+                        {worktreeStatus.hasUncommittedChanges
+                          ? "Has uncommitted changes"
+                          : "Clean"}
+                      </span>
+                    </div>
+                    {worktreeStatus.latestCommitSummary && (
+                      <div className="worktree-status-item worktree-status-wide">
+                        <label>Latest commit</label>
+                        <span>{worktreeStatus.latestCommitSummary}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {worktreeDiff && worktreeDiff.trim() && (
+                    <div className="worktree-diff">
+                      <h4>Working Changes</h4>
+                      <pre className="log-output">{worktreeDiff}</pre>
+                    </div>
+                  )}
+
+                  <div className="worktree-merge">
+                    <h4>Merge Branch</h4>
+                    <div className="worktree-merge-controls">
+                      <span className="text-muted">Merge into:</span>
+                      <select
+                        value={mergeTarget}
+                        onChange={(e) => setMergeTarget(e.target.value)}
+                      >
+                        <option value="">Select target branch...</option>
+                        {branches.map((b) => (
+                          <option key={b} value={b}>
+                            {b}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={!mergeTarget}
+                        onClick={handleMerge}
+                      >
+                        Merge
+                      </button>
+                    </div>
+                    {mergeResult && (
+                      <div
+                        className={`worktree-merge-result ${
+                          mergeResult.startsWith("Error")
+                            ? "worktree-merge-error"
+                            : "worktree-merge-success"
+                        }`}
+                      >
+                        {mergeResult}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: "12px" }}>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => loadWorktreeInfo(selectedSession)}
+                    >
+                      Refresh Status
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

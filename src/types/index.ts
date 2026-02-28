@@ -25,6 +25,17 @@ export interface SessionEnvelope {
   command: string;
   startedAt: string;
   pid: number | null;
+  worktreePath: string | null;
+  worktreeBranch: string | null;
+}
+
+export interface WorktreeStatus {
+  branch: string;
+  baseBranch: string | null;
+  worktreePath: string;
+  hasUncommittedChanges: boolean;
+  commitCount: number;
+  latestCommitSummary: string | null;
 }
 
 // -- Claude Adapter --
@@ -246,6 +257,7 @@ export interface CommandTemplate {
   requires: string[];
   command: string;
   cwd: string | null;
+  useWorktree: boolean;
 }
 
 // -- Scope --
