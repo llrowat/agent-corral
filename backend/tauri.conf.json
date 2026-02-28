@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AgentCorral — Claude Code Command Center",
+        "title": "AgentCorral — Claude Code Workspace Manager",
         "width": 1200,
         "height": 800,
         "resizable": true,

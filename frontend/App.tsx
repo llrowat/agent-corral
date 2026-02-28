@@ -34,7 +34,7 @@ function App() {
         <div className="app-brand">
           <img src={appIcon} alt="" className="app-icon" />
           <h1>AgentCorral</h1>
-          <span className="app-subtitle">Claude Code Command Center</span>
+          <span className="app-subtitle">Claude Code Workspace Manager</span>
         </div>
         <ScopeSwitcher
           repos={repos}
