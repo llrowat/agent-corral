@@ -44,3 +44,89 @@ impl PreferencesManager {
         self.save(&prefs)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_returns_defaults_when_no_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mgr = PreferencesManager::new(tmp.path());
+        let prefs = mgr.load();
+        assert!(prefs.terminal_emulator.is_none());
+    }
+
+    #[test]
+    fn save_and_load_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mgr = PreferencesManager::new(tmp.path());
+
+        let prefs = AppPreferences {
+            terminal_emulator: Some("alacritty".to_string()),
+        };
+        mgr.save(&prefs).unwrap();
+
+        let loaded = mgr.load();
+        assert_eq!(loaded.terminal_emulator, Some("alacritty".to_string()));
+    }
+
+    #[test]
+    fn set_terminal_emulator() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mgr = PreferencesManager::new(tmp.path());
+
+        mgr.set_terminal_emulator(Some("kitty".to_string())).unwrap();
+        assert_eq!(mgr.get_terminal_emulator(), Some("kitty".to_string()));
+
+        mgr.set_terminal_emulator(None).unwrap();
+        assert_eq!(mgr.get_terminal_emulator(), None);
+    }
+
+    #[test]
+    fn load_handles_corrupt_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let prefs_path = tmp.path().join("preferences.json");
+        fs::write(&prefs_path, "not valid json!!!").unwrap();
+
+        let mgr = PreferencesManager::new(tmp.path());
+        let prefs = mgr.load();
+        // Should return defaults, not panic
+        assert!(prefs.terminal_emulator.is_none());
+    }
+
+    #[test]
+    fn save_uses_atomic_write() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mgr = PreferencesManager::new(tmp.path());
+
+        let prefs = AppPreferences {
+            terminal_emulator: Some("wezterm".to_string()),
+        };
+        mgr.save(&prefs).unwrap();
+
+        // Verify the tmp file was cleaned up (atomic rename)
+        let tmp_path = tmp.path().join("preferences.json.tmp");
+        assert!(!tmp_path.exists());
+
+        // Verify the actual file exists
+        let prefs_path = tmp.path().join("preferences.json");
+        assert!(prefs_path.exists());
+    }
+
+    #[test]
+    fn app_preferences_default() {
+        let prefs = AppPreferences::default();
+        assert!(prefs.terminal_emulator.is_none());
+    }
+
+    #[test]
+    fn app_preferences_serialization() {
+        let prefs = AppPreferences {
+            terminal_emulator: Some("gnome-terminal".to_string()),
+        };
+        let json = serde_json::to_string(&prefs).unwrap();
+        let deserialized: AppPreferences = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.terminal_emulator, prefs.terminal_emulator);
+    }
+}
