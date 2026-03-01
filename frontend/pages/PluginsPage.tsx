@@ -107,7 +107,7 @@ export function PluginsPage({ scope }: Props) {
         api.listTemplates(),
       ]);
       // Filter out built-in templates — only custom ones are exportable
-      const builtinIds = ["run-claude", "run-chat", "run-agent", "run-prompt", "run-review"];
+      const builtinIds = ["run-claude", "run-agent", "run-review"];
       const customTemplates = templates.filter((t) => !builtinIds.includes(t.templateId));
       setExportAgents(agents);
       setExportSelectedAgentIds(agents.map((a) => a.agentId));

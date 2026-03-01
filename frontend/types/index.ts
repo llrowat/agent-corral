@@ -38,6 +38,8 @@ export interface WorktreeStatus {
   hasUncommittedChanges: boolean;
   commitCount: number;
   latestCommitSummary: string | null;
+  insertions: number;
+  deletions: number;
 }
 
 /** Activity state for a running session, inferred from CPU usage between polls. */

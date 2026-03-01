@@ -54,29 +54,11 @@ impl TemplateEngine {
                 use_worktree: false,
             },
             CommandTemplate {
-                template_id: "run-chat".to_string(),
-                name: "Claude Chat".to_string(),
-                description: "Start a Claude Code chat session".to_string(),
-                requires: vec!["repo".to_string()],
-                command: "claude --chat".to_string(),
-                cwd: Some("{{repoPath}}".to_string()),
-                use_worktree: false,
-            },
-            CommandTemplate {
                 template_id: "run-agent".to_string(),
                 name: "Run Agent".to_string(),
                 description: "Run a specific agent in a repo".to_string(),
                 requires: vec!["repo".to_string(), "agent".to_string()],
                 command: "claude --agent {{agentId}}".to_string(),
-                cwd: Some("{{repoPath}}".to_string()),
-                use_worktree: false,
-            },
-            CommandTemplate {
-                template_id: "run-prompt".to_string(),
-                name: "Run with Prompt".to_string(),
-                description: "Run Claude Code with a specific prompt".to_string(),
-                requires: vec!["repo".to_string(), "prompt".to_string()],
-                command: "claude -p {{prompt}}".to_string(),
                 cwd: Some("{{repoPath}}".to_string()),
                 use_worktree: false,
             },
@@ -238,7 +220,7 @@ mod tests {
     #[test]
     fn default_templates_returns_expected_count() {
         let templates = TemplateEngine::default_templates();
-        assert_eq!(templates.len(), 5);
+        assert_eq!(templates.len(), 3);
     }
 
     #[test]
@@ -346,7 +328,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let engine = TemplateEngine::new(tmp.path());
         let templates = engine.list_templates().unwrap();
-        assert_eq!(templates.len(), 5);
+        assert_eq!(templates.len(), 3);
     }
 
     #[test]
@@ -366,7 +348,7 @@ mod tests {
 
         engine.save_template(&custom).unwrap();
         let templates = engine.list_templates().unwrap();
-        assert_eq!(templates.len(), 6);
+        assert_eq!(templates.len(), 4);
         assert!(templates.iter().any(|t| t.template_id == "custom-1"));
     }
 
@@ -424,7 +406,7 @@ mod tests {
         engine.delete_template("custom-1").unwrap();
 
         let templates = engine.list_templates().unwrap();
-        assert_eq!(templates.len(), 5); // back to defaults only
+        assert_eq!(templates.len(), 3); // back to defaults only
     }
 
     #[test]

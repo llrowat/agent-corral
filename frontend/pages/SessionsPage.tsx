@@ -81,7 +81,7 @@ function groupByRepo(
 }
 
 export function SessionsPage({ scope, repos }: Props) {
-  const { sessions, activities, loading, launchSession, refresh } =
+  const { sessions, activities, diffStats, loading, launchSession, refresh } =
     useSessions();
   const [selectedSession, setSelectedSession] =
     useState<SessionEnvelope | null>(null);
@@ -288,6 +288,7 @@ export function SessionsPage({ scope, repos }: Props) {
   // Render a single session list item
   const renderSessionItem = (session: SessionEnvelope) => {
     const activity = activities[session.sessionId];
+    const stats = diffStats[session.sessionId];
     return (
       <div
         key={session.sessionId}
@@ -301,6 +302,12 @@ export function SessionsPage({ scope, repos }: Props) {
           <span className="session-badges">
             {session.worktreeBranch && (
               <span className="worktree-badge">{session.worktreeBranch}</span>
+            )}
+            {stats && (stats.insertions > 0 || stats.deletions > 0) && (
+              <span className="diff-stats">
+                <span className="diff-plus">+{stats.insertions}</span>
+                <span className="diff-minus">-{stats.deletions}</span>
+              </span>
             )}
             <span className={activityBadgeClass(activity)}>
               {activityLabel(activity)}
@@ -516,6 +523,15 @@ export function SessionsPage({ scope, repos }: Props) {
                       <label>Commits</label>
                       <span>{worktreeStatus.commitCount} ahead</span>
                     </div>
+                    {(worktreeStatus.insertions > 0 || worktreeStatus.deletions > 0) && (
+                      <div className="worktree-status-item">
+                        <label>Lines changed</label>
+                        <span className="diff-stats">
+                          <span className="diff-plus">+{worktreeStatus.insertions}</span>
+                          <span className="diff-minus">-{worktreeStatus.deletions}</span>
+                        </span>
+                      </div>
+                    )}
                     <div className="worktree-status-item">
                       <label>Working tree</label>
                       <span

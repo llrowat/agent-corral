@@ -95,7 +95,7 @@ describe("Type definitions", () => {
         sessionId: "sess-2",
         repoPath: "/tmp",
         commandName: "Chat",
-        command: "claude --chat",
+        command: "claude",
         startedAt: "2026-01-01T00:00:00Z",
         pid: null,
         worktreePath: null,
