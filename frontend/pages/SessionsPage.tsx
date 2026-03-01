@@ -1,15 +1,18 @@
 import { useState, useCallback, useMemo } from "react";
 import type {
+  Repo,
   Scope,
   SessionEnvelope,
   SessionActivity,
   WorktreeStatus,
 } from "@/types";
 import { useSessions } from "@/hooks/useSessions";
+import { QuickLaunchBar } from "@/components/QuickLaunchBar";
 import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
+  repos: Repo[];
 }
 
 /** Extract a short repo name from a full path (last path segment). */
@@ -77,7 +80,7 @@ function groupByRepo(
   });
 }
 
-export function SessionsPage({ scope }: Props) {
+export function SessionsPage({ scope, repos }: Props) {
   const { sessions, activities, loading, launchSession, refresh } =
     useSessions();
   const [selectedSession, setSelectedSession] =
@@ -344,6 +347,12 @@ export function SessionsPage({ scope }: Props) {
         </div>
       </div>
 
+      <QuickLaunchBar
+        repoPath={repoPath}
+        repos={repos}
+        onLaunch={(repo, name, cmd, wt) => launchSession(repo, name, cmd, wt)}
+      />
+
       {loading && sessions.length === 0 && (
         <p className="text-muted">Loading sessions...</p>
       )}
@@ -391,8 +400,8 @@ export function SessionsPage({ scope }: Props) {
                 {statusFilter !== "all"
                   ? `No ${statusFilter} sessions.`
                   : repoPath
-                    ? "No sessions for this repo."
-                    : "No sessions yet. Launch a command to get started."}
+                    ? "No sessions for this repo. Use the launch bar above to start one."
+                    : "No sessions yet. Use the launch bar above to get started."}
               </div>
             )}
           </div>

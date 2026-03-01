@@ -19,7 +19,6 @@ const navGroups: NavGroup[] = [
     items: [
       { path: "/overview", label: "Overview", icon: "grid" },
       { path: "/sessions", label: "Sessions", icon: "terminal" },
-      { path: "/templates", label: "Launchers", icon: "template" },
     ],
   },
   {

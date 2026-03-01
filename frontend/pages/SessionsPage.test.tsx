@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { SessionsPage } from "./SessionsPage";
-import type { Scope, SessionEnvelope, SessionActivityMap } from "@/types";
+import type { Repo, Scope, SessionEnvelope, SessionActivityMap } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 
 const mockInvoke = invoke as ReturnType<typeof vi.fn>;
@@ -51,6 +51,23 @@ const mockActivities: SessionActivityMap = {
   s3: "idle",
 };
 
+const mockRepos: Repo[] = [
+  {
+    repo_id: "r1",
+    name: "api-service",
+    path: "/home/user/api-service",
+    pinned: false,
+    last_opened_at: null,
+  },
+  {
+    repo_id: "r2",
+    name: "web-frontend",
+    path: "/home/user/web-frontend",
+    pinned: false,
+    last_opened_at: null,
+  },
+];
+
 function setupMocks(
   sessions: SessionEnvelope[] = mockSessions,
   activities: SessionActivityMap = mockActivities
@@ -61,6 +78,10 @@ function setupMocks(
         return sessions;
       case "poll_session_states":
         return activities;
+      case "list_templates":
+        return [];
+      case "read_agents":
+        return [];
       default:
         return null;
     }
@@ -74,7 +95,7 @@ describe("SessionsPage", () => {
 
   it("renders sessions page with filter buttons", async () => {
     setupMocks();
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     // Filter buttons should be present
     expect(await screen.findByText(/All \(/)).toBeInTheDocument();
@@ -85,7 +106,7 @@ describe("SessionsPage", () => {
 
   it("shows repo group headers in multi-repo mode (no scope)", async () => {
     setupMocks();
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     // Wait for sessions to load
     expect(await screen.findByText("api-service")).toBeInTheDocument();
@@ -104,7 +125,7 @@ describe("SessionsPage", () => {
         last_opened_at: null,
       },
     };
-    render(<SessionsPage scope={scope} />);
+    render(<SessionsPage scope={scope} repos={mockRepos} />);
 
     // Wait for sessions to load, should show session names
     expect(await screen.findByText("Claude Chat")).toBeInTheDocument();
@@ -120,7 +141,7 @@ describe("SessionsPage", () => {
 
   it("shows activity badges for sessions", async () => {
     setupMocks();
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     // Wait for data to load
     await screen.findByText("Claude Chat");
@@ -138,7 +159,7 @@ describe("SessionsPage", () => {
 
   it("shows correct filter counts", async () => {
     setupMocks();
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     expect(await screen.findByText("All (3)")).toBeInTheDocument();
     expect(screen.getByText("Working (1)")).toBeInTheDocument();
@@ -148,7 +169,7 @@ describe("SessionsPage", () => {
 
   it("filters sessions by status when clicking filter button", async () => {
     setupMocks();
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     await screen.findByText("Claude Chat");
 
@@ -164,7 +185,7 @@ describe("SessionsPage", () => {
 
   it("shows running count in repo group header", async () => {
     setupMocks();
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     // Both repos have 1 running session each
     const runningBadges = await screen.findAllByText("1 running");
@@ -173,7 +194,7 @@ describe("SessionsPage", () => {
 
   it("shows detail panel when selecting a session", async () => {
     setupMocks();
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     await screen.findByText("Claude Chat");
 
@@ -188,7 +209,7 @@ describe("SessionsPage", () => {
   it("works with global scope (no longer blocked)", async () => {
     setupMocks();
     const scope: Scope = { type: "global", homePath: "/home/user" };
-    render(<SessionsPage scope={scope} />);
+    render(<SessionsPage scope={scope} repos={mockRepos} />);
 
     // Should NOT show the old "project-specific" message
     expect(
@@ -199,18 +220,27 @@ describe("SessionsPage", () => {
     expect(await screen.findByText("api-service")).toBeInTheDocument();
   });
 
+  it("renders quick-launch bar", async () => {
+    setupMocks();
+    render(<SessionsPage scope={null} repos={mockRepos} />);
+
+    expect(await screen.findByText("Run Claude")).toBeInTheDocument();
+    expect(screen.getByText("Run Chat")).toBeInTheDocument();
+    expect(screen.getByText("Manage Launchers")).toBeInTheDocument();
+  });
+
   it("shows empty state when no sessions exist", async () => {
     setupMocks([], {});
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     expect(
-      await screen.findByText("No sessions yet. Launch a command to get started.")
+      await screen.findByText("No sessions yet. Use the launch bar above to get started.")
     ).toBeInTheDocument();
   });
 
   it("shows filtered empty state", async () => {
     setupMocks();
-    render(<SessionsPage scope={null} />);
+    render(<SessionsPage scope={null} repos={mockRepos} />);
 
     await screen.findByText("Claude Chat");
 

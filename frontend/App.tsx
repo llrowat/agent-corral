@@ -12,7 +12,6 @@ import { SkillsPage } from "./pages/SkillsPage";
 import { McpPage } from "./pages/McpPage";
 import { PacksPage } from "./pages/PacksPage";
 import { PluginsPage } from "./pages/PluginsPage";
-import { TemplatesPage } from "./pages/TemplatesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { useRepos } from "./hooks/useRepos";
 import { getClaudeHome } from "./lib/tauri";
@@ -83,11 +82,14 @@ function App() {
             />
             <Route
               path="/sessions"
-              element={<SessionsPage scope={scope} />}
+              element={<SessionsPage scope={scope} repos={repos} />}
             />
             <Route path="/packs" element={<PacksPage scope={scope} />} />
             <Route path="/plugins" element={<PluginsPage scope={scope} />} />
-            <Route path="/templates" element={<TemplatesPage />} />
+            <Route
+              path="/templates"
+              element={<Navigate to="/sessions" replace />}
+            />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

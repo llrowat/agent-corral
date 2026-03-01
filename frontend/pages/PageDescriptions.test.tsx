@@ -7,7 +7,6 @@ import { HooksPage } from "./HooksPage";
 import { McpPage } from "./McpPage";
 import { MemoryPage } from "./MemoryPage";
 import { ConfigPage } from "./ConfigPage";
-import { TemplatesPage } from "./TemplatesPage";
 import type { Scope } from "@/types";
 
 const mockInvoke = invoke as ReturnType<typeof vi.fn>;
@@ -66,13 +65,6 @@ describe("Page descriptions", () => {
     render(<ConfigPage scope={globalScope} />);
     expect(
       screen.getByText(/project and global settings/i)
-    ).toBeInTheDocument();
-  });
-
-  it("TemplatesPage renders a description for new users", async () => {
-    render(<TemplatesPage />);
-    expect(
-      screen.getByText(/saved command templates/i)
     ).toBeInTheDocument();
   });
 
