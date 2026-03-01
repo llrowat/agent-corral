@@ -44,14 +44,25 @@ export function ConfigSummary({ scope }: Props) {
     0
   );
 
+  const isEmpty =
+    agents.length === 0 &&
+    hookHandlerCount === 0 &&
+    skills.length === 0 &&
+    mcpServers.length === 0 &&
+    !config?.model;
+
   const parts: string[] = [];
   parts.push(`Model: ${modelLabel}`);
   if (agents.length > 0)
     parts.push(`${agents.length} agent${agents.length !== 1 ? "s" : ""}`);
+  else
+    parts.push("0 agents");
   if (hookHandlerCount > 0)
     parts.push(
       `${hookHandlerCount} hook${hookHandlerCount !== 1 ? "s" : ""}`
     );
+  else
+    parts.push("0 hooks");
   if (skills.length > 0)
     parts.push(`${skills.length} skill${skills.length !== 1 ? "s" : ""}`);
   if (mcpServers.length > 0)
@@ -61,27 +72,20 @@ export function ConfigSummary({ scope }: Props) {
   if (config?.ignorePatterns && config.ignorePatterns.length > 0)
     parts.push(`${config.ignorePatterns.length} ignore patterns`);
 
-  const isEmpty =
-    agents.length === 0 &&
-    hookHandlerCount === 0 &&
-    skills.length === 0 &&
-    mcpServers.length === 0 &&
-    !config?.model;
-
-  if (isEmpty) return null;
-
   return (
-    <section className="config-summary">
+    <section className={`config-summary ${isEmpty ? "config-summary-empty" : ""}`}>
       <div className="config-summary-bar">
         <span className="config-summary-text">{parts.join("  |  ")}</span>
-        <button
-          className="btn btn-sm"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? "Hide details" : "View details"}
-        </button>
+        {!isEmpty && (
+          <button
+            className="btn btn-sm"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? "Hide details" : "View details"}
+          </button>
+        )}
       </div>
-      {expanded && (
+      {expanded && !isEmpty && (
         <div className="config-summary-details">
           {config?.model && (
             <div className="config-summary-section">

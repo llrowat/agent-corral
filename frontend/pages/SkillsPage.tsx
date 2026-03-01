@@ -209,7 +209,7 @@ export function SkillsPage({ scope, homePath }: Props) {
                   <span className="agent-name">
                     {skill.name}
                     {skill.userInvocable && (
-                      <span className="badge-new" style={{ marginLeft: 6 }}>
+                      <span className="badge-new">
                         invocable
                       </span>
                     )}
@@ -226,12 +226,12 @@ export function SkillsPage({ scope, homePath }: Props) {
               </li>
             ))}
             {skills.length === 0 && !isProjectScope && (
-              <li className="text-muted" style={{ padding: "12px" }}>
+              <li className="list-empty">
                 No skills defined
               </li>
             )}
             {isProjectScope && skills.length === 0 && globalSkills.length === 0 && (
-              <li className="text-muted" style={{ padding: "12px" }}>
+              <li className="list-empty">
                 No skills defined
               </li>
             )}
@@ -261,7 +261,7 @@ export function SkillsPage({ scope, homePath }: Props) {
                         {skill.name}
                         <span className="badge-global">global</span>
                         {skill.userInvocable && (
-                          <span className="badge-new" style={{ marginLeft: 6 }}>
+                          <span className="badge-new">
                             invocable
                           </span>
                         )}
@@ -367,8 +367,8 @@ export function SkillsPage({ scope, homePath }: Props) {
                   ))}
                 </div>
                 {editing.allowedTools.length === 0 && (
-                  <span className="text-muted" style={{ fontSize: "12px" }}>
-                    No tools selected (skill will have access to all tools)
+                  <span className="config-field-hint">
+                    No tools selected — skill will have access to all tools
                   </span>
                 )}
               </div>
@@ -437,9 +437,9 @@ export function SkillsPage({ scope, homePath }: Props) {
             <div className="agent-detail">
               <h3>
                 {selected!.name}
-                {selectedIsGlobal && <span className="badge-global" style={{ marginLeft: 8 }}>global</span>}
+                {selectedIsGlobal && <span className="badge-global">global</span>}
                 {selected!.userInvocable && (
-                  <span className="badge-new" style={{ marginLeft: 8 }}>
+                  <span className="badge-new">
                     invocable
                   </span>
                 )}

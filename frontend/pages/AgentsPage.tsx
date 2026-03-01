@@ -223,12 +223,12 @@ export function AgentsPage({ scope, homePath }: Props) {
               </li>
             ))}
             {agents.length === 0 && !isProjectScope && (
-              <li className="text-muted" style={{ padding: "12px" }}>
+              <li className="list-empty">
                 No agents defined
               </li>
             )}
             {isProjectScope && agents.length === 0 && globalAgents.length === 0 && (
-              <li className="text-muted" style={{ padding: "12px" }}>
+              <li className="list-empty">
                 No agents defined
               </li>
             )}
@@ -354,8 +354,8 @@ export function AgentsPage({ scope, homePath }: Props) {
                   ))}
                 </div>
                 {editing.tools.length === 0 && (
-                  <span className="text-muted" style={{ fontSize: "12px" }}>
-                    No tools selected (agent will have access to all tools)
+                  <span className="config-field-hint">
+                    No tools selected — agent will have access to all tools
                   </span>
                 )}
               </div>
@@ -413,7 +413,7 @@ export function AgentsPage({ scope, homePath }: Props) {
             <div className="agent-detail">
               <h3>
                 {selected!.name}
-                {selectedIsGlobal && <span className="badge-global" style={{ marginLeft: 8 }}>global</span>}
+                {selectedIsGlobal && <span className="badge-global">global</span>}
               </h3>
               {selectedIsGlobal && (
                 <p className="global-readonly-hint">

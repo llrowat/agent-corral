@@ -229,12 +229,12 @@ export function HooksPage({ scope, homePath }: Props) {
               </li>
             ))}
             {hooks.length === 0 && !isProjectScope && (
-              <li className="text-muted" style={{ padding: "12px" }}>
+              <li className="list-empty">
                 No hooks configured
               </li>
             )}
             {isProjectScope && hooks.length === 0 && globalHooks.length === 0 && (
-              <li className="text-muted" style={{ padding: "12px" }}>
+              <li className="list-empty">
                 No hooks configured
               </li>
             )}
@@ -451,7 +451,7 @@ export function HooksPage({ scope, homePath }: Props) {
             <div className="agent-detail">
               <h3>
                 {selected!.event}
-                {selectedIsGlobal && <span className="badge-global" style={{ marginLeft: 8 }}>global</span>}
+                {selectedIsGlobal && <span className="badge-global">global</span>}
               </h3>
               {selectedIsGlobal && (
                 <p className="global-readonly-hint">

@@ -500,7 +500,7 @@ export function McpPage({ scope, homePath }: Props) {
                     <div className="pack-card-header">
                       <h3>
                         {server.serverId}
-                        <span className="badge-global" style={{ marginLeft: 8 }}>global</span>
+                        <span className="badge-global">global</span>
                       </h3>
                       <span className="pack-source-badge">{server.serverType}</span>
                     </div>

@@ -51,7 +51,7 @@ describe("ConfigSummary", () => {
     });
   });
 
-  it("renders nothing when no config is set", async () => {
+  it("renders empty state with dashed border when no config is set", async () => {
     mockReadClaudeConfig.mockRejectedValue(new Error("not found"));
     mockReadAgents.mockResolvedValue([]);
     mockReadHooks.mockResolvedValue([]);
@@ -65,8 +65,12 @@ describe("ConfigSummary", () => {
     const { container } = render(<ConfigSummary scope={scope} />);
 
     await waitFor(() => {
-      expect(container.querySelector(".config-summary")).not.toBeInTheDocument();
+      const summary = container.querySelector(".config-summary");
+      expect(summary).toBeInTheDocument();
+      expect(summary).toHaveClass("config-summary-empty");
     });
+    // Should show zero counts but no "View details" button
+    expect(screen.queryByText("View details")).not.toBeInTheDocument();
   });
 
   it("expands details when View details is clicked", async () => {
