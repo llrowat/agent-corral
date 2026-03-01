@@ -18,11 +18,8 @@ You've got Claude Code agents scattered across a dozen repos. Hooks defined in o
 
 - **See everything at a glance** — One dashboard across all your repos. Know instantly which projects have agents, hooks, skills, MCP servers, and memory configured.
 - **Stop copy-pasting JSON** — Visual editors for agents, hooks, skills, MCP servers, config, and memory. Built-in presets so you're not starting from scratch.
-- **Share setups across repos** — The plugin system bundles your agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, or install directly from git.
-- **Keep configs in sync** — Import sync tracks which plugins you've pulled into each repo, auto-updates them when the source changes, and lets you pin versions when you need stability.
 - **Global or project, your call** — Flip between global (`~/.claude/`) and project-scoped (`.claude/`) config with a single toggle. See exactly what applies where.
-- **Share config with your team through git** — Export your agents, skills, hooks, and MCP servers as a plugin, host it in a git repo, and teammates can install it in one step. Import sync keeps everyone up to date automatically when the source repo changes.
-- **Bootstrap new repos fast** — The Quick Setup wizard detects unconfigured repos and offers starter presets to get a full Claude Code setup running in one click.
+- **Share setups with your team** — Bundle agents, skills, hooks, and MCP servers into plugins. Export from one repo, import into another, install from git, and keep everyone in sync automatically.
 
 No more digging through dotfiles. No more wondering which repo has that hook you wrote last month. No more breaking your config because you missed a comma in a JSON file.
 
@@ -34,44 +31,18 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
 ## Features
 
-### Core Management
-- **Global + Project Scope** — Manage Claude Code configuration at the global (`~/.claude/`) or project (`{repo}/.claude/`) level with a scope selector in the header.
-- **Repo Registry** — Add and switch between multiple repositories. See at a glance which repos have Claude configs, agents, hooks, skills, MCP servers, and memory.
-- **Agent Studio** — Create, edit, and delete Claude Code agents with a visual editor. Configure tools, model overrides, and memory bindings. Includes built-in presets (code reviewer, test writer, doc writer, refactorer, and more).
-- **Hooks Editor** — Manage Claude Code hooks (PreToolUse, PostToolUse, Notification, Stop, SubagentStop) with a form UI. Built-in hook presets. Drag & drop reordering for hook execution priority.
+- **Global + Project Scope** — Manage configuration at the global (`~/.claude/`) or project (`.claude/`) level. A scope toggle in the header switches between them, and an effective config view shows the merged result with source annotations.
+- **Repo Registry** — Add and switch between repositories. The overview dashboard shows which repos have agents, hooks, skills, MCP servers, and memory configured.
+- **Agent Studio** — Create, edit, and delete agents with a visual editor. Configure tools, model overrides, and memory bindings. Built-in presets for common roles (code reviewer, test writer, doc writer, refactorer). Launch agents directly from the app with `claude --agent <id>`.
+- **Hooks Editor** — Manage hooks (PreToolUse, PostToolUse, Notification, Stop, SubagentStop) with built-in presets and drag & drop reordering for execution priority.
 - **Skills Editor** — Create and manage skills with YAML frontmatter and markdown content.
-- **MCP Servers** — Configure Model Context Protocol servers at global or project scope. Health check per server to verify availability.
-- **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. See raw JSON and shareability tags.
+- **MCP Servers** — Configure Model Context Protocol servers with health checks to verify availability.
+- **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. Snapshot configuration at any point and restore from history.
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
-- **CLAUDE.md Viewer** — Read-only view of your project's CLAUDE.md with markdown preview, nested file discovery, and a Claude Code prompt you can copy to generate a tailored CLAUDE.md for your project. (CLAUDE.md is version-controlled source — edit it in your code editor.)
-
-### Visibility & Insights
-- **Effective Config Preview** — See the merged result of global + project configuration with source annotations ("from global", "project override") for each setting.
-- **Config Health Score** — Automated linting widget that checks for common issues: missing CLAUDE.md, no model configured, agents with short prompts, hooks without timeouts, MCP placeholder env vars, and more.
-- **Cross-Reference Visualization** — See how entities relate: which agents bind to which memory stores, hook coverage by event, orphaned entities, and dangling references.
-- **Config Version History** — Snapshot settings.json at any point, view timeline, and one-click restore to any previous state.
-
-### Productivity
-- **Global Search** — Cmd+K / Ctrl+K search overlay that indexes all agents, hooks, skills, MCP servers, and memory stores with instant navigation.
-- **Keyboard Shortcuts** — Cmd/Ctrl+1-9 for page navigation, Cmd+K for search.
-- **Agent Quick Launch** — One-click terminal launch with `claude --agent <id>`, copy CLI command to clipboard.
-- **Toast Notifications** — Non-blocking success/error/info/warning notifications throughout the app (no more alert() popups).
-- **Enable/Disable Toggle** — Temporarily disable agents, skills, hooks, or MCP servers without deleting them.
-- **Drag & Drop Reordering** — Reorder hook groups via drag-and-drop (execution order matters for hooks).
-
-### Import & Export
-- **Plugin System** — Directory-based plugin format bundling agents, skills, hooks, and MCP servers. Import/export, install from git, auto-update, and import sync (track, pin, auto-sync imported plugins).
-- **Config Backup & Restore** — Export Claude Code configuration (agents, skills, hooks, MCP servers, settings) as a JSON bundle. Import with merge or overwrite modes. CLAUDE.md is excluded since it's version-controlled.
-- **Import from Existing Project** — Scan wizard to discover Claude Code config in any project directory and register it in AgentCorral.
-- **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal window.
-
-### Polish
-- **Dark/Light Theme** — Toggle between dark and light themes with persistent preference.
-- **Multi-Language Starter Templates** — Quick Setup templates for TypeScript/React, Python, Rust, Go, Java/Kotlin, C#/.NET, Swift, and Ruby.
-- **Quick Setup** — First-run wizard detects repos with no Claude config and offers starter presets to bootstrap a working setup in one click.
-- **Schema-Driven Forms** — Entity editors generated dynamically from JSON Schema definitions. The settings.json schema is fetched at runtime from [SchemaStore](https://json.schemastore.org/claude-code-settings.json).
-- **Inline Validation** — Real-time form validation with auto-fix suggestions for IDs and slugs.
-- **Docs Links** — Each feature page links to the corresponding Anthropic documentation.
+- **CLAUDE.md Viewer** — Read-only markdown preview with nested file discovery and a prompt you can copy to generate a tailored CLAUDE.md.
+- **Plugin System** — Bundle agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, install from git, and auto-sync when the source changes.
+- **Config Backup & Restore** — Export/import full configuration as a JSON bundle with merge or overwrite modes.
+- **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal.
 
 ## Getting Started
 
