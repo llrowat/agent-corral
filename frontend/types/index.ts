@@ -222,7 +222,6 @@ export interface PluginSummary {
   skillCount: number;
   hookCount: number;
   mcpCount: number;
-  templateCount: number;
   hasConfig: boolean;
   dirPath: string;
   source: "local" | "library" | "git";
@@ -235,7 +234,6 @@ export interface PluginContents {
   skills: Skill[];
   hooks: HookEvent[];
   mcpServers: McpServer[];
-  templates: CommandTemplate[];
   config: NormalizedConfig | null;
 }
 
@@ -247,8 +245,6 @@ export interface PluginImportPreview {
   hooksToAdd: string[];
   mcpToAdd: string[];
   mcpToUpdate: string[];
-  templatesToAdd: string[];
-  templatesToUpdate: string[];
   configChanges: boolean;
 }
 
@@ -289,18 +285,6 @@ export interface PluginSyncStatus {
   updateAvailable: boolean;
   autoSync: boolean;
   pinned: boolean;
-}
-
-// -- Command Templates --
-
-export interface CommandTemplate {
-  templateId: string;
-  name: string;
-  description: string;
-  requires: string[];
-  command: string;
-  cwd: string | null;
-  useWorktree: boolean;
 }
 
 // -- Scope --

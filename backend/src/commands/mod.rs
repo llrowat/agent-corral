@@ -7,6 +7,5 @@ pub mod preferences;
 pub mod repo;
 pub mod session;
 pub mod skills;
-pub mod template;
 pub mod terminal;
 pub mod worktree;

@@ -78,10 +78,6 @@ function setupMocks(
         return sessions;
       case "poll_session_states":
         return activities;
-      case "list_templates":
-        return [];
-      case "read_agents":
-        return [];
       default:
         return null;
     }
@@ -220,13 +216,18 @@ describe("SessionsPage", () => {
     expect(await screen.findByText("api-service")).toBeInTheDocument();
   });
 
-  it("renders quick-launch bar", async () => {
+  it("renders New Session button", async () => {
     setupMocks();
     render(<SessionsPage scope={null} repos={mockRepos} />);
 
-    expect(await screen.findByText("Run Claude")).toBeInTheDocument();
-    expect(screen.getByText("Run Chat")).toBeInTheDocument();
-    expect(screen.getByText("Manage Launchers")).toBeInTheDocument();
+    expect(await screen.findByText("New Session")).toBeInTheDocument();
+  });
+
+  it("renders worktree toggle", async () => {
+    setupMocks();
+    render(<SessionsPage scope={null} repos={mockRepos} />);
+
+    expect(await screen.findByText("Use worktree")).toBeInTheDocument();
   });
 
   it("shows empty state when no sessions exist", async () => {
@@ -234,7 +235,7 @@ describe("SessionsPage", () => {
     render(<SessionsPage scope={null} repos={mockRepos} />);
 
     expect(
-      await screen.findByText("No sessions yet. Use the launch bar above to get started.")
+      await screen.findByText('No sessions yet. Click "New Session" to get started.')
     ).toBeInTheDocument();
   });
 

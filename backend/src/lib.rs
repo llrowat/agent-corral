@@ -1,5 +1,4 @@
 mod claude_adapter;
-mod command_templates;
 #[cfg(feature = "tauri-app")]
 mod commands;
 mod pack_manager;
@@ -9,8 +8,6 @@ mod repo_registry;
 mod session_manager;
 mod terminal_launcher;
 
-#[cfg(feature = "tauri-app")]
-use command_templates::TemplateEngine;
 #[cfg(feature = "tauri-app")]
 use pack_manager::PackManager;
 #[cfg(feature = "tauri-app")]
@@ -30,7 +27,6 @@ pub struct AppState {
     pub session_manager: Mutex<SessionManager>,
     pub pack_manager: Mutex<PackManager>,
     pub plugin_manager: Mutex<PluginManager>,
-    pub template_engine: Mutex<TemplateEngine>,
     pub preferences: Mutex<PreferencesManager>,
 }
 
@@ -66,7 +62,6 @@ pub fn run() {
         .expect("Failed to initialize session manager");
     let pack_manager = PackManager::new(packs_dir, packs_library_dir);
     let plugin_manager = PluginManager::new(plugins_dir, plugins_library_dir);
-    let template_engine = TemplateEngine::new(&app_data_dir);
     let preferences_manager = PreferencesManager::new(&app_data_dir);
 
     let state = AppState {
@@ -74,7 +69,6 @@ pub fn run() {
         session_manager: Mutex::new(session_manager),
         pack_manager: Mutex::new(pack_manager),
         plugin_manager: Mutex::new(plugin_manager),
-        template_engine: Mutex::new(template_engine),
         preferences: Mutex::new(preferences_manager),
     };
 
@@ -163,11 +157,6 @@ pub fn run() {
             commands::plugin::read_import_registry,
             commands::plugin::set_plugin_sync_interval,
             commands::plugin::get_plugin_sync_interval,
-            // Template commands
-            commands::template::list_templates,
-            commands::template::save_template,
-            commands::template::delete_template,
-            commands::template::render_template,
             // Worktree commands
             commands::worktree::get_worktree_status,
             commands::worktree::get_worktree_diff,

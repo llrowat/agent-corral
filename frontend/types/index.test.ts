@@ -11,7 +11,6 @@ import type {
   HookEvent,
   Skill,
   McpServer,
-  CommandTemplate,
   Scope,
   PageId,
   PluginSummary,
@@ -196,22 +195,6 @@ describe("Type definitions", () => {
     });
   });
 
-  describe("CommandTemplate type", () => {
-    it("creates a template", () => {
-      const template: CommandTemplate = {
-        templateId: "custom-1",
-        name: "Custom",
-        description: "A custom template",
-        requires: ["repo", "prompt"],
-        command: "claude -p {{prompt}}",
-        cwd: "{{repoPath}}",
-        useWorktree: true,
-      };
-      expect(template.requires).toContain("repo");
-      expect(template.useWorktree).toBe(true);
-    });
-  });
-
   describe("Scope type", () => {
     it("creates a global scope", () => {
       const scope: Scope = { type: "global", homePath: "/home/user" };
@@ -262,7 +245,6 @@ describe("Type definitions", () => {
         skillCount: 1,
         hookCount: 0,
         mcpCount: 1,
-        templateCount: 0,
         hasConfig: false,
         dirPath: "/path/to/plugin",
         source: "library",

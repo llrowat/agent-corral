@@ -1,4 +1,3 @@
-use crate::command_templates::CommandTemplate;
 use crate::plugin_manager::{
     ImportMode, PluginContents, PluginImportPreview, PluginImportRegistry, PluginSummary,
     PluginSyncStatus, PluginUpdateCheck,
@@ -28,24 +27,7 @@ pub fn export_plugin(
     skill_ids: Vec<String>,
     include_hooks: bool,
     include_mcp: bool,
-    template_ids: Vec<String>,
 ) -> Result<String, String> {
-    // Gather selected templates from the template engine
-    let all_templates = state
-        .template_engine
-        .lock()
-        .map_err(|e| e.to_string())?
-        .list_templates()
-        .map_err(|e| e.to_string())?;
-    let selected_templates: Vec<CommandTemplate> = if template_ids.is_empty() {
-        vec![]
-    } else {
-        all_templates
-            .into_iter()
-            .filter(|t| template_ids.contains(&t.template_id))
-            .collect()
-    };
-
     state
         .plugin_manager
         .lock()
@@ -61,7 +43,6 @@ pub fn export_plugin(
             &skill_ids,
             include_hooks,
             include_mcp,
-            &selected_templates,
         )
         .map_err(|e| e.to_string())
 }
@@ -72,21 +53,11 @@ pub fn preview_plugin_import(
     plugin_dir: String,
     repo_path: String,
 ) -> Result<PluginImportPreview, String> {
-    let existing_template_ids: Vec<String> = state
-        .template_engine
-        .lock()
-        .map_err(|e| e.to_string())?
-        .list_templates()
-        .map_err(|e| e.to_string())?
-        .iter()
-        .map(|t| t.template_id.clone())
-        .collect();
-
     state
         .plugin_manager
         .lock()
         .map_err(|e| e.to_string())?
-        .preview_import(&plugin_dir, &repo_path, &existing_template_ids)
+        .preview_import(&plugin_dir, &repo_path)
         .map_err(|e| e.to_string())
 }
 
@@ -97,12 +68,11 @@ pub fn import_plugin(
     repo_path: String,
     mode: ImportMode,
 ) -> Result<(), String> {
-    let template_engine = state.template_engine.lock().map_err(|e| e.to_string())?;
     state
         .plugin_manager
         .lock()
         .map_err(|e| e.to_string())?
-        .import_plugin(&plugin_dir, &repo_path, mode, &template_engine)
+        .import_plugin(&plugin_dir, &repo_path, mode)
         .map_err(|e| e.to_string())
 }
 
@@ -202,12 +172,11 @@ pub fn sync_imported_plugin(
     repo_path: String,
     plugin_name: String,
 ) -> Result<PluginSyncStatus, String> {
-    let template_engine = state.template_engine.lock().map_err(|e| e.to_string())?;
     state
         .plugin_manager
         .lock()
         .map_err(|e| e.to_string())?
-        .sync_imported_plugin(&repo_path, &plugin_name, &template_engine)
+        .sync_imported_plugin(&repo_path, &plugin_name)
         .map_err(|e| e.to_string())
 }
 
@@ -216,12 +185,11 @@ pub fn auto_sync_repo(
     state: tauri::State<AppState>,
     repo_path: String,
 ) -> Result<Vec<String>, String> {
-    let template_engine = state.template_engine.lock().map_err(|e| e.to_string())?;
     state
         .plugin_manager
         .lock()
         .map_err(|e| e.to_string())?
-        .auto_sync_repo(&repo_path, &template_engine)
+        .auto_sync_repo(&repo_path)
         .map_err(|e| e.to_string())
 }
 

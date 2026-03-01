@@ -19,10 +19,9 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 - **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. See raw JSON and shareability tags.
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
 - **Session Manager** — Launch terminal sessions, view active sessions, resume sessions, focus terminal windows, and auto-cleanup when terminals close. Supports **git worktree isolation** — run sessions in an isolated worktree with their own branch, view diffs, and merge changes back. Session activity monitoring (active/idle/exited).
-- **Plugin System** — Directory-based plugin format bundling agents, skills, hooks, MCP servers, and command templates. Import/export, install from git, auto-update, and import sync (track, pin, auto-sync imported plugins).
-- **Command Templates** — Built-in and custom command templates with variable substitution. Launch Claude Code sessions from the UI. Templates can default to worktree isolation.
+- **Plugin System** — Directory-based plugin format bundling agents, skills, hooks, and MCP servers. Import/export, install from git, auto-update, and import sync (track, pin, auto-sync imported plugins).
 - **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code with a tailored prompt.
-- **Quick Setup** — First-run wizard detects repos with no Claude config and offers starter templates to bootstrap a working setup in one click.
+- **Quick Setup** — First-run wizard detects repos with no Claude config and offers starter presets to bootstrap a working setup in one click.
 - **Settings** — Configure terminal emulator preference and plugin sync interval.
 - **Inline Validation** — Real-time form validation with auto-fix suggestions for IDs and slugs.
 - **Docs Links** — Each feature page links to the corresponding Anthropic documentation.
@@ -63,13 +62,12 @@ agent-corral/
 │   │   ├── lib.rs              # App entry, state management
 │   │   ├── main.rs             # Binary entry
 │   │   ├── preferences.rs      # App preferences (terminal emulator, plugin sync interval)
-│   │   ├── commands/           # Tauri IPC command handlers (12 modules)
+│   │   ├── commands/           # Tauri IPC command handlers (11 modules)
 │   │   ├── repo_registry/      # SQLite repo management
 │   │   ├── session_manager/    # Session tracking, process lifecycle, window focus, git worktree lifecycle
 │   │   ├── claude_adapter/     # Claude Code file format adapter (agents, hooks, skills, MCP, memory)
 │   │   ├── plugin_manager/     # Plugin export/import/git install/update, import sync registry
 │   │   ├── pack_manager/       # Legacy pack system (kept for migration)
-│   │   ├── command_templates/  # Template engine with variable substitution
 │   │   └── terminal_launcher/  # Native terminal spawning (per-platform)
 │   └── tauri.conf.json
 ├── frontend/           # React frontend
@@ -87,9 +85,9 @@ agent-corral/
 
 ## Plugin System
 
-Plugins use a directory-based format (`.claude-plugin/plugin.json`) bundling agents, skills, hooks, MCP servers, and command templates. They can be:
+Plugins use a directory-based format (`.claude-plugin/plugin.json`) bundling agents, skills, hooks, and MCP servers. They can be:
 
-- **Exported** from any repo (choose which agents, skills, hooks, MCP servers, and templates to include)
+- **Exported** from any repo (choose which agents, skills, hooks, and MCP servers to include)
 - **Imported** into any repo (preview changes before applying, choose add-only or overwrite mode)
 - **Installed from Git** — point to any git repo containing a `.claude-plugin/` directory
 - **Updated** — git-sourced plugins track their source commit and can be checked for updates

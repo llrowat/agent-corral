@@ -241,36 +241,6 @@ describe("Tauri API bindings", () => {
     });
   });
 
-  // -- Template commands --
-
-  describe("listTemplates", () => {
-    it("calls invoke correctly", async () => {
-      mockInvoke.mockResolvedValue([]);
-      await api.listTemplates();
-      expect(mockInvoke).toHaveBeenCalledWith("list_templates");
-    });
-  });
-
-  describe("saveTemplate", () => {
-    it("calls invoke with template", async () => {
-      mockInvoke.mockResolvedValue(undefined);
-      const template = {
-        templateId: "custom", name: "Custom", description: "Test",
-        requires: [], command: "echo", cwd: null, useWorktree: false,
-      };
-      await api.saveTemplate(template);
-      expect(mockInvoke).toHaveBeenCalledWith("save_template", { template });
-    });
-  });
-
-  describe("deleteTemplate", () => {
-    it("calls invoke with template id", async () => {
-      mockInvoke.mockResolvedValue(undefined);
-      await api.deleteTemplate("custom-1");
-      expect(mockInvoke).toHaveBeenCalledWith("delete_template", { templateId: "custom-1" });
-    });
-  });
-
   // -- Worktree commands --
 
   describe("getWorktreeStatus", () => {

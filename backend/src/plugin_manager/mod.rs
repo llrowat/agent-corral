@@ -1,7 +1,6 @@
 use crate::claude_adapter::{
     atomic_write, Agent, ClaudeRepoAdapter, HookEvent, McpServer, NormalizedConfig, Skill,
 };
-use crate::command_templates::CommandTemplate;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,7 +46,6 @@ pub struct PluginSummary {
     pub skill_count: usize,
     pub hook_count: usize,
     pub mcp_count: usize,
-    pub template_count: usize,
     pub has_config: bool,
     pub dir_path: String,
     pub source: PluginSource,
@@ -99,7 +97,6 @@ pub struct PluginContents {
     pub skills: Vec<Skill>,
     pub hooks: Vec<HookEvent>,
     pub mcp_servers: Vec<McpServer>,
-    pub templates: Vec<CommandTemplate>,
     pub config: Option<NormalizedConfig>,
 }
 
@@ -113,8 +110,6 @@ pub struct PluginImportPreview {
     pub hooks_to_add: Vec<String>,
     pub mcp_to_add: Vec<String>,
     pub mcp_to_update: Vec<String>,
-    pub templates_to_add: Vec<String>,
-    pub templates_to_update: Vec<String>,
     pub config_changes: bool,
 }
 
@@ -195,7 +190,6 @@ impl PluginManager {
         skill_ids: &[String],
         include_hooks: bool,
         include_mcp: bool,
-        templates: &[CommandTemplate],
     ) -> Result<String, PluginError> {
         let dir_name = name.to_lowercase().replace(' ', "-");
         let plugin_dir = self.plugins_dir.join(&dir_name);
@@ -385,12 +379,6 @@ impl PluginManager {
             atomic_write(&plugin_dir.join("settings.json"), &config_json)?;
         }
 
-        // Export templates
-        if !templates.is_empty() {
-            let templates_json = serde_json::to_string_pretty(templates)?;
-            atomic_write(&plugin_dir.join("templates.json"), &templates_json)?;
-        }
-
         Ok(plugin_dir.to_string_lossy().to_string())
     }
 
@@ -464,15 +452,6 @@ impl PluginManager {
             vec![]
         };
 
-        // Read templates from templates.json
-        let templates_file = dir.join("templates.json");
-        let templates: Vec<CommandTemplate> = if templates_file.exists() {
-            let contents = fs::read_to_string(&templates_file)?;
-            serde_json::from_str(&contents)?
-        } else {
-            vec![]
-        };
-
         // Read config from settings.json
         let settings_file = dir.join("settings.json");
         let config = if settings_file.exists() {
@@ -500,7 +479,6 @@ impl PluginManager {
             skills,
             hooks,
             mcp_servers,
-            templates,
             config,
         })
     }
@@ -510,7 +488,6 @@ impl PluginManager {
         &self,
         plugin_dir: &str,
         repo_path: &str,
-        existing_template_ids: &[String],
     ) -> Result<PluginImportPreview, PluginError> {
         let contents = self.read_plugin(plugin_dir)?;
 
@@ -561,16 +538,6 @@ impl PluginManager {
             }
         }
 
-        let mut templates_to_add = Vec::new();
-        let mut templates_to_update = Vec::new();
-        for tmpl in &contents.templates {
-            if existing_template_ids.contains(&tmpl.template_id) {
-                templates_to_update.push(tmpl.template_id.clone());
-            } else {
-                templates_to_add.push(tmpl.template_id.clone());
-            }
-        }
-
         Ok(PluginImportPreview {
             agents_to_add,
             agents_to_update,
@@ -579,8 +546,6 @@ impl PluginManager {
             hooks_to_add,
             mcp_to_add,
             mcp_to_update,
-            templates_to_add,
-            templates_to_update,
             config_changes: contents.config.is_some(),
         })
     }
@@ -591,7 +556,6 @@ impl PluginManager {
         plugin_dir: &str,
         repo_path: &str,
         mode: ImportMode,
-        template_engine: &crate::command_templates::TemplateEngine,
     ) -> Result<(), PluginError> {
         let contents = self.read_plugin(plugin_dir)?;
 
@@ -656,35 +620,6 @@ impl PluginManager {
         for server in &contents.mcp_servers {
             ClaudeRepoAdapter::write_mcp_server(repo_path, server, false)
                 .map_err(|e| PluginError::Adapter(e.to_string()))?;
-        }
-
-        // Import templates
-        if !contents.templates.is_empty() {
-            let existing_templates = template_engine
-                .list_templates()
-                .map_err(|e| PluginError::Adapter(e.to_string()))?;
-            let existing_ids: Vec<String> = existing_templates
-                .iter()
-                .map(|t| t.template_id.clone())
-                .collect();
-
-            for tmpl in &contents.templates {
-                let exists = existing_ids.contains(&tmpl.template_id);
-                match mode {
-                    ImportMode::AddOnly => {
-                        if !exists {
-                            template_engine
-                                .save_template(tmpl)
-                                .map_err(|e| PluginError::Adapter(e.to_string()))?;
-                        }
-                    }
-                    ImportMode::Overwrite => {
-                        template_engine
-                            .save_template(tmpl)
-                            .map_err(|e| PluginError::Adapter(e.to_string()))?;
-                    }
-                }
-            }
         }
 
         // Import config
@@ -1187,7 +1122,6 @@ impl PluginManager {
         &self,
         repo_path: &str,
         plugin_name: &str,
-        template_engine: &crate::command_templates::TemplateEngine,
     ) -> Result<PluginSyncStatus, PluginError> {
         let registry = self.read_import_registry(repo_path)?;
         let record = registry
@@ -1215,7 +1149,7 @@ impl PluginManager {
         }
 
         // Re-import with Overwrite mode
-        self.import_plugin(&plugin_dir, repo_path, ImportMode::Overwrite, template_engine)?;
+        self.import_plugin(&plugin_dir, repo_path, ImportMode::Overwrite)?;
 
         // Return fresh sync status for this plugin
         let statuses = self.get_import_sync_status(repo_path)?;
@@ -1235,7 +1169,6 @@ impl PluginManager {
     pub fn auto_sync_repo(
         &self,
         repo_path: &str,
-        template_engine: &crate::command_templates::TemplateEngine,
     ) -> Result<Vec<String>, PluginError> {
         let statuses = self.get_import_sync_status(repo_path)?;
         let mut synced = Vec::new();
@@ -1243,7 +1176,7 @@ impl PluginManager {
         for status in &statuses {
             if status.auto_sync && !status.pinned && status.update_available && status.plugin_exists
             {
-                match self.sync_imported_plugin(repo_path, &status.plugin_name, template_engine) {
+                match self.sync_imported_plugin(repo_path, &status.plugin_name) {
                     Ok(_) => synced.push(status.plugin_name.clone()),
                     Err(e) => {
                         eprintln!(
@@ -1551,17 +1484,6 @@ impl PluginManager {
             0
         };
 
-        let templates_file = dir.join("templates.json");
-        let template_count = if templates_file.exists() {
-            fs::read_to_string(&templates_file)
-                .ok()
-                .and_then(|s| serde_json::from_str::<Vec<serde_json::Value>>(&s).ok())
-                .map(|a| a.len())
-                .unwrap_or(0)
-        } else {
-            0
-        };
-
         let has_config = dir.join("settings.json").exists();
 
         // Check for git source
@@ -1586,7 +1508,6 @@ impl PluginManager {
             skill_count,
             hook_count,
             mcp_count,
-            template_count,
             has_config,
             dir_path: dir.to_string_lossy().to_string(),
             source,

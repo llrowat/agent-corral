@@ -24,7 +24,6 @@ import type {
   PluginUpdateCheck,
   PluginSyncStatus,
   PluginImportRegistry,
-  CommandTemplate,
 } from "@/types";
 
 // -- Repo commands --
@@ -386,7 +385,6 @@ export async function exportPlugin(
   skillIds: string[],
   includeHooks: boolean,
   includeMcp: boolean,
-  templateIds: string[]
 ): Promise<string> {
   return invoke("export_plugin", {
     repoPath,
@@ -399,7 +397,6 @@ export async function exportPlugin(
     skillIds,
     includeHooks,
     includeMcp,
-    templateIds,
   });
 }
 
@@ -518,25 +515,3 @@ export async function getPluginSyncInterval(): Promise<number> {
   return invoke("get_plugin_sync_interval");
 }
 
-// -- Template commands --
-
-export async function listTemplates(): Promise<CommandTemplate[]> {
-  return invoke("list_templates");
-}
-
-export async function saveTemplate(
-  template: CommandTemplate
-): Promise<void> {
-  return invoke("save_template", { template });
-}
-
-export async function deleteTemplate(templateId: string): Promise<void> {
-  return invoke("delete_template", { templateId });
-}
-
-export async function renderTemplate(
-  template: CommandTemplate,
-  vars: Record<string, string>
-): Promise<string> {
-  return invoke("render_template", { template, vars });
-}

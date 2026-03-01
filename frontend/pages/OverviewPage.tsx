@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Scope, RepoStatus, ClaudeDetection, CommandTemplate } from "@/types";
+import type { Scope, RepoStatus, ClaudeDetection } from "@/types";
 import * as api from "@/lib/tauri";
 import { useSessions } from "@/hooks/useSessions";
 import { ConfigSummary } from "@/components/ConfigSummary";
@@ -12,11 +12,7 @@ interface Props {
 export function OverviewPage({ scope }: Props) {
   const [status, setStatus] = useState<RepoStatus | null>(null);
   const [detection, setDetection] = useState<ClaudeDetection | null>(null);
-  const [templates, setTemplates] = useState<CommandTemplate[]>([]);
   const [worktreeEnabled, setWorktreeEnabled] = useState(false);
-  const [branches, setBranches] = useState<string[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState<string>("");
-  const [currentBranch, setCurrentBranch] = useState<string>("");
   const { sessions, launchSession, refresh } = useSessions();
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
@@ -42,26 +38,6 @@ export function OverviewPage({ scope }: Props) {
     reloadDetection();
   }, [basePath, isGlobal, reloadDetection]);
 
-  useEffect(() => {
-    if (!isGlobal) {
-      api.listTemplates().then(setTemplates).catch(() => {});
-    } else {
-      setTemplates([]);
-    }
-  }, [isGlobal]);
-
-  // Load branches when worktree is enabled
-  useEffect(() => {
-    if (worktreeEnabled && basePath && isGitRepo) {
-      api.listBranches(basePath).then((branchList) => {
-        setBranches(branchList);
-        // Detect current branch (first one that doesn't start with worktree/)
-        const main = branchList.find((b) => !b.startsWith("worktree/"));
-        if (main) setCurrentBranch(main);
-      }).catch(() => setBranches([]));
-    }
-  }, [worktreeEnabled, basePath, isGitRepo]);
-
   if (!scope) {
     return (
       <div className="page page-empty">
@@ -80,28 +56,9 @@ export function OverviewPage({ scope }: Props) {
         .filter((s) => s.repoPath === basePath)
         .slice(0, 5);
 
-  const handleRunTemplate = async (template: CommandTemplate) => {
+  const handleNewSession = async () => {
     if (!basePath || isGlobal) return;
-    let cmd = template.command;
-    cmd = cmd.replace("{{repoPath}}", basePath);
-    if (cmd.includes("{{agentId}}")) {
-      const agentId = prompt("Enter agent ID:");
-      if (!agentId) return;
-      cmd = cmd.replace("{{agentId}}", agentId);
-    }
-    if (cmd.includes("{{prompt}}")) {
-      const promptText = prompt("Enter prompt:");
-      if (!promptText) return;
-      cmd = cmd.replace("{{prompt}}", promptText);
-    }
-    const useWt = worktreeEnabled || template.useWorktree;
-    await launchSession(
-      basePath,
-      template.name,
-      cmd,
-      useWt,
-      useWt && selectedBranch ? selectedBranch : null
-    );
+    await launchSession(basePath, "Claude", "claude", worktreeEnabled);
   };
 
   const handleDeleteSession = async (sessionId: string, hasWorktree: boolean) => {
@@ -148,54 +105,25 @@ export function OverviewPage({ scope }: Props) {
       {!isGlobal && (
         <section className="overview-section">
           <div className="section-header-row">
-            <h3>Launchers</h3>
-            {isGitRepo && (
-              <div className="worktree-toggle">
-                <label className="worktree-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={worktreeEnabled}
-                    onChange={(e) => setWorktreeEnabled(e.target.checked)}
-                  />
-                  <span>Use worktree</span>
-                </label>
-                {worktreeEnabled && branches.length > 0 && (
-                  <select
-                    className="worktree-branch-select"
-                    value={selectedBranch}
-                    onChange={(e) => setSelectedBranch(e.target.value)}
-                  >
-                    <option value="">
-                      Current HEAD{currentBranch ? ` (${currentBranch})` : ""}
-                    </option>
-                    {branches.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
+            <h3>New Session</h3>
           </div>
-          <div className="templates-grid">
-            {templates.map((t) => (
-              <button
-                key={t.templateId}
-                className={`template-card${
-                  (worktreeEnabled || t.useWorktree) ? " template-card-worktree" : ""
-                }`}
-                onClick={() => handleRunTemplate(t)}
-              >
-                <span className="template-name">
-                  {t.name}
-                  {t.useWorktree && (
-                    <span className="worktree-badge">worktree</span>
-                  )}
-                </span>
-                <span className="template-desc">{t.description}</span>
-              </button>
-            ))}
+          <div className="new-session-bar">
+            <button
+              className="btn btn-primary"
+              onClick={handleNewSession}
+            >
+              New Session
+            </button>
+            {isGitRepo && (
+              <label className="worktree-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={worktreeEnabled}
+                  onChange={(e) => setWorktreeEnabled(e.target.checked)}
+                />
+                <span>Use worktree</span>
+              </label>
+            )}
           </div>
         </section>
       )}

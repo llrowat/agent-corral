@@ -7,7 +7,6 @@ import type {
   WorktreeStatus,
 } from "@/types";
 import { useSessions } from "@/hooks/useSessions";
-import { QuickLaunchBar } from "@/components/QuickLaunchBar";
 import * as api from "@/lib/tauri";
 
 interface Props {
@@ -96,6 +95,7 @@ export function SessionsPage({ scope, repos }: Props) {
   const [statusFilter, setStatusFilter] = useState<
     "all" | "active" | "idle" | "exited"
   >("all");
+  const [useWorktree, setUseWorktree] = useState(false);
 
   const loadWorktreeInfo = useCallback(
     async (session: SessionEnvelope) => {
@@ -285,6 +285,12 @@ export function SessionsPage({ scope, repos }: Props) {
     return { all: base.length, active, idle, exited };
   }, [sessions, repoPath, activities]);
 
+  const handleNewSession = async () => {
+    const target = repoPath || (repos.length > 0 ? repos[0].path : null);
+    if (!target) return;
+    await launchSession(target, "Claude", "claude", useWorktree);
+  };
+
   // Render a single session list item
   const renderSessionItem = (session: SessionEnvelope) => {
     const activity = activities[session.sessionId];
@@ -354,11 +360,23 @@ export function SessionsPage({ scope, repos }: Props) {
         </div>
       </div>
 
-      <QuickLaunchBar
-        repoPath={repoPath}
-        repos={repos}
-        onLaunch={(repo, name, cmd, wt) => launchSession(repo, name, cmd, wt)}
-      />
+      <div className="new-session-bar">
+        <button
+          className="btn btn-primary"
+          onClick={handleNewSession}
+          disabled={!repoPath && repos.length === 0}
+        >
+          New Session
+        </button>
+        <label className="worktree-checkbox-label">
+          <input
+            type="checkbox"
+            checked={useWorktree}
+            onChange={(e) => setUseWorktree(e.target.checked)}
+          />
+          <span>Use worktree</span>
+        </label>
+      </div>
 
       {loading && sessions.length === 0 && (
         <p className="text-muted">Loading sessions...</p>
@@ -407,8 +425,8 @@ export function SessionsPage({ scope, repos }: Props) {
                 {statusFilter !== "all"
                   ? `No ${statusFilter} sessions.`
                   : repoPath
-                    ? "No sessions for this repo. Use the launch bar above to start one."
-                    : "No sessions yet. Use the launch bar above to get started."}
+                    ? "No sessions for this repo. Click \"New Session\" to start one."
+                    : "No sessions yet. Click \"New Session\" to get started."}
               </div>
             )}
           </div>

@@ -86,10 +86,6 @@ function App() {
             />
             <Route path="/packs" element={<PacksPage scope={scope} />} />
             <Route path="/plugins" element={<PluginsPage scope={scope} />} />
-            <Route
-              path="/templates"
-              element={<Navigate to="/sessions" replace />}
-            />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>
