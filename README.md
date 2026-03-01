@@ -4,9 +4,32 @@
 
 <h1 align="center">AgentCorral</h1>
 
-<p align="center"><strong>Claude Code Configuration Manager</strong> — a desktop app for managing Claude Code agents, configs, hooks, skills, MCP servers, memory, and plugins across your repositories.</p>
+<p align="center"><strong>Claude Code Configuration Management Studio</strong></p>
+
+---
+
+### Howdy, partner.
+
+You've got Claude Code agents scattered across a dozen repos. Hooks defined in one project that you wish you had in another. MCP servers configured globally when they should be scoped to a project — or the other way around. Skills buried in directories you forgot existed. Memory stores you set up once and never touched again because, frankly, the JSON was a pain to wrangle by hand.
+
+**That's the mess.** Claude Code is powerful, but its configuration lives in a tangle of dotfiles, JSON blobs, YAML frontmatter, and markdown spread across `~/.claude/` and every project's `.claude/` directory. There's no single place to see what you've got, no easy way to share setups between repos, and no guard rails when you're hand-editing config at 2am.
+
+**AgentCorral rounds it all up.** This is your Claude Code configuration management studio — a desktop app that gives you a visual, unified interface to wrangle every piece of your Claude Code setup:
+
+- **See everything at a glance** — One dashboard across all your repos. Know instantly which projects have agents, hooks, skills, MCP servers, and memory configured.
+- **Stop copy-pasting JSON** — Visual editors for agents, hooks, skills, MCP servers, config, and memory. Built-in presets so you're not starting from scratch.
+- **Share setups across repos** — The plugin system bundles your agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, or install directly from git.
+- **Keep configs in sync** — Import sync tracks which plugins you've pulled into each repo, auto-updates them when the source changes, and lets you pin versions when you need stability.
+- **Global or project, your call** — Flip between global (`~/.claude/`) and project-scoped (`.claude/`) config with a single toggle. See exactly what applies where.
+- **Bootstrap new repos fast** — The Quick Setup wizard detects unconfigured repos and offers starter presets to get a full Claude Code setup running in one click.
+
+No more digging through dotfiles. No more wondering which repo has that hook you wrote last month. No more breaking your config because you missed a comma in a JSON file.
+
+**Saddle up. Your agents ain't gonna wrangle themselves.**
 
 Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
+
+---
 
 ## Features
 
