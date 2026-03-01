@@ -135,6 +135,10 @@ npm run test:watch
 - `frontend/**/*.test.ts` / `frontend/**/*.test.tsx` — Frontend test files (Vitest)
 - `frontend/test/setup.ts` — Vitest global setup (Tauri mock, jest-dom matchers)
 
+## Documentation
+
+- **Update README after each change** — When a change affects project structure, features, configuration, commands, or public-facing behavior, update the README (and any other relevant documentation) to reflect the change. Documentation should stay in sync with the code at all times.
+
 ## Build Phases
 
 - Phase 1: Repo Registry, Config Studio
