@@ -19,6 +19,7 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 - **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. See raw JSON and shareability tags.
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
 - **Plugin System** — Directory-based plugin format bundling agents, skills, hooks, and MCP servers. Import/export, install from git, auto-update, and import sync (track, pin, auto-sync imported plugins).
+- **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal window.
 - **Quick Setup** — First-run wizard detects repos with no Claude config and offers starter presets to bootstrap a working setup in one click.
 - **Settings** — Configure plugin sync interval for automatic update checking.
 - **Inline Validation** — Real-time form validation with auto-fix suggestions for IDs and slugs.

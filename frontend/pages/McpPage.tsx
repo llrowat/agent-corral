@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { Scope, McpServer } from "@/types";
 import * as api from "@/lib/tauri";
 import { PresetPicker } from "@/components/PresetPicker";
+import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { MCP_PRESETS, type McpPreset } from "@/lib/presets";
 import { ScopeBanner, McpFileIndicator } from "@/components/ScopeGuard";
 import { DocsLink } from "@/components/DocsLink";
@@ -39,6 +40,7 @@ export function McpPage({ scope, homePath }: Props) {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
   const [serverIdError, setServerIdError] = useState<ValidationError | null>(
     null
   );
@@ -392,6 +394,14 @@ export function McpPage({ scope, homePath }: Props) {
           >
             From Template
           </button>
+          {basePath && (
+            <button
+              className="btn btn-sm"
+              onClick={() => setShowAiModal(true)}
+            >
+              AI Create
+            </button>
+          )}
           <button className="btn btn-primary btn-sm" onClick={startNew}>
             + Add Server
           </button>
@@ -533,6 +543,14 @@ export function McpPage({ scope, homePath }: Props) {
           presets={MCP_PRESETS}
           onSelect={handleSelectPreset}
           onClose={() => setShowPresets(false)}
+        />
+      )}
+      {showAiModal && basePath && (
+        <CreateWithAiModal
+          entityType="mcp"
+          repoPath={basePath}
+          onClose={() => setShowAiModal(false)}
+          onCreated={() => loadServers()}
         />
       )}
     </div>

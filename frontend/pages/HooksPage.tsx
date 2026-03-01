@@ -3,6 +3,7 @@ import type { Scope, HookEvent, HookGroup, HookHandler } from "@/types";
 import { HOOK_EVENTS } from "@/types";
 import * as api from "@/lib/tauri";
 import { PresetPicker } from "@/components/PresetPicker";
+import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { HOOK_PRESETS, type HookPreset } from "@/lib/presets";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import { DocsLink } from "@/components/DocsLink";
@@ -29,6 +30,7 @@ export function HooksPage({ scope, homePath }: Props) {
   const [saving, setSaving] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isProjectScope = scope?.type === "project";
@@ -181,6 +183,14 @@ export function HooksPage({ scope, homePath }: Props) {
               >
                 From Template
               </button>
+              {basePath && (
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setShowAiModal(true)}
+                >
+                  AI Create
+                </button>
+              )}
               <button className="btn btn-sm" onClick={startNew}>
                 + New
               </button>
@@ -505,6 +515,14 @@ export function HooksPage({ scope, homePath }: Props) {
           presets={HOOK_PRESETS}
           onSelect={handleSelectPreset}
           onClose={() => setShowPresets(false)}
+        />
+      )}
+      {showAiModal && basePath && (
+        <CreateWithAiModal
+          entityType="hook"
+          repoPath={basePath}
+          onClose={() => setShowAiModal(false)}
+          onCreated={() => loadHooks()}
         />
       )}
     </div>

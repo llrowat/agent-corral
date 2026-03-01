@@ -35,7 +35,8 @@ agent-corral/
 │   │   ├── DocsLink           # Links to Anthropic docs per feature
 │   │   ├── InlineValidation   # Form validation with auto-fix suggestions
 │   │   ├── PresetPicker       # Generic preset selection modal
-│   │   └── QuickSetup         # First-run setup wizard with starter presets
+│   │   ├── QuickSetup         # First-run setup wizard with starter presets
+│   │   └── CreateWithAiModal  # AI-powered entity creation (launches terminal)
 │   ├── pages/          # Page components
 │   │   ├── OverviewPage       # Dashboard with config summary
 │   │   ├── AgentsPage         # Agent studio (create/edit/delete)
@@ -73,6 +74,7 @@ agent-corral/
 - **Built-in Presets** (`frontend/lib/presets.ts`) provide ready-made configurations for agents (code reviewer, test writer, doc writer, refactorer, etc.), hooks, skills, MCP servers, config, and starter presets for the QuickSetup wizard.
 - **QuickSetup Wizard** (`QuickSetup`) detects repos with no Claude config and offers starter presets to bootstrap a working setup in one click.
 - **Inline Validation** (`InlineValidation`) provides real-time form validation for agent IDs, skill IDs, and server IDs with auto-fix suggestions (e.g., converting invalid slugs to valid ones).
+- **Create with AI** (`CreateWithAiModal`) launches Claude Code in a terminal with a tailored prompt to generate agents, skills, hooks, or MCP server configs from a natural-language description. Uses a lightweight terminal launcher (no session tracking).
 - **Docs Links** (`DocsLink`) links each feature page to the corresponding Anthropic documentation (agents, hooks, skills, MCP, config, memory).
 - **Pack-to-Plugin Migration** — The `migrate_agentpack` command converts legacy `.agentpack` files to the new directory-based plugin format.
 

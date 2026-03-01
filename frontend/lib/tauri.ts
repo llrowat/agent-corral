@@ -139,6 +139,24 @@ export async function getKnownTools(): Promise<string[]> {
   return invoke("get_known_tools");
 }
 
+export async function prepareAiCommand(
+  repoPath: string,
+  prompt: string
+): Promise<string> {
+  return invoke("prepare_ai_command", { repoPath, prompt });
+}
+
+export async function launchTerminal(
+  repoPath: string,
+  command: string
+): Promise<number> {
+  return invoke("launch_terminal", { repoPath, command });
+}
+
+export async function isProcessAlive(pid: number): Promise<boolean> {
+  return invoke("is_process_alive", { pid });
+}
+
 // -- Hooks commands --
 
 export async function readHooks(repoPath: string): Promise<HookEvent[]> {

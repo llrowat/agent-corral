@@ -11,6 +11,7 @@ import {
   type ValidationError,
 } from "@/components/InlineValidation";
 import { DocsLink } from "@/components/DocsLink";
+import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 
 interface Props {
   scope: Scope | null;
@@ -38,6 +39,7 @@ export function AgentsPage({ scope, homePath }: Props) {
   const [saving, setSaving] = useState(false);
   const [knownTools, setKnownTools] = useState<string[]>([]);
   const [showPresets, setShowPresets] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
   const [errors, setErrors] = useState<Record<string, ValidationError | null>>({});
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
@@ -172,7 +174,15 @@ export function AgentsPage({ scope, homePath }: Props) {
               >
                 From Template
               </button>
-<button
+              {basePath && (
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setShowAiModal(true)}
+                >
+                  AI Create
+                </button>
+              )}
+              <button
                 className="btn btn-sm"
                 onClick={() => {
                   setEditing(newAgent());
@@ -491,6 +501,14 @@ export function AgentsPage({ scope, homePath }: Props) {
           presets={AGENT_PRESETS}
           onSelect={handleSelectPreset}
           onClose={() => setShowPresets(false)}
+        />
+      )}
+      {showAiModal && basePath && (
+        <CreateWithAiModal
+          entityType="agent"
+          repoPath={basePath}
+          onClose={() => setShowAiModal(false)}
+          onCreated={() => loadAgents()}
         />
       )}
     </div>

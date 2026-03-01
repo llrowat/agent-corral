@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { Scope, Skill } from "@/types";
 import * as api from "@/lib/tauri";
 import { PresetPicker } from "@/components/PresetPicker";
+import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { SKILL_PRESETS, type SkillPreset } from "@/lib/presets";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import {
@@ -55,6 +56,7 @@ export function SkillsPage({ scope, homePath }: Props) {
   const [editing, setEditing] = useState<Skill | null>(null);
   const [saving, setSaving] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
   const [errors, setErrors] = useState<Record<string, ValidationError | null>>({});
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
@@ -168,6 +170,14 @@ export function SkillsPage({ scope, homePath }: Props) {
               >
                 From Template
               </button>
+              {basePath && (
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setShowAiModal(true)}
+                >
+                  AI Create
+                </button>
+              )}
               <button
                 className="btn btn-sm"
                 onClick={() => {
@@ -497,6 +507,14 @@ export function SkillsPage({ scope, homePath }: Props) {
           presets={SKILL_PRESETS}
           onSelect={handleSelectPreset}
           onClose={() => setShowPresets(false)}
+        />
+      )}
+      {showAiModal && basePath && (
+        <CreateWithAiModal
+          entityType="skill"
+          repoPath={basePath}
+          onClose={() => setShowAiModal(false)}
+          onCreated={() => loadSkills()}
         />
       )}
     </div>
