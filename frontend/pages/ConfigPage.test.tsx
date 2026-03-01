@@ -251,7 +251,7 @@ describe("ConfigPage", () => {
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue("Not set")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("Not set (defaults to Opus)")).toBeInTheDocument();
     });
 
     // Should show the form directly without a "No config found" card
@@ -408,5 +408,181 @@ describe("ConfigPage", () => {
       },
       { timeout: 3000 }
     );
+  });
+
+  // -- Feature Toggles tests --
+
+  it("renders feature toggle checkboxes", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Feature Toggles")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Agent Teams (Experimental)")).toBeInTheDocument();
+    expect(screen.getByText("Fast Mode")).toBeInTheDocument();
+    expect(screen.getByText("Extended Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Auto-approve Project MCP Servers")).toBeInTheDocument();
+    expect(screen.getByText("Respect .gitignore")).toBeInTheDocument();
+    expect(screen.getByText("Disable All Hooks")).toBeInTheDocument();
+  });
+
+  it("reads toggle values from raw config", async () => {
+    const configWithToggles: NormalizedConfig = {
+      model: null,
+      permissions: null,
+      ignorePatterns: null,
+      raw: { fastMode: true, alwaysThinkingEnabled: true },
+    };
+    mockReadClaudeConfig.mockResolvedValue(configWithToggles);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Feature Toggles")).toBeInTheDocument();
+    });
+
+    // Fast Mode and Extended Thinking should be checked
+    const checkboxes = screen.getAllByRole("checkbox");
+    const fastModeCheckbox = checkboxes.find(
+      (cb) => cb.closest("label")?.textContent?.includes("Fast Mode")
+    ) as HTMLInputElement;
+    const thinkingCheckbox = checkboxes.find(
+      (cb) => cb.closest("label")?.textContent?.includes("Extended Thinking")
+    ) as HTMLInputElement;
+
+    expect(fastModeCheckbox.checked).toBe(true);
+    expect(thinkingCheckbox.checked).toBe(true);
+  });
+
+  it("reads agent teams toggle from env section", async () => {
+    const configWithTeams: NormalizedConfig = {
+      model: null,
+      permissions: null,
+      ignorePatterns: null,
+      raw: { env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" } },
+    };
+    mockReadClaudeConfig.mockResolvedValue(configWithTeams);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Feature Toggles")).toBeInTheDocument();
+    });
+
+    const checkboxes = screen.getAllByRole("checkbox");
+    const teamsCheckbox = checkboxes.find(
+      (cb) =>
+        cb.closest("label")?.textContent?.includes("Agent Teams")
+    ) as HTMLInputElement;
+
+    expect(teamsCheckbox.checked).toBe(true);
+  });
+
+  it("shows save bar when a toggle is changed", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Feature Toggles")).toBeInTheDocument();
+    });
+
+    // No save bar initially
+    expect(screen.queryByTestId("save-bar")).not.toBeInTheDocument();
+
+    // Toggle Fast Mode on
+    const checkboxes = screen.getAllByRole("checkbox");
+    const fastModeCheckbox = checkboxes.find(
+      (cb) => cb.closest("label")?.textContent?.includes("Fast Mode")
+    ) as HTMLInputElement;
+    fireEvent.click(fastModeCheckbox);
+
+    expect(screen.getByTestId("save-bar")).toBeInTheDocument();
+  });
+
+  it("saves toggle values in raw config", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Feature Toggles")).toBeInTheDocument();
+    });
+
+    // Toggle Fast Mode on
+    const checkboxes = screen.getAllByRole("checkbox");
+    const fastModeCheckbox = checkboxes.find(
+      (cb) => cb.closest("label")?.textContent?.includes("Fast Mode")
+    ) as HTMLInputElement;
+    fireEvent.click(fastModeCheckbox);
+
+    // After save, the backend is called and config is reloaded
+    const updatedConfig: NormalizedConfig = {
+      model: null,
+      permissions: null,
+      ignorePatterns: null,
+      raw: { fastMode: true },
+    };
+    mockReadClaudeConfig.mockResolvedValue(updatedConfig);
+
+    fireEvent.click(screen.getByText("Save Changes"));
+
+    await waitFor(() => {
+      expect(mockWriteClaudeConfig).toHaveBeenCalledWith(
+        "/home/user",
+        expect.objectContaining({
+          raw: expect.objectContaining({ fastMode: true }),
+        })
+      );
+    });
+  });
+
+  it("saves agent teams toggle to env section in raw", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Feature Toggles")).toBeInTheDocument();
+    });
+
+    // Toggle Agent Teams on
+    const checkboxes = screen.getAllByRole("checkbox");
+    const teamsCheckbox = checkboxes.find(
+      (cb) =>
+        cb.closest("label")?.textContent?.includes("Agent Teams")
+    ) as HTMLInputElement;
+    fireEvent.click(teamsCheckbox);
+
+    const updatedConfig: NormalizedConfig = {
+      model: null,
+      permissions: null,
+      ignorePatterns: null,
+      raw: { env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1" } },
+    };
+    mockReadClaudeConfig.mockResolvedValue(updatedConfig);
+
+    fireEvent.click(screen.getByText("Save Changes"));
+
+    await waitFor(() => {
+      expect(mockWriteClaudeConfig).toHaveBeenCalledWith(
+        "/home/user",
+        expect.objectContaining({
+          raw: expect.objectContaining({
+            env: expect.objectContaining({
+              CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+            }),
+          }),
+        })
+      );
+    });
+  });
+
+  it("model dropdown shows default Opus hint", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByDisplayValue("Not set (defaults to Opus)")
+      ).toBeInTheDocument();
+    });
   });
 });

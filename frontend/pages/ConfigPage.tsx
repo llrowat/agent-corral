@@ -17,11 +17,117 @@ const EMPTY_CONFIG: NormalizedConfig = {
 };
 
 const MODEL_OPTIONS = [
-  { value: "", label: "Not set" },
+  { value: "", label: "Not set (defaults to Opus)" },
   { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
   { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
   { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
 ];
+
+// -- Feature Toggles --
+
+interface FeatureToggleDef {
+  key: string;
+  label: string;
+  description: string;
+  /** JSON path within settings.json: top-level key or "env.VAR_NAME" for env vars */
+  settingsPath: string;
+  defaultValue?: boolean;
+}
+
+const FEATURE_TOGGLES: FeatureToggleDef[] = [
+  {
+    key: "enableTeams",
+    label: "Agent Teams (Experimental)",
+    description:
+      "Enable multi-agent team coordination. Agents can delegate tasks to teammates.",
+    settingsPath: "env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+  },
+  {
+    key: "fastMode",
+    label: "Fast Mode",
+    description:
+      "2.5x faster Opus output at higher per-token cost. Requires extra usage enabled.",
+    settingsPath: "fastMode",
+  },
+  {
+    key: "alwaysThinkingEnabled",
+    label: "Extended Thinking",
+    description: "Enable extended thinking by default for all sessions.",
+    settingsPath: "alwaysThinkingEnabled",
+  },
+  {
+    key: "enableAllProjectMcpServers",
+    label: "Auto-approve Project MCP Servers",
+    description:
+      "Automatically approve all MCP servers defined in the project.",
+    settingsPath: "enableAllProjectMcpServers",
+  },
+  {
+    key: "respectGitignore",
+    label: "Respect .gitignore",
+    description:
+      "Exclude .gitignore patterns from @ file picker suggestions.",
+    settingsPath: "respectGitignore",
+    defaultValue: true,
+  },
+  {
+    key: "disableAllHooks",
+    label: "Disable All Hooks",
+    description:
+      "Disable all hooks and statusLine execution globally.",
+    settingsPath: "disableAllHooks",
+  },
+];
+
+/** Read a toggle value from the raw settings object. Supports "env.VAR" paths. */
+function readToggle(
+  raw: Record<string, unknown>,
+  path: string
+): boolean | null {
+  if (path.startsWith("env.")) {
+    const envKey = path.slice(4);
+    const env = raw.env as Record<string, unknown> | undefined;
+    if (!env || !(envKey in env)) return null;
+    const val = env[envKey];
+    return val === "1" || val === "true" || val === true;
+  }
+  if (!(path in raw)) return null;
+  return !!raw[path];
+}
+
+/** Write a toggle value into a raw settings object (mutates). Supports "env.VAR" paths. */
+function writeToggle(
+  raw: Record<string, unknown>,
+  path: string,
+  value: boolean | null
+) {
+  if (path.startsWith("env.")) {
+    const envKey = path.slice(4);
+    if (value === null || value === false) {
+      if (raw.env && typeof raw.env === "object") {
+        const env = { ...(raw.env as Record<string, unknown>) };
+        delete env[envKey];
+        if (Object.keys(env).length === 0) {
+          delete raw.env;
+        } else {
+          raw.env = env;
+        }
+      }
+    } else {
+      const env = (raw.env && typeof raw.env === "object"
+        ? { ...(raw.env as Record<string, unknown>) }
+        : {}) as Record<string, unknown>;
+      env[envKey] = "1";
+      raw.env = env;
+    }
+    return;
+  }
+  if (value === null || value === false) {
+    delete raw[path];
+  } else {
+    raw[path] = true;
+  }
+}
 
 // -- Helpers --
 
@@ -55,15 +161,41 @@ function buildPermissions(
   return result;
 }
 
-/** Get raw config fields that aren't managed by the form (model, permissions, ignorePatterns). */
+/** Keys managed by the form — excluded from the advanced JSON editor. */
+const MANAGED_RAW_KEYS = new Set([
+  "model",
+  "permissions",
+  "ignorePatterns",
+  ...FEATURE_TOGGLES.filter((t) => !t.settingsPath.startsWith("env.")).map(
+    (t) => t.settingsPath
+  ),
+]);
+
+/** Env-var keys managed by toggles — excluded from the advanced JSON env section. */
+const MANAGED_ENV_KEYS = new Set(
+  FEATURE_TOGGLES.filter((t) => t.settingsPath.startsWith("env.")).map((t) =>
+    t.settingsPath.slice(4)
+  )
+);
+
+/** Get raw config fields that aren't managed by the form. */
 function getExtraRawFields(
   raw: Record<string, unknown>
 ): Record<string, unknown> {
   const extra: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (key !== "model" && key !== "permissions" && key !== "ignorePatterns") {
-      extra[key] = value;
+    if (MANAGED_RAW_KEYS.has(key)) continue;
+    if (key === "env" && typeof value === "object" && value !== null) {
+      // Strip managed env keys
+      const envObj = value as Record<string, unknown>;
+      const filteredEnv: Record<string, unknown> = {};
+      for (const [ek, ev] of Object.entries(envObj)) {
+        if (!MANAGED_ENV_KEYS.has(ek)) filteredEnv[ek] = ev;
+      }
+      if (Object.keys(filteredEnv).length > 0) extra.env = filteredEnv;
+      continue;
     }
+    extra[key] = value;
   }
   return extra;
 }
@@ -184,6 +316,7 @@ export function ConfigPage({ scope }: Props) {
   const [ignorePatterns, setIgnorePatterns] = useState<string[]>([]);
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
   const [deniedTools, setDeniedTools] = useState<string[]>([]);
+  const [toggles, setToggles] = useState<Record<string, boolean | null>>({});
   const [advancedJson, setAdvancedJson] = useState("{}");
   const [jsonError, setJsonError] = useState<string | null>(null);
 
@@ -212,9 +345,14 @@ export function ConfigPage({ scope }: Props) {
     const perms = parsePermissions(config.permissions);
     setAllowedTools(perms.allow);
     setDeniedTools(perms.deny);
-    const extra = getExtraRawFields(
-      (config.raw ?? {}) as Record<string, unknown>
-    );
+    // Read toggle values from raw
+    const raw = (config.raw ?? {}) as Record<string, unknown>;
+    const toggleState: Record<string, boolean | null> = {};
+    for (const toggle of FEATURE_TOGGLES) {
+      toggleState[toggle.key] = readToggle(raw, toggle.settingsPath);
+    }
+    setToggles(toggleState);
+    const extra = getExtraRawFields(raw);
     setAdvancedJson(
       Object.keys(extra).length > 0 ? JSON.stringify(extra, null, 2) : "{}"
     );
@@ -276,6 +414,13 @@ export function ConfigPage({ scope }: Props) {
     const savedPerms = parsePermissions(savedConfig.permissions);
     if (JSON.stringify(currentPerms) !== JSON.stringify(savedPerms)) return true;
 
+    // Feature toggles
+    const savedRaw = (savedConfig.raw ?? {}) as Record<string, unknown>;
+    for (const toggle of FEATURE_TOGGLES) {
+      const savedVal = readToggle(savedRaw, toggle.settingsPath);
+      if (toggles[toggle.key] !== savedVal) return true;
+    }
+
     // Advanced JSON (extra raw fields)
     const savedExtra = getExtraRawFields(
       (savedConfig.raw ?? {}) as Record<string, unknown>
@@ -303,6 +448,11 @@ export function ConfigPage({ scope }: Props) {
         rawObj = JSON.parse(advancedJson);
       } catch {
         /* keep empty */
+      }
+
+      // Merge feature toggle values into raw
+      for (const toggle of FEATURE_TOGGLES) {
+        writeToggle(rawObj, toggle.settingsPath, toggles[toggle.key] ?? null);
       }
 
       const config: NormalizedConfig = {
@@ -413,6 +563,43 @@ export function ConfigPage({ scope }: Props) {
                 </p>
               )}
           </div>
+        </div>
+      </div>
+
+      {/* ── Feature Toggles ── */}
+      <div className="config-section">
+        <div className="config-section-header">
+          <h3>Feature Toggles</h3>
+        </div>
+        <div className="config-section-body">
+          {FEATURE_TOGGLES.map((toggle) => {
+            const current = toggles[toggle.key];
+            const isOn = current === true;
+            const isExplicit = current !== null;
+            return (
+              <div key={toggle.key} className="config-field toggle-field">
+                <label className="toggle-label">
+                  <input
+                    type="checkbox"
+                    checked={isOn}
+                    onChange={(e) =>
+                      setToggles((prev) => ({
+                        ...prev,
+                        [toggle.key]: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>{toggle.label}</span>
+                  {toggle.defaultValue !== undefined && !isExplicit && (
+                    <span className="toggle-default">
+                      (default: {toggle.defaultValue ? "on" : "off"})
+                    </span>
+                  )}
+                </label>
+                <p className="config-field-hint">{toggle.description}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
 
