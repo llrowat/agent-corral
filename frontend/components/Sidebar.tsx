@@ -18,6 +18,7 @@ const navGroups: NavGroup[] = [
     label: "Project",
     items: [
       { path: "/overview", label: "Overview", icon: "grid" },
+      { path: "/claude-md", label: "CLAUDE.md", icon: "doc" },
     ],
   },
   {
@@ -35,6 +36,7 @@ const navGroups: NavGroup[] = [
     label: "App",
     items: [
       { path: "/plugins", label: "Plugins", icon: "package" },
+      { path: "/history", label: "History", icon: "history" },
       { path: "/settings", label: "Settings", icon: "wrench" },
     ],
   },
@@ -99,6 +101,8 @@ function getIcon(name: string): string {
 package: "\u25A3",
     template: "\u25B8",
     wrench: "\u2692",
+    doc: "\u2263",
+    history: "\u29D6",
   };
   return icons[name] ?? "\u25CF";
 }

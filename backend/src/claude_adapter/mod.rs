@@ -94,6 +94,8 @@ pub struct HookHandler {
 pub struct HookGroup {
     pub matcher: Option<String>,
     pub hooks: Vec<HookHandler>,
+    #[serde(rename = "_disabled", skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,6 +136,8 @@ pub struct McpServer {
     pub url: Option<String>,
     pub env: Option<serde_json::Value>,
     pub headers: Option<serde_json::Value>,
+    #[serde(rename = "_disabled", skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
 }
 
 /// Known Claude Code tools for the tools selector
@@ -150,6 +154,63 @@ pub const KNOWN_TOOLS: &[&str] = &[
     "NotebookEdit",
     "Agent",
 ];
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigSnapshot {
+    pub snapshot_id: String,
+    pub label: String,
+    pub timestamp: String,
+    pub settings_json: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigSnapshotSummary {
+    pub snapshot_id: String,
+    pub label: String,
+    pub timestamp: String,
+    pub has_settings: bool,
+}
+
+// -- Config Bundle types (backup/restore) --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigBundle {
+    pub version: String,
+    pub created_at: String,
+    pub scope: String,
+    pub agents: Vec<serde_json::Value>,
+    pub skills: Vec<serde_json::Value>,
+    pub hooks: Vec<serde_json::Value>,
+    pub mcp_servers: serde_json::Value,
+    pub settings: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportBundleResult {
+    pub agents_imported: usize,
+    pub skills_imported: usize,
+    pub hooks_imported: usize,
+    pub mcp_servers_imported: usize,
+    pub settings_imported: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectScanResult {
+    pub has_claude_md: bool,
+    pub claude_md_count: usize,
+    pub agent_count: usize,
+    pub skill_count: usize,
+    pub hook_count: usize,
+    pub mcp_server_count: usize,
+    pub has_settings: bool,
+    pub has_memory: bool,
+    pub memory_store_count: usize,
+}
 
 pub struct ClaudeRepoAdapter;
 
@@ -588,9 +649,14 @@ impl ClaudeRepoAdapter {
                     });
                 }
 
+                let disabled = group_val
+                    .get("_disabled")
+                    .and_then(|v| v.as_bool());
+
                 groups.push(HookGroup {
                     matcher,
                     hooks: handlers,
+                    disabled,
                 });
             }
 
@@ -671,6 +737,12 @@ impl ClaudeRepoAdapter {
                         "hooks".to_string(),
                         serde_json::Value::Array(hooks_arr),
                     );
+                    if let Some(true) = group.disabled {
+                        group_obj.insert(
+                            "_disabled".to_string(),
+                            serde_json::Value::Bool(true),
+                        );
+                    }
                     groups_arr.push(serde_json::Value::Object(group_obj));
                 }
                 hooks_obj.insert(event.event.clone(), serde_json::Value::Array(groups_arr));
@@ -860,6 +932,10 @@ impl ClaudeRepoAdapter {
             let env = server_val.get("env").cloned();
             let headers = server_val.get("headers").cloned();
 
+            let disabled = server_val
+                .get("_disabled")
+                .and_then(|v| v.as_bool());
+
             servers.push(McpServer {
                 server_id: server_id.clone(),
                 server_type,
@@ -868,6 +944,7 @@ impl ClaudeRepoAdapter {
                 url,
                 env,
                 headers,
+                disabled,
             });
         }
 
@@ -972,6 +1049,453 @@ impl ClaudeRepoAdapter {
                     server_id.to_string(),
                 ));
             }
+        }
+
+        let json = serde_json::to_string_pretty(&raw)?;
+        atomic_write(&mcp_path, &json)?;
+        Ok(())
+    }
+
+    // -- Config Bundle (backup/restore) --
+
+    /// Export all configuration as a JSON bundle
+    pub fn export_config_bundle(
+        base_path: &str,
+        is_global: bool,
+    ) -> Result<Vec<u8>, ClaudeAdapterError> {
+        let agents = Self::read_agents(base_path).unwrap_or_default();
+        let agents_json: Vec<serde_json::Value> = agents
+            .iter()
+            .map(|a| serde_json::to_value(a).unwrap_or_default())
+            .collect();
+
+        let skills = Self::read_skills(base_path).unwrap_or_default();
+        let skills_json: Vec<serde_json::Value> = skills
+            .iter()
+            .map(|s| serde_json::to_value(s).unwrap_or_default())
+            .collect();
+
+        let hooks = Self::read_hooks(base_path).unwrap_or_default();
+        let hooks_json: Vec<serde_json::Value> = hooks
+            .iter()
+            .map(|h| serde_json::to_value(h).unwrap_or_default())
+            .collect();
+
+        let mcp_servers = Self::read_mcp_servers(base_path, is_global).unwrap_or_default();
+        let mcp_map: serde_json::Map<String, serde_json::Value> = mcp_servers
+            .iter()
+            .map(|s| {
+                (
+                    s.server_id.clone(),
+                    serde_json::to_value(s).unwrap_or_default(),
+                )
+            })
+            .collect();
+
+        let settings = Self::read_config(base_path)
+            .map(|c| c.raw)
+            .unwrap_or_else(|_| serde_json::json!({}));
+
+        let bundle = ConfigBundle {
+            version: "1.0".to_string(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+            scope: if is_global {
+                "global".to_string()
+            } else {
+                "project".to_string()
+            },
+            agents: agents_json,
+            skills: skills_json,
+            hooks: hooks_json,
+            mcp_servers: serde_json::Value::Object(mcp_map),
+            settings,
+        };
+
+        let bytes = serde_json::to_vec_pretty(&bundle)?;
+        Ok(bytes)
+    }
+
+    /// Import configuration from a JSON bundle
+    pub fn import_config_bundle(
+        base_path: &str,
+        is_global: bool,
+        bundle_bytes: &[u8],
+        mode: &str,
+    ) -> Result<ImportBundleResult, ClaudeAdapterError> {
+        let bundle: ConfigBundle = serde_json::from_slice(bundle_bytes)?;
+        let overwrite = mode == "overwrite";
+
+        let mut result = ImportBundleResult {
+            agents_imported: 0,
+            skills_imported: 0,
+            hooks_imported: 0,
+            mcp_servers_imported: 0,
+            settings_imported: false,
+        };
+
+        // Import agents
+        let existing_agents = Self::read_agents(base_path).unwrap_or_default();
+        let existing_agent_ids: std::collections::HashSet<String> =
+            existing_agents.iter().map(|a| a.agent_id.clone()).collect();
+
+        for agent_val in &bundle.agents {
+            if let Ok(agent) = serde_json::from_value::<Agent>(agent_val.clone()) {
+                if overwrite || !existing_agent_ids.contains(&agent.agent_id) {
+                    Self::write_agent(base_path, &agent)?;
+                    result.agents_imported += 1;
+                }
+            }
+        }
+
+        // Import skills
+        let existing_skills = Self::read_skills(base_path).unwrap_or_default();
+        let existing_skill_ids: std::collections::HashSet<String> =
+            existing_skills.iter().map(|s| s.skill_id.clone()).collect();
+
+        for skill_val in &bundle.skills {
+            if let Ok(skill) = serde_json::from_value::<Skill>(skill_val.clone()) {
+                if overwrite || !existing_skill_ids.contains(&skill.skill_id) {
+                    Self::write_skill(base_path, &skill)?;
+                    result.skills_imported += 1;
+                }
+            }
+        }
+
+        // Import hooks
+        if !bundle.hooks.is_empty() {
+            let mut new_hooks: Vec<HookEvent> = Vec::new();
+            for hook_val in &bundle.hooks {
+                if let Ok(hook) = serde_json::from_value::<HookEvent>(hook_val.clone()) {
+                    new_hooks.push(hook);
+                }
+            }
+
+            if overwrite {
+                Self::write_hooks(base_path, &new_hooks)?;
+                result.hooks_imported = new_hooks.len();
+            } else {
+                let existing_hooks = Self::read_hooks(base_path).unwrap_or_default();
+                let existing_events: std::collections::HashSet<String> =
+                    existing_hooks.iter().map(|h| h.event.clone()).collect();
+
+                let mut merged = existing_hooks;
+                for hook in &new_hooks {
+                    if !existing_events.contains(&hook.event) {
+                        merged.push(hook.clone());
+                        result.hooks_imported += 1;
+                    }
+                }
+                Self::write_hooks(base_path, &merged)?;
+            }
+        }
+
+        // Import MCP servers
+        if let Some(servers_obj) = bundle.mcp_servers.as_object() {
+            let existing_servers = Self::read_mcp_servers(base_path, is_global).unwrap_or_default();
+            let existing_server_ids: std::collections::HashSet<String> =
+                existing_servers.iter().map(|s| s.server_id.clone()).collect();
+
+            for (_id, server_val) in servers_obj {
+                if let Ok(server) = serde_json::from_value::<McpServer>(server_val.clone()) {
+                    if overwrite || !existing_server_ids.contains(&server.server_id) {
+                        Self::write_mcp_server(base_path, &server, is_global)?;
+                        result.mcp_servers_imported += 1;
+                    }
+                }
+            }
+        }
+
+        // Import settings
+        if bundle.settings != serde_json::json!({}) {
+            if overwrite {
+                let settings_path = Path::new(base_path).join(".claude/settings.json");
+                let claude_dir = Path::new(base_path).join(".claude");
+                fs::create_dir_all(&claude_dir)?;
+                // Preserve hooks from existing settings when overwriting
+                let existing_raw: serde_json::Value = if settings_path.exists() {
+                    let contents = fs::read_to_string(&settings_path)?;
+                    serde_json::from_str(&contents)?
+                } else {
+                    serde_json::json!({})
+                };
+                let mut new_settings = bundle.settings.clone();
+                // Merge: don't overwrite hooks via settings import (hooks are handled separately)
+                if let Some(existing_hooks) = existing_raw.get("hooks") {
+                    new_settings["hooks"] = existing_hooks.clone();
+                }
+                let json = serde_json::to_string_pretty(&new_settings)?;
+                atomic_write(&settings_path, &json)?;
+                result.settings_imported = true;
+            } else {
+                // In merge mode, only import settings if no settings exist
+                let settings_path = Path::new(base_path).join(".claude/settings.json");
+                if !settings_path.exists() {
+                    let claude_dir = Path::new(base_path).join(".claude");
+                    fs::create_dir_all(&claude_dir)?;
+                    let json = serde_json::to_string_pretty(&bundle.settings)?;
+                    atomic_write(&settings_path, &json)?;
+                    result.settings_imported = true;
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    // -- Enable/Disable --
+
+    /// Disable an agent by renaming its .md file to .md.disabled
+    pub fn disable_agent(base_path: &str, agent_id: &str) -> Result<(), ClaudeAdapterError> {
+        let agents_dir = Path::new(base_path).join(".claude/agents");
+        let md_path = agents_dir.join(format!("{}.md", agent_id));
+        if !md_path.exists() {
+            return Err(ClaudeAdapterError::AgentNotFound(agent_id.to_string()));
+        }
+        let disabled_path = agents_dir.join(format!("{}.md.disabled", agent_id));
+        fs::rename(&md_path, &disabled_path)?;
+
+        // Also rename meta sidecar if it exists
+        let meta_path = agents_dir.join(format!("{}.meta.json", agent_id));
+        if meta_path.exists() {
+            let meta_disabled = agents_dir.join(format!("{}.meta.json.disabled", agent_id));
+            fs::rename(&meta_path, &meta_disabled)?;
+        }
+        Ok(())
+    }
+
+    /// Enable a previously disabled agent by renaming .md.disabled back to .md
+    pub fn enable_agent(base_path: &str, agent_id: &str) -> Result<(), ClaudeAdapterError> {
+        let agents_dir = Path::new(base_path).join(".claude/agents");
+        let disabled_path = agents_dir.join(format!("{}.md.disabled", agent_id));
+        if !disabled_path.exists() {
+            return Err(ClaudeAdapterError::AgentNotFound(agent_id.to_string()));
+        }
+        let md_path = agents_dir.join(format!("{}.md", agent_id));
+        fs::rename(&disabled_path, &md_path)?;
+
+        // Also rename meta sidecar back if it exists
+        let meta_disabled = agents_dir.join(format!("{}.meta.json.disabled", agent_id));
+        if meta_disabled.exists() {
+            let meta_path = agents_dir.join(format!("{}.meta.json", agent_id));
+            fs::rename(&meta_disabled, &meta_path)?;
+        }
+        Ok(())
+    }
+
+    /// Check if an agent is disabled
+    pub fn is_agent_disabled(base_path: &str, agent_id: &str) -> bool {
+        let agents_dir = Path::new(base_path).join(".claude/agents");
+        agents_dir
+            .join(format!("{}.md.disabled", agent_id))
+            .exists()
+    }
+
+    /// List agent IDs that are currently disabled
+    pub fn list_disabled_agents(base_path: &str) -> Result<Vec<String>, ClaudeAdapterError> {
+        let agents_dir = Path::new(base_path).join(".claude/agents");
+        if !agents_dir.exists() {
+            return Ok(vec![]);
+        }
+
+        let mut disabled = Vec::new();
+        for entry in fs::read_dir(&agents_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            if file_name.ends_with(".md.disabled") {
+                let agent_id = file_name.trim_end_matches(".md.disabled").to_string();
+                if !agent_id.is_empty() {
+                    disabled.push(agent_id);
+                }
+            }
+        }
+        disabled.sort();
+        Ok(disabled)
+    }
+
+    /// Disable a hook group by adding a "_disabled": true field in settings.json
+    pub fn disable_hook(
+        base_path: &str,
+        event: &str,
+        group_index: usize,
+    ) -> Result<(), ClaudeAdapterError> {
+        let settings_path = Path::new(base_path).join(".claude/settings.json");
+        if !settings_path.exists() {
+            return Err(ClaudeAdapterError::ConfigNotFound(
+                settings_path.to_string_lossy().to_string(),
+            ));
+        }
+
+        let contents = fs::read_to_string(&settings_path)?;
+        let mut raw: serde_json::Value = serde_json::from_str(&contents)?;
+
+        let group = raw
+            .get_mut("hooks")
+            .and_then(|h| h.get_mut(event))
+            .and_then(|arr| arr.get_mut(group_index))
+            .ok_or_else(|| {
+                ClaudeAdapterError::ConfigNotFound(format!(
+                    "Hook group {}[{}] not found",
+                    event, group_index
+                ))
+            })?;
+
+        if let Some(obj) = group.as_object_mut() {
+            obj.insert("_disabled".to_string(), serde_json::Value::Bool(true));
+        }
+
+        let json = serde_json::to_string_pretty(&raw)?;
+        atomic_write(&settings_path, &json)?;
+        Ok(())
+    }
+
+    /// Enable a hook group by removing the "_disabled" field from settings.json
+    pub fn enable_hook(
+        base_path: &str,
+        event: &str,
+        group_index: usize,
+    ) -> Result<(), ClaudeAdapterError> {
+        let settings_path = Path::new(base_path).join(".claude/settings.json");
+        if !settings_path.exists() {
+            return Err(ClaudeAdapterError::ConfigNotFound(
+                settings_path.to_string_lossy().to_string(),
+            ));
+        }
+
+        let contents = fs::read_to_string(&settings_path)?;
+        let mut raw: serde_json::Value = serde_json::from_str(&contents)?;
+
+        let group = raw
+            .get_mut("hooks")
+            .and_then(|h| h.get_mut(event))
+            .and_then(|arr| arr.get_mut(group_index))
+            .ok_or_else(|| {
+                ClaudeAdapterError::ConfigNotFound(format!(
+                    "Hook group {}[{}] not found",
+                    event, group_index
+                ))
+            })?;
+
+        if let Some(obj) = group.as_object_mut() {
+            obj.remove("_disabled");
+        }
+
+        let json = serde_json::to_string_pretty(&raw)?;
+        atomic_write(&settings_path, &json)?;
+        Ok(())
+    }
+
+    /// Disable a skill by renaming SKILL.md to SKILL.md.disabled
+    pub fn disable_skill(base_path: &str, skill_id: &str) -> Result<(), ClaudeAdapterError> {
+        let skill_dir = Path::new(base_path).join(".claude/skills").join(skill_id);
+        let skill_md = skill_dir.join("SKILL.md");
+        if !skill_md.exists() {
+            return Err(ClaudeAdapterError::SkillNotFound(skill_id.to_string()));
+        }
+        let disabled_path = skill_dir.join("SKILL.md.disabled");
+        fs::rename(&skill_md, &disabled_path)?;
+        Ok(())
+    }
+
+    /// Enable a previously disabled skill by renaming SKILL.md.disabled back to SKILL.md
+    pub fn enable_skill(base_path: &str, skill_id: &str) -> Result<(), ClaudeAdapterError> {
+        let skill_dir = Path::new(base_path).join(".claude/skills").join(skill_id);
+        let disabled_path = skill_dir.join("SKILL.md.disabled");
+        if !disabled_path.exists() {
+            return Err(ClaudeAdapterError::SkillNotFound(skill_id.to_string()));
+        }
+        let skill_md = skill_dir.join("SKILL.md");
+        fs::rename(&disabled_path, &skill_md)?;
+        Ok(())
+    }
+
+    /// List skill IDs that are currently disabled
+    pub fn list_disabled_skills(base_path: &str) -> Result<Vec<String>, ClaudeAdapterError> {
+        let skills_dir = Path::new(base_path).join(".claude/skills");
+        if !skills_dir.exists() {
+            return Ok(vec![]);
+        }
+
+        let mut disabled = Vec::new();
+        for entry in fs::read_dir(&skills_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                let disabled_md = path.join("SKILL.md.disabled");
+                if disabled_md.exists() {
+                    if let Some(skill_id) =
+                        path.file_name().map(|s| s.to_string_lossy().to_string())
+                    {
+                        disabled.push(skill_id);
+                    }
+                }
+            }
+        }
+        disabled.sort();
+        Ok(disabled)
+    }
+
+    /// Disable an MCP server by adding a "_disabled": true field in the MCP JSON
+    pub fn disable_mcp_server(
+        base_path: &str,
+        server_id: &str,
+        is_global: bool,
+    ) -> Result<(), ClaudeAdapterError> {
+        let mcp_path = if is_global {
+            Path::new(base_path).join(".claude.json")
+        } else {
+            Path::new(base_path).join(".mcp.json")
+        };
+        if !mcp_path.exists() {
+            return Err(ClaudeAdapterError::McpServerNotFound(server_id.to_string()));
+        }
+
+        let contents = fs::read_to_string(&mcp_path)?;
+        let mut raw: serde_json::Value = serde_json::from_str(&contents)?;
+
+        let server = raw
+            .get_mut("mcpServers")
+            .and_then(|s| s.get_mut(server_id))
+            .ok_or_else(|| ClaudeAdapterError::McpServerNotFound(server_id.to_string()))?;
+
+        if let Some(obj) = server.as_object_mut() {
+            obj.insert("_disabled".to_string(), serde_json::Value::Bool(true));
+        }
+
+        let json = serde_json::to_string_pretty(&raw)?;
+        atomic_write(&mcp_path, &json)?;
+        Ok(())
+    }
+
+    /// Enable an MCP server by removing the "_disabled" field from the MCP JSON
+    pub fn enable_mcp_server(
+        base_path: &str,
+        server_id: &str,
+        is_global: bool,
+    ) -> Result<(), ClaudeAdapterError> {
+        let mcp_path = if is_global {
+            Path::new(base_path).join(".claude.json")
+        } else {
+            Path::new(base_path).join(".mcp.json")
+        };
+        if !mcp_path.exists() {
+            return Err(ClaudeAdapterError::McpServerNotFound(server_id.to_string()));
+        }
+
+        let contents = fs::read_to_string(&mcp_path)?;
+        let mut raw: serde_json::Value = serde_json::from_str(&contents)?;
+
+        let server = raw
+            .get_mut("mcpServers")
+            .and_then(|s| s.get_mut(server_id))
+            .ok_or_else(|| ClaudeAdapterError::McpServerNotFound(server_id.to_string()))?;
+
+        if let Some(obj) = server.as_object_mut() {
+            obj.remove("_disabled");
         }
 
         let json = serde_json::to_string_pretty(&raw)?;
@@ -1169,6 +1693,320 @@ impl ClaudeRepoAdapter {
             argument_hint,
             content: body,
         })
+    }
+
+    /// Read CLAUDE.md content from a repo (or global home). Returns empty string if not found.
+    pub fn read_claude_md(repo_path: &str) -> Result<String, ClaudeAdapterError> {
+        let md_path = Path::new(repo_path).join("CLAUDE.md");
+        if !md_path.exists() {
+            return Ok(String::new());
+        }
+        Ok(fs::read_to_string(&md_path)?)
+    }
+
+    /// List nested CLAUDE.md files in subdirectories (not the root one)
+    pub fn list_claude_md_files(repo_path: &str) -> Result<Vec<String>, ClaudeAdapterError> {
+        let base = Path::new(repo_path);
+        let mut files = Vec::new();
+        // Check common subdirectory patterns
+        if let Ok(entries) = fs::read_dir(base) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let nested_md = path.join("CLAUDE.md");
+                    if nested_md.exists() {
+                        if let Some(relative) = nested_md.strip_prefix(base).ok() {
+                            files.push(relative.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+        }
+        files.sort();
+        Ok(files)
+    }
+
+    /// Save a snapshot of the current config state with a label
+    pub fn save_config_snapshot(repo_path: &str, label: &str) -> Result<ConfigSnapshot, ClaudeAdapterError> {
+        let claude_dir = Path::new(repo_path).join(".claude");
+        let history_dir = claude_dir.join("history");
+        fs::create_dir_all(&history_dir)?;
+
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let snapshot_id = format!("{}_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"), label.replace(' ', "_"));
+
+        // Capture current state (settings.json only — CLAUDE.md is version-controlled)
+        let settings_path = claude_dir.join("settings.json");
+        let settings_content = if settings_path.exists() {
+            Some(fs::read_to_string(&settings_path)?)
+        } else {
+            None
+        };
+
+        let snapshot = ConfigSnapshot {
+            snapshot_id: snapshot_id.clone(),
+            label: label.to_string(),
+            timestamp: timestamp.clone(),
+            settings_json: settings_content,
+        };
+
+        let snapshot_path = history_dir.join(format!("{}.json", snapshot_id));
+        let json = serde_json::to_string_pretty(&snapshot)?;
+        atomic_write(&snapshot_path, &json)?;
+        Ok(snapshot)
+    }
+
+    /// List all config snapshots, newest first
+    pub fn list_config_snapshots(repo_path: &str) -> Result<Vec<ConfigSnapshotSummary>, ClaudeAdapterError> {
+        let history_dir = Path::new(repo_path).join(".claude/history");
+        if !history_dir.exists() {
+            return Ok(vec![]);
+        }
+
+        let mut summaries = Vec::new();
+        for entry in fs::read_dir(&history_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().map_or(false, |ext| ext == "json") {
+                if let Ok(contents) = fs::read_to_string(&path) {
+                    if let Ok(snapshot) = serde_json::from_str::<ConfigSnapshot>(&contents) {
+                        summaries.push(ConfigSnapshotSummary {
+                            snapshot_id: snapshot.snapshot_id,
+                            label: snapshot.label,
+                            timestamp: snapshot.timestamp,
+                            has_settings: snapshot.settings_json.is_some(),
+                        });
+                    }
+                }
+            }
+        }
+        summaries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        Ok(summaries)
+    }
+
+    /// Restore a config snapshot
+    pub fn restore_config_snapshot(repo_path: &str, snapshot_id: &str) -> Result<(), ClaudeAdapterError> {
+        let history_dir = Path::new(repo_path).join(".claude/history");
+        let snapshot_path = history_dir.join(format!("{}.json", snapshot_id));
+
+        if !snapshot_path.exists() {
+            return Err(ClaudeAdapterError::ConfigNotFound(snapshot_id.to_string()));
+        }
+
+        let contents = fs::read_to_string(&snapshot_path)?;
+        let snapshot: ConfigSnapshot = serde_json::from_str(&contents)?;
+
+        if let Some(ref settings) = snapshot.settings_json {
+            let claude_dir = Path::new(repo_path).join(".claude");
+            fs::create_dir_all(&claude_dir)?;
+            atomic_write(&claude_dir.join("settings.json"), settings)?;
+        }
+
+        Ok(())
+    }
+
+    /// Delete a config snapshot
+    pub fn delete_config_snapshot(repo_path: &str, snapshot_id: &str) -> Result<(), ClaudeAdapterError> {
+        let history_dir = Path::new(repo_path).join(".claude/history");
+        let snapshot_path = history_dir.join(format!("{}.json", snapshot_id));
+        if snapshot_path.exists() {
+            fs::remove_file(&snapshot_path)?;
+        }
+        Ok(())
+    }
+
+    /// Scan a project directory for Claude Code configuration and return a summary
+    pub fn scan_project_config(project_path: &Path) -> Result<ProjectScanResult, ClaudeAdapterError> {
+        let claude_dir = project_path.join(".claude");
+
+        // Check CLAUDE.md at root and inside .claude/
+        let root_claude_md = project_path.join("CLAUDE.md");
+        let inner_claude_md = claude_dir.join("CLAUDE.md");
+        let has_claude_md = root_claude_md.exists() || inner_claude_md.exists();
+
+        // Count all CLAUDE.md files: root, .claude/, and nested subdirectories
+        let mut claude_md_count: usize = 0;
+        if root_claude_md.exists() {
+            claude_md_count += 1;
+        }
+        if inner_claude_md.exists() {
+            claude_md_count += 1;
+        }
+        // Check one level of subdirectories for nested CLAUDE.md
+        if let Ok(entries) = fs::read_dir(project_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() && path.file_name().map_or(false, |n| n != ".claude") {
+                    if path.join("CLAUDE.md").exists() {
+                        claude_md_count += 1;
+                    }
+                }
+            }
+        }
+
+        // Count agents (.md files in .claude/agents/)
+        let agents_dir = claude_dir.join("agents");
+        let agent_count = if agents_dir.exists() {
+            fs::read_dir(&agents_dir)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter(|e| {
+                            e.path().extension().map_or(false, |ext| ext == "md")
+                        })
+                        .count()
+                })
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Count skills (subdirectories in .claude/skills/ that contain SKILL.md)
+        let skills_dir = claude_dir.join("skills");
+        let skill_count = if skills_dir.exists() {
+            fs::read_dir(&skills_dir)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter(|e| {
+                            e.path().is_dir() && e.path().join("SKILL.md").exists()
+                        })
+                        .count()
+                })
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Count hooks from settings.json
+        let settings_path = claude_dir.join("settings.json");
+        let has_settings = settings_path.exists();
+        let hook_count = if has_settings {
+            fs::read_to_string(&settings_path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| v.get("hooks").cloned())
+                .and_then(|h| {
+                    h.as_object().map(|obj| {
+                        obj.values()
+                            .filter_map(|v| v.as_array())
+                            .flat_map(|arr| arr.iter())
+                            .filter_map(|group| {
+                                group
+                                    .get("hooks")
+                                    .and_then(|h| h.as_array())
+                                    .map(|hooks| hooks.len())
+                            })
+                            .sum()
+                    })
+                })
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Count MCP servers from .mcp.json
+        let mcp_path = project_path.join(".mcp.json");
+        let mcp_server_count = if mcp_path.exists() {
+            fs::read_to_string(&mcp_path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| v.get("mcpServers").and_then(|m| m.as_object()).map(|obj| obj.len()))
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Check memory stores
+        let memory_dir = claude_dir.join("memory");
+        let has_memory = memory_dir.exists();
+        let memory_store_count = if has_memory {
+            fs::read_dir(&memory_dir)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter(|e| {
+                            e.path().is_file()
+                                && e.path().extension().map_or(false, |ext| ext == "md")
+                        })
+                        .count()
+                })
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        Ok(ProjectScanResult {
+            has_claude_md,
+            claude_md_count,
+            agent_count,
+            skill_count,
+            hook_count,
+            mcp_server_count,
+            has_settings,
+            has_memory,
+            memory_store_count,
+        })
+    }
+
+    /// Reorder hook groups within a specific event type.
+    /// `new_order` is an array of original indices specifying the desired order.
+    pub fn reorder_hook_groups(
+        base_path: &Path,
+        event: &str,
+        new_order: &[usize],
+    ) -> Result<(), ClaudeAdapterError> {
+        let settings_path = base_path.join(".claude/settings.json");
+        if !settings_path.exists() {
+            return Err(ClaudeAdapterError::ConfigNotFound(
+                settings_path.display().to_string(),
+            ));
+        }
+
+        let contents = fs::read_to_string(&settings_path)?;
+        let mut raw: serde_json::Value = serde_json::from_str(&contents)?;
+
+        let groups_arr = raw
+            .get_mut("hooks")
+            .and_then(|h| h.get_mut(event))
+            .and_then(|v| v.as_array_mut())
+            .ok_or_else(|| ClaudeAdapterError::ConfigNotFound(format!("hook event '{}'", event)))?;
+
+        let len = groups_arr.len();
+        if new_order.len() != len {
+            return Err(ClaudeAdapterError::ConfigNotFound(format!(
+                "new_order length {} does not match groups length {}",
+                new_order.len(),
+                len
+            )));
+        }
+
+        // Validate that new_order is a valid permutation
+        let mut seen = vec![false; len];
+        for &idx in new_order {
+            if idx >= len {
+                return Err(ClaudeAdapterError::ConfigNotFound(format!(
+                    "index {} out of bounds for {} groups",
+                    idx, len
+                )));
+            }
+            if seen[idx] {
+                return Err(ClaudeAdapterError::ConfigNotFound(format!(
+                    "duplicate index {} in new_order",
+                    idx
+                )));
+            }
+            seen[idx] = true;
+        }
+
+        let original: Vec<serde_json::Value> = groups_arr.drain(..).collect();
+        for &idx in new_order {
+            groups_arr.push(original[idx].clone());
+        }
+
+        let json = serde_json::to_string_pretty(&raw)?;
+        atomic_write(&settings_path, &json)?;
+        Ok(())
     }
 }
 
@@ -1589,6 +2427,7 @@ mod tests {
                     prompt: None,
                     timeout: Some(5000),
                 }],
+                disabled: None,
             }],
         }];
 
@@ -1643,6 +2482,141 @@ mod tests {
         let raw: serde_json::Value = serde_json::from_str(&contents).unwrap();
         assert_eq!(raw["model"], "claude-sonnet-4-20250514");
         assert_eq!(raw["customKey"], true);
+    }
+
+    // -- reorder_hook_groups tests --
+
+    #[test]
+    fn reorder_hook_groups_reverses_two_groups() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        fs::create_dir_all(base.join(".claude")).unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{
+                "hooks": {
+                    "PreToolUse": [
+                        { "matcher": "Bash", "hooks": [{ "type": "command", "command": "echo first" }] },
+                        { "matcher": "Write", "hooks": [{ "type": "command", "command": "echo second" }] }
+                    ]
+                }
+            }"#,
+        ).unwrap();
+
+        ClaudeRepoAdapter::reorder_hook_groups(base, "PreToolUse", &[1, 0]).unwrap();
+
+        let hooks = ClaudeRepoAdapter::read_hooks(base.to_str().unwrap()).unwrap();
+        let event = hooks.iter().find(|h| h.event == "PreToolUse").unwrap();
+        assert_eq!(event.groups.len(), 2);
+        assert_eq!(event.groups[0].matcher, Some("Write".to_string()));
+        assert_eq!(event.groups[1].matcher, Some("Bash".to_string()));
+    }
+
+    #[test]
+    fn reorder_hook_groups_preserves_other_settings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        fs::create_dir_all(base.join(".claude")).unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{
+                "model": "claude-sonnet-4-20250514",
+                "hooks": {
+                    "PreToolUse": [
+                        { "matcher": "A", "hooks": [] },
+                        { "matcher": "B", "hooks": [] }
+                    ]
+                }
+            }"#,
+        ).unwrap();
+
+        ClaudeRepoAdapter::reorder_hook_groups(base, "PreToolUse", &[1, 0]).unwrap();
+
+        let contents = fs::read_to_string(base.join(".claude/settings.json")).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert_eq!(raw["model"], "claude-sonnet-4-20250514");
+    }
+
+    #[test]
+    fn reorder_hook_groups_invalid_length_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        fs::create_dir_all(base.join(".claude")).unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{"hooks": {"PreToolUse": [{"matcher": "A", "hooks": []}, {"matcher": "B", "hooks": []}]}}"#,
+        ).unwrap();
+
+        let result = ClaudeRepoAdapter::reorder_hook_groups(base, "PreToolUse", &[0]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reorder_hook_groups_duplicate_index_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        fs::create_dir_all(base.join(".claude")).unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{"hooks": {"PreToolUse": [{"matcher": "A", "hooks": []}, {"matcher": "B", "hooks": []}]}}"#,
+        ).unwrap();
+
+        let result = ClaudeRepoAdapter::reorder_hook_groups(base, "PreToolUse", &[0, 0]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reorder_hook_groups_out_of_bounds_index_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        fs::create_dir_all(base.join(".claude")).unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{"hooks": {"PreToolUse": [{"matcher": "A", "hooks": []}]}}"#,
+        ).unwrap();
+
+        let result = ClaudeRepoAdapter::reorder_hook_groups(base, "PreToolUse", &[5]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reorder_hook_groups_nonexistent_event_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        fs::create_dir_all(base.join(".claude")).unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{"hooks": {"PreToolUse": [{"matcher": "A", "hooks": []}]}}"#,
+        ).unwrap();
+
+        let result = ClaudeRepoAdapter::reorder_hook_groups(base, "NonExistent", &[0]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reorder_hook_groups_no_settings_file_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::reorder_hook_groups(tmp.path(), "PreToolUse", &[0]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reorder_hook_groups_identity_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        fs::create_dir_all(base.join(".claude")).unwrap();
+        fs::write(
+            base.join(".claude/settings.json"),
+            r#"{"hooks": {"PreToolUse": [{"matcher": "A", "hooks": []}, {"matcher": "B", "hooks": []}, {"matcher": "C", "hooks": []}]}}"#,
+        ).unwrap();
+
+        ClaudeRepoAdapter::reorder_hook_groups(base, "PreToolUse", &[0, 1, 2]).unwrap();
+
+        let hooks = ClaudeRepoAdapter::read_hooks(base.to_str().unwrap()).unwrap();
+        let event = hooks.iter().find(|h| h.event == "PreToolUse").unwrap();
+        assert_eq!(event.groups[0].matcher, Some("A".to_string()));
+        assert_eq!(event.groups[1].matcher, Some("B".to_string()));
+        assert_eq!(event.groups[2].matcher, Some("C".to_string()));
     }
 
     // -- skills tests --
@@ -1739,6 +2713,7 @@ mod tests {
             url: None,
             env: Some(serde_json::json!({"API_KEY": "test"})),
             headers: None,
+            disabled: None,
         };
 
         ClaudeRepoAdapter::write_mcp_server(path, &server, false).unwrap();
@@ -1764,6 +2739,7 @@ mod tests {
             url: Some("https://example.com/mcp".to_string()),
             env: None,
             headers: None,
+            disabled: None,
         };
 
         ClaudeRepoAdapter::write_mcp_server(path, &server, true).unwrap();
@@ -1784,6 +2760,7 @@ mod tests {
             url: None,
             env: None,
             headers: None,
+            disabled: None,
         };
 
         ClaudeRepoAdapter::write_mcp_server(path, &server, false).unwrap();
@@ -1863,10 +2840,823 @@ mod tests {
             url: None,
             env: None,
             headers: None,
+            disabled: None,
         };
         let json = serde_json::to_value(&server).unwrap();
         assert!(json.get("serverId").is_some());
         // "type" field uses serde rename
         assert!(json.get("type").is_some());
+    }
+
+    // -- CLAUDE.md tests --
+
+    #[test]
+    fn read_claude_md_returns_empty_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::read_claude_md(dir.path().to_str().unwrap()).unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn read_claude_md_reads_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        let content = "# Project Instructions\n\nAlways write tests.";
+        std::fs::write(dir.path().join("CLAUDE.md"), content).unwrap();
+        let result = ClaudeRepoAdapter::read_claude_md(path).unwrap();
+        assert_eq!(result, content);
+    }
+
+    #[test]
+    fn list_claude_md_files_finds_nested() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("frontend");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("CLAUDE.md"), "# Frontend").unwrap();
+        let files = ClaudeRepoAdapter::list_claude_md_files(dir.path().to_str().unwrap()).unwrap();
+        assert_eq!(files, vec!["frontend/CLAUDE.md"]);
+    }
+
+    // -- config snapshot tests --
+
+    #[test]
+    fn save_and_list_config_snapshots() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        // Create some config first
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(claude_dir.join("settings.json"), r#"{"model":"claude-sonnet-4-6"}"#).unwrap();
+
+        let snapshot = ClaudeRepoAdapter::save_config_snapshot(path, "test snapshot").unwrap();
+        assert!(!snapshot.snapshot_id.is_empty());
+        assert_eq!(snapshot.label, "test snapshot");
+        assert!(snapshot.settings_json.is_some());
+
+        let list = ClaudeRepoAdapter::list_config_snapshots(path).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].label, "test snapshot");
+        assert!(list[0].has_settings);
+    }
+
+    #[test]
+    fn restore_config_snapshot_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(claude_dir.join("settings.json"), r#"{"model":"claude-sonnet-4-6"}"#).unwrap();
+
+        let snapshot = ClaudeRepoAdapter::save_config_snapshot(path, "before change").unwrap();
+        // Change config
+        std::fs::write(claude_dir.join("settings.json"), r#"{"model":"claude-opus-4-6"}"#).unwrap();
+        // Restore
+        ClaudeRepoAdapter::restore_config_snapshot(path, &snapshot.snapshot_id).unwrap();
+        let restored = std::fs::read_to_string(claude_dir.join("settings.json")).unwrap();
+        assert!(restored.contains("claude-sonnet-4-6"));
+    }
+
+    #[test]
+    fn list_snapshots_empty_when_no_history() {
+        let dir = tempfile::tempdir().unwrap();
+        let list = ClaudeRepoAdapter::list_config_snapshots(dir.path().to_str().unwrap()).unwrap();
+        assert!(list.is_empty());
+    }
+
+    // -- enable/disable agent tests --
+
+    #[test]
+    fn disable_and_enable_agent_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let agent = Agent {
+            agent_id: "toggle-me".to_string(),
+            name: "Toggle Agent".to_string(),
+            description: "Can be toggled".to_string(),
+            system_prompt: "Hello".to_string(),
+            tools: vec![],
+            model_override: None,
+            memory: None,
+        };
+
+        ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
+        assert!(!ClaudeRepoAdapter::is_agent_disabled(path, "toggle-me"));
+
+        // Disable
+        ClaudeRepoAdapter::disable_agent(path, "toggle-me").unwrap();
+        assert!(ClaudeRepoAdapter::is_agent_disabled(path, "toggle-me"));
+
+        // Agent should not appear in read_agents
+        let agents = ClaudeRepoAdapter::read_agents(path).unwrap();
+        assert!(agents.is_empty());
+
+        // Should appear in list_disabled_agents
+        let disabled = ClaudeRepoAdapter::list_disabled_agents(path).unwrap();
+        assert_eq!(disabled, vec!["toggle-me"]);
+
+        // Enable
+        ClaudeRepoAdapter::enable_agent(path, "toggle-me").unwrap();
+        assert!(!ClaudeRepoAdapter::is_agent_disabled(path, "toggle-me"));
+
+        // Agent should appear again
+        let agents = ClaudeRepoAdapter::read_agents(path).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].agent_id, "toggle-me");
+    }
+
+    #[test]
+    fn disable_nonexistent_agent_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::disable_agent(tmp.path().to_str().unwrap(), "nope");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn enable_non_disabled_agent_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::enable_agent(tmp.path().to_str().unwrap(), "nope");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn list_disabled_agents_empty_when_no_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let disabled = ClaudeRepoAdapter::list_disabled_agents(tmp.path().to_str().unwrap()).unwrap();
+        assert!(disabled.is_empty());
+    }
+
+    // -- enable/disable skill tests --
+
+    #[test]
+    fn disable_and_enable_skill_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let skill = Skill {
+            skill_id: "toggle-skill".to_string(),
+            name: "Toggle Skill".to_string(),
+            description: None,
+            user_invocable: Some(true),
+            allowed_tools: vec![],
+            model: None,
+            disable_model_invocation: None,
+            context: None,
+            agent: None,
+            argument_hint: None,
+            content: "Do something".to_string(),
+        };
+
+        ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
+
+        // Disable
+        ClaudeRepoAdapter::disable_skill(path, "toggle-skill").unwrap();
+
+        // Should not appear in read_skills
+        let skills = ClaudeRepoAdapter::read_skills(path).unwrap();
+        assert!(skills.is_empty());
+
+        // Should appear in list_disabled_skills
+        let disabled = ClaudeRepoAdapter::list_disabled_skills(path).unwrap();
+        assert_eq!(disabled, vec!["toggle-skill"]);
+
+        // Enable
+        ClaudeRepoAdapter::enable_skill(path, "toggle-skill").unwrap();
+
+        let skills = ClaudeRepoAdapter::read_skills(path).unwrap();
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].skill_id, "toggle-skill");
+
+        let disabled = ClaudeRepoAdapter::list_disabled_skills(path).unwrap();
+        assert!(disabled.is_empty());
+    }
+
+    #[test]
+    fn disable_nonexistent_skill_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::disable_skill(tmp.path().to_str().unwrap(), "nope");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn enable_non_disabled_skill_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::enable_skill(tmp.path().to_str().unwrap(), "nope");
+        assert!(result.is_err());
+    }
+
+    // -- enable/disable hook tests --
+
+    #[test]
+    fn disable_and_enable_hook_group() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let hooks = vec![HookEvent {
+            event: "PreToolUse".to_string(),
+            groups: vec![HookGroup {
+                matcher: Some("Bash".to_string()),
+                hooks: vec![HookHandler {
+                    hook_type: "command".to_string(),
+                    command: Some("echo hi".to_string()),
+                    prompt: None,
+                    timeout: None,
+                }],
+                disabled: None,
+            }],
+        }];
+
+        ClaudeRepoAdapter::write_hooks(path, &hooks).unwrap();
+
+        // Disable group 0
+        ClaudeRepoAdapter::disable_hook(path, "PreToolUse", 0).unwrap();
+
+        // Verify the _disabled field is set
+        let settings_path = tmp.path().join(".claude/settings.json");
+        let contents = fs::read_to_string(&settings_path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert_eq!(raw["hooks"]["PreToolUse"][0]["_disabled"], true);
+
+        // Enable group 0
+        ClaudeRepoAdapter::enable_hook(path, "PreToolUse", 0).unwrap();
+
+        // Verify the _disabled field is removed
+        let contents = fs::read_to_string(&settings_path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert!(raw["hooks"]["PreToolUse"][0].get("_disabled").is_none());
+    }
+
+    #[test]
+    fn disable_hook_invalid_index_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let hooks = vec![HookEvent {
+            event: "Stop".to_string(),
+            groups: vec![],
+        }];
+        ClaudeRepoAdapter::write_hooks(path, &hooks).unwrap();
+
+        let result = ClaudeRepoAdapter::disable_hook(path, "Stop", 99);
+        assert!(result.is_err());
+    }
+
+    // -- enable/disable MCP server tests --
+
+    #[test]
+    fn disable_and_enable_mcp_server_project() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let server = McpServer {
+            server_id: "test-srv".to_string(),
+            server_type: "stdio".to_string(),
+            command: Some("npx".to_string()),
+            args: None,
+            url: None,
+            env: None,
+            headers: None,
+            disabled: None,
+        };
+
+        ClaudeRepoAdapter::write_mcp_server(path, &server, false).unwrap();
+
+        // Disable
+        ClaudeRepoAdapter::disable_mcp_server(path, "test-srv", false).unwrap();
+
+        // Verify the _disabled field is set
+        let mcp_path = tmp.path().join(".mcp.json");
+        let contents = fs::read_to_string(&mcp_path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert_eq!(raw["mcpServers"]["test-srv"]["_disabled"], true);
+
+        // Enable
+        ClaudeRepoAdapter::enable_mcp_server(path, "test-srv", false).unwrap();
+
+        let contents = fs::read_to_string(&mcp_path).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert!(raw["mcpServers"]["test-srv"].get("_disabled").is_none());
+        // Original fields preserved
+        assert_eq!(raw["mcpServers"]["test-srv"]["command"], "npx");
+    }
+
+    #[test]
+    fn disable_mcp_server_nonexistent_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(
+            tmp.path().join(".mcp.json"),
+            r#"{"mcpServers": {}}"#,
+        )
+        .unwrap();
+
+        let result =
+            ClaudeRepoAdapter::disable_mcp_server(tmp.path().to_str().unwrap(), "nope", false);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn disable_mcp_server_global_uses_claude_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let server = McpServer {
+            server_id: "global-srv".to_string(),
+            server_type: "sse".to_string(),
+            command: None,
+            args: None,
+            url: Some("https://example.com".to_string()),
+            env: None,
+            headers: None,
+            disabled: None,
+        };
+
+        ClaudeRepoAdapter::write_mcp_server(path, &server, true).unwrap();
+        ClaudeRepoAdapter::disable_mcp_server(path, "global-srv", true).unwrap();
+
+        let contents = fs::read_to_string(tmp.path().join(".claude.json")).unwrap();
+        let raw: serde_json::Value = serde_json::from_str(&contents).unwrap();
+        assert_eq!(raw["mcpServers"]["global-srv"]["_disabled"], true);
+    }
+
+    // -- scan_project_config tests --
+
+    #[test]
+    fn scan_project_config_empty_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert!(!result.has_claude_md);
+        assert_eq!(result.claude_md_count, 0);
+        assert_eq!(result.agent_count, 0);
+        assert_eq!(result.skill_count, 0);
+        assert_eq!(result.hook_count, 0);
+        assert_eq!(result.mcp_server_count, 0);
+        assert!(!result.has_settings);
+        assert!(!result.has_memory);
+        assert_eq!(result.memory_store_count, 0);
+    }
+
+    #[test]
+    fn scan_project_config_detects_root_claude_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("CLAUDE.md"), "# Instructions").unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert!(result.has_claude_md);
+        assert_eq!(result.claude_md_count, 1);
+    }
+
+    #[test]
+    fn scan_project_config_detects_inner_claude_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        let claude_dir = tmp.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(claude_dir.join("CLAUDE.md"), "# Inner instructions").unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert!(result.has_claude_md);
+        assert_eq!(result.claude_md_count, 1);
+    }
+
+    #[test]
+    fn scan_project_config_counts_nested_claude_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("CLAUDE.md"), "# Root").unwrap();
+        let fe_dir = tmp.path().join("frontend");
+        fs::create_dir_all(&fe_dir).unwrap();
+        fs::write(fe_dir.join("CLAUDE.md"), "# Frontend").unwrap();
+        let be_dir = tmp.path().join("be");
+        fs::create_dir_all(&be_dir).unwrap();
+        fs::write(be_dir.join("CLAUDE.md"), "# Backend").unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert!(result.has_claude_md);
+        assert_eq!(result.claude_md_count, 3);
+    }
+
+    #[test]
+    fn scan_project_config_counts_agents() {
+        let tmp = tempfile::tempdir().unwrap();
+        let agents_dir = tmp.path().join(".claude/agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        fs::write(agents_dir.join("reviewer.md"), "---\nname: Reviewer\n---\nReview code.").unwrap();
+        fs::write(agents_dir.join("writer.md"), "---\nname: Writer\n---\nWrite code.").unwrap();
+        // Non-.md files should not be counted
+        fs::write(agents_dir.join("notes.txt"), "not an agent").unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert_eq!(result.agent_count, 2);
+    }
+
+    #[test]
+    fn scan_project_config_counts_skills() {
+        let tmp = tempfile::tempdir().unwrap();
+        let skills_dir = tmp.path().join(".claude/skills");
+        let skill1 = skills_dir.join("lint");
+        let skill2 = skills_dir.join("test-skill");
+        let empty_dir = skills_dir.join("empty");
+        fs::create_dir_all(&skill1).unwrap();
+        fs::create_dir_all(&skill2).unwrap();
+        fs::create_dir_all(&empty_dir).unwrap();
+        fs::write(skill1.join("SKILL.md"), "---\nname: Lint\n---\nRun linter.").unwrap();
+        fs::write(skill2.join("SKILL.md"), "---\nname: Test\n---\nRun tests.").unwrap();
+        // empty_dir has no SKILL.md, should not be counted
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert_eq!(result.skill_count, 2);
+    }
+
+    #[test]
+    fn scan_project_config_counts_hooks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let claude_dir = tmp.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+        let settings = serde_json::json!({
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Bash",
+                        "hooks": [
+                            {"type": "command", "command": "echo pre"},
+                            {"type": "command", "command": "echo pre2"}
+                        ]
+                    }
+                ],
+                "PostToolUse": [
+                    {
+                        "hooks": [
+                            {"type": "command", "command": "echo post"}
+                        ]
+                    }
+                ]
+            }
+        });
+        fs::write(claude_dir.join("settings.json"), serde_json::to_string(&settings).unwrap()).unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert_eq!(result.hook_count, 3);
+        assert!(result.has_settings);
+    }
+
+    #[test]
+    fn scan_project_config_counts_mcp_servers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mcp = serde_json::json!({
+            "mcpServers": {
+                "filesystem": {"type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem"]},
+                "github": {"type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"]}
+            }
+        });
+        fs::write(tmp.path().join(".mcp.json"), serde_json::to_string(&mcp).unwrap()).unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert_eq!(result.mcp_server_count, 2);
+    }
+
+    #[test]
+    fn scan_project_config_counts_memory_stores() {
+        let tmp = tempfile::tempdir().unwrap();
+        let memory_dir = tmp.path().join(".claude/memory");
+        fs::create_dir_all(&memory_dir).unwrap();
+        fs::write(memory_dir.join("user-preferences.md"), "- Prefers dark mode\n- Uses vim").unwrap();
+        fs::write(memory_dir.join("project-notes.md"), "- Uses React").unwrap();
+        // Non-.md files should not be counted
+        fs::write(memory_dir.join("scratch.txt"), "not a store").unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        assert!(result.has_memory);
+        assert_eq!(result.memory_store_count, 2);
+    }
+
+    #[test]
+    fn scan_project_config_full_project() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+
+        // Set up a fully configured project
+        fs::write(base.join("CLAUDE.md"), "# Project").unwrap();
+        let claude_dir = base.join(".claude");
+        fs::create_dir_all(claude_dir.join("agents")).unwrap();
+        fs::create_dir_all(claude_dir.join("skills/deploy")).unwrap();
+        fs::create_dir_all(claude_dir.join("memory")).unwrap();
+        fs::write(claude_dir.join("agents/helper.md"), "---\nname: Helper\n---\nHelp.").unwrap();
+        fs::write(claude_dir.join("skills/deploy/SKILL.md"), "---\nname: Deploy\n---\nDeploy.").unwrap();
+        fs::write(claude_dir.join("memory/notes.md"), "- Note 1").unwrap();
+        let settings = serde_json::json!({
+            "model": "claude-sonnet-4-6",
+            "hooks": {
+                "PreToolUse": [{"hooks": [{"type": "command", "command": "echo hi"}]}]
+            }
+        });
+        fs::write(claude_dir.join("settings.json"), serde_json::to_string(&settings).unwrap()).unwrap();
+        let mcp = serde_json::json!({"mcpServers": {"fs": {"type": "stdio", "command": "npx"}}});
+        fs::write(base.join(".mcp.json"), serde_json::to_string(&mcp).unwrap()).unwrap();
+
+        let result = ClaudeRepoAdapter::scan_project_config(base).unwrap();
+        assert!(result.has_claude_md);
+        assert_eq!(result.claude_md_count, 1);
+        assert_eq!(result.agent_count, 1);
+        assert_eq!(result.skill_count, 1);
+        assert_eq!(result.hook_count, 1);
+        assert_eq!(result.mcp_server_count, 1);
+        assert!(result.has_settings);
+        assert!(result.has_memory);
+        assert_eq!(result.memory_store_count, 1);
+    }
+
+    #[test]
+    fn scan_project_config_serializes_camel_case() {
+        let result = ProjectScanResult {
+            has_claude_md: true,
+            claude_md_count: 2,
+            agent_count: 3,
+            skill_count: 1,
+            hook_count: 4,
+            mcp_server_count: 2,
+            has_settings: true,
+            has_memory: true,
+            memory_store_count: 1,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert!(json.get("hasClaudeMd").is_some());
+        assert!(json.get("claudeMdCount").is_some());
+        assert!(json.get("agentCount").is_some());
+        assert!(json.get("skillCount").is_some());
+        assert!(json.get("hookCount").is_some());
+        assert!(json.get("mcpServerCount").is_some());
+        assert!(json.get("hasSettings").is_some());
+        assert!(json.get("hasMemory").is_some());
+        assert!(json.get("memoryStoreCount").is_some());
+        // Verify no snake_case keys
+        assert!(json.get("has_claude_md").is_none());
+    }
+
+    // -- config bundle (backup/restore) tests --
+
+    #[test]
+    fn export_config_bundle_empty_repo() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        let bytes = ClaudeRepoAdapter::export_config_bundle(path, false).unwrap();
+        let bundle: ConfigBundle = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(bundle.version, "1.0");
+        assert_eq!(bundle.scope, "project");
+        assert!(bundle.agents.is_empty());
+        assert!(bundle.skills.is_empty());
+        assert!(bundle.hooks.is_empty());
+        assert_eq!(bundle.mcp_servers, serde_json::json!({}));
+        assert_eq!(bundle.settings, serde_json::json!({}));
+    }
+
+    #[test]
+    fn export_config_bundle_with_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let agent = Agent {
+            agent_id: "reviewer".to_string(),
+            name: "Code Reviewer".to_string(),
+            description: "Reviews code".to_string(),
+            system_prompt: "Review this code.".to_string(),
+            tools: vec!["Read".to_string()],
+            model_override: None,
+            memory: None,
+        };
+        ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
+
+        let skill = Skill {
+            skill_id: "test-skill".to_string(),
+            name: "Test Skill".to_string(),
+            description: Some("A test skill".to_string()),
+            user_invocable: Some(true),
+            allowed_tools: vec!["Bash".to_string()],
+            model: None,
+            disable_model_invocation: None,
+            context: None,
+            agent: None,
+            argument_hint: None,
+            content: "Do the thing.".to_string(),
+        };
+        ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
+
+        let config = NormalizedConfig {
+            model: Some("claude-sonnet-4-6".to_string()),
+            permissions: None,
+            ignore_patterns: None,
+            raw: serde_json::json!({"model": "claude-sonnet-4-6"}),
+        };
+        ClaudeRepoAdapter::write_config(path, &config).unwrap();
+
+        let bytes = ClaudeRepoAdapter::export_config_bundle(path, false).unwrap();
+        let bundle: ConfigBundle = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(bundle.agents.len(), 1);
+        assert_eq!(bundle.skills.len(), 1);
+        assert_eq!(bundle.settings["model"], "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn export_config_bundle_global_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        let bytes = ClaudeRepoAdapter::export_config_bundle(path, true).unwrap();
+        let bundle: ConfigBundle = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(bundle.scope, "global");
+    }
+
+    #[test]
+    fn import_config_bundle_merge_mode_skips_existing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let existing_agent = Agent {
+            agent_id: "reviewer".to_string(),
+            name: "Existing Reviewer".to_string(),
+            description: "Original".to_string(),
+            system_prompt: "Original prompt.".to_string(),
+            tools: vec![],
+            model_override: None,
+            memory: None,
+        };
+        ClaudeRepoAdapter::write_agent(path, &existing_agent).unwrap();
+
+        let bundle = ConfigBundle {
+            version: "1.0".to_string(),
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+            scope: "project".to_string(),
+            agents: vec![
+                serde_json::to_value(&Agent {
+                    agent_id: "reviewer".to_string(),
+                    name: "New Reviewer".to_string(),
+                    description: "Should be skipped".to_string(),
+                    system_prompt: "New prompt.".to_string(),
+                    tools: vec![],
+                    model_override: None,
+                    memory: None,
+                })
+                .unwrap(),
+                serde_json::to_value(&Agent {
+                    agent_id: "writer".to_string(),
+                    name: "Writer".to_string(),
+                    description: "New agent".to_string(),
+                    system_prompt: "Write stuff.".to_string(),
+                    tools: vec![],
+                    model_override: None,
+                    memory: None,
+                })
+                .unwrap(),
+            ],
+            skills: vec![],
+            hooks: vec![],
+            mcp_servers: serde_json::json!({}),
+            settings: serde_json::json!({}),
+        };
+
+        let bundle_bytes = serde_json::to_vec(&bundle).unwrap();
+        let result =
+            ClaudeRepoAdapter::import_config_bundle(path, false, &bundle_bytes, "merge").unwrap();
+
+        assert_eq!(result.agents_imported, 1);
+        let agents = ClaudeRepoAdapter::read_agents(path).unwrap();
+        assert_eq!(agents.len(), 2);
+
+        let reviewer = agents.iter().find(|a| a.agent_id == "reviewer").unwrap();
+        assert_eq!(reviewer.name, "Existing Reviewer");
+    }
+
+    #[test]
+    fn import_config_bundle_overwrite_mode_replaces_existing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let existing_agent = Agent {
+            agent_id: "reviewer".to_string(),
+            name: "Old Reviewer".to_string(),
+            description: "Old".to_string(),
+            system_prompt: "Old prompt.".to_string(),
+            tools: vec![],
+            model_override: None,
+            memory: None,
+        };
+        ClaudeRepoAdapter::write_agent(path, &existing_agent).unwrap();
+
+        let bundle = ConfigBundle {
+            version: "1.0".to_string(),
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+            scope: "project".to_string(),
+            agents: vec![serde_json::to_value(&Agent {
+                agent_id: "reviewer".to_string(),
+                name: "New Reviewer".to_string(),
+                description: "Replaced".to_string(),
+                system_prompt: "New prompt.".to_string(),
+                tools: vec![],
+                model_override: None,
+                memory: None,
+            })
+            .unwrap()],
+            skills: vec![],
+            hooks: vec![],
+            mcp_servers: serde_json::json!({}),
+            settings: serde_json::json!({}),
+        };
+
+        let bundle_bytes = serde_json::to_vec(&bundle).unwrap();
+        let result = ClaudeRepoAdapter::import_config_bundle(
+            path,
+            false,
+            &bundle_bytes,
+            "overwrite",
+        )
+        .unwrap();
+
+        assert_eq!(result.agents_imported, 1);
+        let agents = ClaudeRepoAdapter::read_agents(path).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].name, "New Reviewer");
+    }
+
+    #[test]
+    fn export_import_roundtrip() {
+        let src = tempfile::tempdir().unwrap();
+        let src_path = src.path().to_str().unwrap();
+
+        let agent = Agent {
+            agent_id: "helper".to_string(),
+            name: "Helper".to_string(),
+            description: "Helps".to_string(),
+            system_prompt: "Help me.".to_string(),
+            tools: vec!["Read".to_string()],
+            model_override: None,
+            memory: None,
+        };
+        ClaudeRepoAdapter::write_agent(src_path, &agent).unwrap();
+
+        let config = NormalizedConfig {
+            model: Some("claude-sonnet-4-6".to_string()),
+            permissions: None,
+            ignore_patterns: None,
+            raw: serde_json::json!({"model": "claude-sonnet-4-6"}),
+        };
+        ClaudeRepoAdapter::write_config(src_path, &config).unwrap();
+
+        let exported = ClaudeRepoAdapter::export_config_bundle(src_path, false).unwrap();
+
+        let dst = tempfile::tempdir().unwrap();
+        let dst_path = dst.path().to_str().unwrap();
+
+        let result =
+            ClaudeRepoAdapter::import_config_bundle(dst_path, false, &exported, "merge").unwrap();
+        assert_eq!(result.agents_imported, 1);
+        assert!(result.settings_imported);
+
+        let agents = ClaudeRepoAdapter::read_agents(dst_path).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].agent_id, "helper");
+
+        let cfg = ClaudeRepoAdapter::read_config(dst_path).unwrap();
+        assert_eq!(cfg.model, Some("claude-sonnet-4-6".to_string()));
+    }
+
+    #[test]
+    fn import_config_bundle_with_hooks_and_mcp() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let bundle = ConfigBundle {
+            version: "1.0".to_string(),
+            created_at: "2026-03-01T00:00:00Z".to_string(),
+            scope: "project".to_string(),
+            agents: vec![],
+            skills: vec![],
+            hooks: vec![serde_json::to_value(&HookEvent {
+                event: "PreToolUse".to_string(),
+                groups: vec![HookGroup {
+                    matcher: Some("Bash".to_string()),
+                    hooks: vec![HookHandler {
+                        hook_type: "command".to_string(),
+                        command: Some("echo hook".to_string()),
+                        prompt: None,
+                        timeout: None,
+                    }],
+                    disabled: None,
+                }],
+            })
+            .unwrap()],
+            mcp_servers: serde_json::json!({
+                "my-mcp": {
+                    "serverId": "my-mcp",
+                    "type": "stdio",
+                    "command": "npx",
+                    "args": ["-y", "@test/server"]
+                }
+            }),
+            settings: serde_json::json!({}),
+        };
+
+        let bundle_bytes = serde_json::to_vec(&bundle).unwrap();
+        let result =
+            ClaudeRepoAdapter::import_config_bundle(path, false, &bundle_bytes, "merge").unwrap();
+
+        assert_eq!(result.hooks_imported, 1);
+        assert_eq!(result.mcp_servers_imported, 1);
+
+        let hooks = ClaudeRepoAdapter::read_hooks(path).unwrap();
+        assert_eq!(hooks.len(), 1);
+        assert_eq!(hooks[0].event, "PreToolUse");
+
+        let servers = ClaudeRepoAdapter::read_mcp_servers(path, false).unwrap();
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].server_id, "my-mcp");
     }
 }

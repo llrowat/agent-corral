@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import { renderWithProviders } from "@/test/test-utils";
 import { invoke } from "@tauri-apps/api/core";
 import { AgentsPage } from "./AgentsPage";
 import { SkillsPage } from "./SkillsPage";
@@ -27,49 +28,49 @@ describe("Page descriptions", () => {
   });
 
   it("AgentsPage renders a description for new users", async () => {
-    render(<AgentsPage scope={globalScope} homePath="/home/user" />);
+    renderWithProviders(<AgentsPage scope={globalScope} homePath="/home/user" />);
     expect(
       screen.getByText(/custom personas for claude code/i)
     ).toBeInTheDocument();
   });
 
   it("SkillsPage renders a description for new users", async () => {
-    render(<SkillsPage scope={globalScope} homePath="/home/user" />);
+    renderWithProviders(<SkillsPage scope={globalScope} homePath="/home/user" />);
     expect(
       screen.getByText(/custom slash commands for claude code/i)
     ).toBeInTheDocument();
   });
 
   it("HooksPage renders a description for new users", async () => {
-    render(<HooksPage scope={globalScope} homePath="/home/user" />);
+    renderWithProviders(<HooksPage scope={globalScope} homePath="/home/user" />);
     expect(
       screen.getByText(/shell commands that run automatically/i)
     ).toBeInTheDocument();
   });
 
   it("McpPage renders a description for new users", async () => {
-    render(<McpPage scope={globalScope} homePath="/home/user" />);
+    renderWithProviders(<McpPage scope={globalScope} homePath="/home/user" />);
     expect(
       screen.getByText(/external tool servers/i)
     ).toBeInTheDocument();
   });
 
   it("MemoryPage renders a description for new users", async () => {
-    render(<MemoryPage scope={globalScope} homePath="/home/user" />);
+    renderWithProviders(<MemoryPage scope={globalScope} homePath="/home/user" />);
     expect(
       screen.getByText(/persistent notes that claude code/i)
     ).toBeInTheDocument();
   });
 
   it("ConfigPage renders a description for new users", async () => {
-    render(<ConfigPage scope={globalScope} />);
+    renderWithProviders(<ConfigPage scope={globalScope} />);
     expect(
       screen.getByText(/project and global settings/i)
     ).toBeInTheDocument();
   });
 
   it("descriptions have the page-description class", async () => {
-    const { container } = render(
+    const { container } = renderWithProviders(
       <AgentsPage scope={globalScope} homePath="/home/user" />
     );
     const desc = container.querySelector(".page-description");

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import type { Scope, HookEvent, HookGroup, HookHandler } from "@/types";
 import { HOOK_EVENTS } from "@/types";
 import * as api from "@/lib/tauri";
@@ -7,6 +7,7 @@ import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { HOOK_PRESETS, type HookPreset } from "@/lib/presets";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import { DocsLink } from "@/components/DocsLink";
+import { useToast } from "@/components/Toast";
 
 interface Props {
   scope: Scope | null;
@@ -22,6 +23,7 @@ function newGroup(): HookGroup {
 }
 
 export function HooksPage({ scope, homePath }: Props) {
+  const toast = useToast();
   const [hooks, setHooks] = useState<HookEvent[]>([]);
   const [globalHooks, setGlobalHooks] = useState<HookEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
@@ -31,6 +33,10 @@ export function HooksPage({ scope, homePath }: Props) {
   const [isNew, setIsNew] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+
+  // Drag-and-drop state for reordering hook groups
+  const dragIndexRef = useRef<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isProjectScope = scope?.type === "project";
@@ -93,7 +99,7 @@ export function HooksPage({ scope, homePath }: Props) {
       setEditing(null);
       setIsNew(false);
     } catch (e) {
-      alert(`Failed to save hooks: ${e}`);
+      toast.error("Failed to save hooks", String(e));
     } finally {
       setSaving(false);
     }
@@ -109,7 +115,7 @@ export function HooksPage({ scope, homePath }: Props) {
       if (selectedEvent === eventName) setSelectedEvent(null);
       if (editing?.event === eventName) setEditing(null);
     } catch (e) {
-      alert(`Failed to delete hooks: ${e}`);
+      toast.error("Failed to delete hooks", String(e));
     }
   };
 
@@ -166,6 +172,70 @@ export function HooksPage({ scope, homePath }: Props) {
       ...g,
       hooks: g.hooks.filter((_, i) => i !== hookIdx),
     }));
+  };
+
+  // -- Drag & drop handlers for hook group reordering --
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    dragIndexRef.current = index;
+    e.dataTransfer.effectAllowed = "move";
+    // Add dragging class after a tick so the browser captures the element first
+    const target = e.currentTarget as HTMLElement;
+    requestAnimationFrame(() => target.classList.add("dragging"));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).classList.remove("dragging");
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+  };
+
+  const handleDropOnEditor = (_e: React.DragEvent, dropIndex: number) => {
+    const dragIndex = dragIndexRef.current;
+    if (dragIndex === null || dragIndex === dropIndex || !editing) return;
+    const reordered = [...editing.groups];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    setEditing({ ...editing, groups: reordered });
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+  };
+
+  const handleDropOnDetail = async (_e: React.DragEvent, dropIndex: number) => {
+    const dragIndex = dragIndexRef.current;
+    if (dragIndex === null || dragIndex === dropIndex || !selected || !basePath || selectedIsGlobal) return;
+    // Build new_order: an array of original indices in the new order
+    const indices = selected.groups.map((_, i) => i);
+    const [moved] = indices.splice(dragIndex, 1);
+    indices.splice(dropIndex, 0, moved);
+    try {
+      await api.reorderHookGroups(basePath, selected.event, indices);
+      await loadHooks();
+    } catch (e) {
+      toast.error("Failed to reorder hook groups", String(e));
+    }
+    dragIndexRef.current = null;
+    setDragOverIndex(null);
+  };
+
+  const handleToggleGroupEnabled = async (event: string, groupIndex: number, currentlyDisabled: boolean) => {
+    if (!basePath) return;
+    try {
+      await api.toggleHookGroupEnabled(basePath, event, groupIndex, currentlyDisabled);
+      await loadHooks();
+    } catch (e) {
+      toast.error("Failed to toggle hook group", String(e));
+    }
   };
 
   return (
@@ -302,8 +372,20 @@ export function HooksPage({ scope, homePath }: Props) {
               </div>
 
               {editing.groups.map((group, gi) => (
-                <div key={gi} className="hook-group">
+                <div
+                  key={gi}
+                  className={`hook-group hook-group-draggable${dragOverIndex === gi ? " hook-group-drag-over" : ""}`}
+                  draggable={editing.groups.length > 1}
+                  onDragStart={(e) => handleDragStart(e, gi)}
+                  onDragOver={(e) => handleDragOver(e, gi)}
+                  onDragLeave={handleDragLeave}
+                  onDragEnd={handleDragEnd}
+                  onDrop={(e) => handleDropOnEditor(e, gi)}
+                >
                   <div className="hook-group-header">
+                    {editing.groups.length > 1 && (
+                      <span className="hook-group-drag-handle" title="Drag to reorder">&#8942;&#8942;</span>
+                    )}
                     <h4>Group {gi + 1}</h4>
                     {editing.groups.length > 1 && (
                       <button
@@ -459,8 +541,31 @@ export function HooksPage({ scope, homePath }: Props) {
                 </p>
               )}
               {selected!.groups.map((group, gi) => (
-                <div key={gi} className="hook-group-detail">
-                  <h4>Group {gi + 1}</h4>
+                <div
+                  key={gi}
+                  className={`hook-group-detail${!selectedIsGlobal && selected!.groups.length > 1 ? " hook-group-draggable" : ""}${dragOverIndex === gi ? " hook-group-drag-over" : ""}${group._disabled ? " entity-disabled" : ""}`}
+                  draggable={!selectedIsGlobal && selected!.groups.length > 1}
+                  onDragStart={!selectedIsGlobal ? (e) => handleDragStart(e, gi) : undefined}
+                  onDragOver={!selectedIsGlobal ? (e) => handleDragOver(e, gi) : undefined}
+                  onDragLeave={!selectedIsGlobal ? handleDragLeave : undefined}
+                  onDragEnd={!selectedIsGlobal ? handleDragEnd : undefined}
+                  onDrop={!selectedIsGlobal ? (e) => handleDropOnDetail(e, gi) : undefined}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    {!selectedIsGlobal && selected!.groups.length > 1 && (
+                      <span className="hook-group-drag-handle" title="Drag to reorder">&#8942;&#8942;</span>
+                    )}
+                    <h4>Group {gi + 1}</h4>
+                    {!selectedIsGlobal && (
+                      <button
+                        className={`btn-icon toggle-btn ${group._disabled ? "toggle-disabled" : "toggle-enabled"}`}
+                        onClick={() => handleToggleGroupEnabled(selected!.event, gi, !!group._disabled)}
+                        title={group._disabled ? "Enable group" : "Disable group"}
+                      >
+                        {group._disabled ? "off" : "on"}
+                      </button>
+                    )}
+                  </div>
                   {group.matcher && (
                     <div className="detail-field">
                       <label>Matcher</label>

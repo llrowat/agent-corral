@@ -89,12 +89,28 @@ pub fn run() {
             commands::claude::prepare_ai_command,
             commands::claude::launch_terminal,
             commands::claude::is_process_alive,
+            commands::claude::read_claude_md,
+            commands::claude::list_claude_md_files,
+            commands::claude::save_config_snapshot,
+            commands::claude::list_config_snapshots,
+            commands::claude::restore_config_snapshot,
+            commands::claude::delete_config_snapshot,
+            commands::claude::export_config_bundle,
+            commands::claude::import_config_bundle,
+            commands::claude::scan_project_config,
+            // Enable/disable toggle commands
+            commands::claude::toggle_agent_enabled,
+            commands::claude::toggle_skill_enabled,
+            commands::claude::list_disabled_agents,
+            commands::claude::list_disabled_skills,
             // Preferences commands
             commands::preferences::get_preferences,
             commands::preferences::get_platform,
             // Hooks commands
             commands::hooks::read_hooks,
             commands::hooks::write_hooks,
+            commands::hooks::reorder_hook_groups,
+            commands::hooks::toggle_hook_group_enabled,
             // Skills commands
             commands::skills::read_skills,
             commands::skills::write_skill,
@@ -103,6 +119,8 @@ pub fn run() {
             commands::mcp::read_mcp_servers,
             commands::mcp::write_mcp_server,
             commands::mcp::delete_mcp_server,
+            commands::mcp::check_mcp_health,
+            commands::mcp::toggle_mcp_server_enabled,
             // Pack commands (legacy, kept for migration)
             commands::pack::list_packs,
             commands::pack::export_pack,

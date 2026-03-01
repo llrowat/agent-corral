@@ -10,6 +10,7 @@ import type {
 } from "@/types";
 import * as api from "@/lib/tauri";
 import { usePluginSync } from "@/hooks/usePluginSync";
+import { useToast } from "@/components/Toast";
 
 interface Props {
   scope?: Scope | null;
@@ -18,6 +19,7 @@ interface Props {
 type View = "list" | "export" | "import-preview" | "git-install";
 
 export function PluginsPage({ scope }: Props) {
+  const toast = useToast();
   const repo = scope?.type === "project" ? scope.repo : null;
   const basePath =
     scope?.type === "global"
@@ -101,7 +103,7 @@ export function PluginsPage({ scope }: Props) {
 
   const startExport = async () => {
     if (!basePath) {
-      alert("Select a scope first");
+      toast.warn("Select a scope first");
       return;
     }
     try {
@@ -122,7 +124,7 @@ export function PluginsPage({ scope }: Props) {
       setExportIncludeMcp(true);
       setView("export");
     } catch (e) {
-      alert(`Failed to load data: ${e}`);
+      toast.error("Failed to load data", String(e));
     }
   };
 
@@ -143,11 +145,11 @@ export function PluginsPage({ scope }: Props) {
         exportIncludeMcp,
         isGlobal,
       );
-      alert(`Plugin exported to: ${path}`);
+      toast.success(`Plugin exported to: ${path}`);
       setView("list");
       await loadPlugins();
     } catch (e) {
-      alert(`Export failed: ${e}`);
+      toast.error("Export failed", String(e));
     } finally {
       setExporting(false);
     }
@@ -161,16 +163,14 @@ export function PluginsPage({ scope }: Props) {
         gitUrl.trim(),
         gitBranch.trim() || undefined
       );
-      alert(
-        `Installed ${installed.length} plugin(s): ${installed.map((p) => p.name).join(", ")}`
-      );
+      toast.success(`Installed ${installed.length} plugin(s): ${installed.map((p) => p.name).join(", ")}`);
       setView("list");
       setGitUrl("");
       setGitBranch("");
       setActiveTab("git");
       await loadPlugins();
     } catch (e) {
-      alert(`Install failed: ${e}`);
+      toast.error("Install failed", String(e));
     } finally {
       setInstalling(false);
     }
@@ -183,12 +183,12 @@ export function PluginsPage({ scope }: Props) {
       setUpdates(result);
       const available = result.filter((u) => u.updateAvailable);
       if (available.length === 0) {
-        alert("All plugins are up to date.");
+        toast.info("All plugins are up to date.");
       } else {
-        alert(`${available.length} update(s) available.`);
+        toast.info(`${available.length} update(s) available.`);
       }
     } catch (e) {
-      alert(`Failed to check updates: ${e}`);
+      toast.error("Failed to check updates", String(e));
     } finally {
       setCheckingUpdates(false);
     }
@@ -198,13 +198,13 @@ export function PluginsPage({ scope }: Props) {
     setUpdatingPlugin(plugin.dirPath);
     try {
       const updated = await api.updatePlugin(plugin.dirPath);
-      alert(`Updated "${updated.name}" to v${updated.version}`);
+      toast.success(`Updated "${updated.name}" to v${updated.version}`);
       setUpdates((prev) =>
         prev.filter((u) => u.dirPath !== plugin.dirPath)
       );
       await loadPlugins();
     } catch (e) {
-      alert(`Update failed: ${e}`);
+      toast.error("Update failed", String(e));
     } finally {
       setUpdatingPlugin(null);
     }
@@ -214,9 +214,9 @@ export function PluginsPage({ scope }: Props) {
     setSyncingPlugin(status.pluginName);
     try {
       await syncPlugin(status.pluginName);
-      alert(`Synced "${status.pluginName}" to latest.`);
+      toast.success(`Synced "${status.pluginName}" to latest.`);
     } catch (e) {
-      alert(`Sync failed: ${e}`);
+      toast.error("Sync failed", String(e));
     } finally {
       setSyncingPlugin(null);
     }
@@ -227,12 +227,12 @@ export function PluginsPage({ scope }: Props) {
     try {
       const synced = await autoSyncAll();
       if (synced.length === 0) {
-        alert("Everything is up to date.");
+        toast.info("Everything is up to date.");
       } else {
-        alert(`Auto-synced ${synced.length} plugin(s): ${synced.join(", ")}`);
+        toast.success(`Auto-synced ${synced.length} plugin(s): ${synced.join(", ")}`);
       }
     } catch (e) {
-      alert(`Auto-sync failed: ${e}`);
+      toast.error("Auto-sync failed", String(e));
     } finally {
       setAutoSyncing(false);
     }
@@ -240,7 +240,7 @@ export function PluginsPage({ scope }: Props) {
 
   const startImport = async (plugin: PluginSummary) => {
     if (!repo) {
-      alert("Select a repository to import into");
+      toast.warn("Select a repository to import into");
       return;
     }
     try {
@@ -249,7 +249,7 @@ export function PluginsPage({ scope }: Props) {
       setImportPreview(preview);
       setView("import-preview");
     } catch (e) {
-      alert(`Failed to preview import: ${e}`);
+      toast.error("Failed to preview import", String(e));
     }
   };
 
@@ -258,10 +258,10 @@ export function PluginsPage({ scope }: Props) {
     setImporting(true);
     try {
       await api.importPlugin(importPluginDir, repo.path, mode);
-      alert("Plugin imported successfully!");
+      toast.success("Plugin imported successfully!");
       setView("list");
     } catch (e) {
-      alert(`Import failed: ${e}`);
+      toast.error("Import failed", String(e));
     } finally {
       setImporting(false);
     }
@@ -273,7 +273,7 @@ export function PluginsPage({ scope }: Props) {
       await api.deletePlugin(plugin.dirPath);
       await loadPlugins();
     } catch (e) {
-      alert(`Failed to delete plugin: ${e}`);
+      toast.error("Failed to delete plugin", String(e));
     }
   };
 

@@ -433,6 +433,145 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     ],
   },
   {
+    id: "go",
+    label: "Go",
+    description: "Model, Go ignore patterns, code reviewer, test-on-stop",
+    config: {
+      model: "claude-sonnet-4-6",
+      permissions: null,
+      ignorePatterns: ["vendor", "bin", "*.exe", ".env"],
+      raw: {},
+    },
+    agents: [AGENT_PRESETS[0].agent, AGENT_PRESETS[4].agent],
+    hooks: [
+      {
+        event: "Stop",
+        groups: [
+          {
+            matcher: null,
+            hooks: [
+              {
+                hookType: "command",
+                command: "go test ./...",
+                prompt: null,
+                timeout: 120000,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "java",
+    label: "Java / Kotlin (Gradle)",
+    description: "Model, JVM ignore patterns, code reviewer, test-on-stop",
+    config: {
+      model: "claude-sonnet-4-6",
+      permissions: null,
+      ignorePatterns: ["build", ".gradle", "*.class", "*.jar", ".env", ".idea"],
+      raw: {},
+    },
+    agents: [AGENT_PRESETS[0].agent, AGENT_PRESETS[1].agent],
+    hooks: [
+      {
+        event: "Stop",
+        groups: [
+          {
+            matcher: null,
+            hooks: [
+              {
+                hookType: "command",
+                command: "./gradlew test",
+                prompt: null,
+                timeout: 180000,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "dotnet",
+    label: "C# / .NET",
+    description: "Model, .NET ignore patterns, code reviewer, test-on-stop",
+    config: {
+      model: "claude-sonnet-4-6",
+      permissions: null,
+      ignorePatterns: ["bin", "obj", "*.dll", "*.exe", ".vs", ".env"],
+      raw: {},
+    },
+    agents: [AGENT_PRESETS[0].agent, AGENT_PRESETS[4].agent],
+    hooks: [
+      {
+        event: "Stop",
+        groups: [
+          {
+            matcher: null,
+            hooks: [
+              {
+                hookType: "command",
+                command: "dotnet test",
+                prompt: null,
+                timeout: 180000,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "swift",
+    label: "Swift / iOS",
+    description: "Model, Swift/Xcode ignore patterns, code reviewer",
+    config: {
+      model: "claude-sonnet-4-6",
+      permissions: null,
+      ignorePatterns: [
+        ".build",
+        "DerivedData",
+        "*.xcworkspace",
+        "Pods",
+        ".env",
+      ],
+      raw: {},
+    },
+    agents: [AGENT_PRESETS[0].agent],
+    hooks: [],
+  },
+  {
+    id: "ruby",
+    label: "Ruby on Rails",
+    description: "Model, Ruby ignore patterns, test writer, format-on-write",
+    config: {
+      model: "claude-sonnet-4-6",
+      permissions: null,
+      ignorePatterns: ["vendor/bundle", "tmp", "log", ".env", "coverage", "node_modules"],
+      raw: {},
+    },
+    agents: [AGENT_PRESETS[1].agent, AGENT_PRESETS[4].agent],
+    hooks: [
+      {
+        event: "Stop",
+        groups: [
+          {
+            matcher: null,
+            hooks: [
+              {
+                hookType: "command",
+                command: "bundle exec rspec",
+                prompt: null,
+                timeout: 180000,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "minimal",
     label: "Minimal",
     description: "Just the model and basic ignore patterns — nothing else",

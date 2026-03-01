@@ -3,9 +3,15 @@ import { useNavigate } from "react-router-dom";
 import type { Scope, RepoStatus, ClaudeDetection, Agent, HookEvent, Skill, McpServer, MemoryStore, NormalizedConfig } from "@/types";
 import * as api from "@/lib/tauri";
 import { ScopeBanner } from "@/components/ScopeGuard";
+import { EffectiveConfig } from "@/components/EffectiveConfig";
+import { ConfigHealth } from "@/components/ConfigHealth";
+import { CrossRefs } from "@/components/CrossRefs";
+import { ImportWizard } from "@/components/ImportWizard";
+import { useToast } from "@/components/Toast";
 
 interface Props {
   scope: Scope | null;
+  homePath?: string | null;
 }
 
 interface ConfigCounts {
@@ -24,11 +30,26 @@ const MODEL_LABELS: Record<string, string> = {
   "claude-haiku-4-5-20251001": "Haiku 4.5",
 };
 
-export function OverviewPage({ scope }: Props) {
+type BackupModalMode = "export" | "import" | null;
+
+export function OverviewPage({ scope, homePath }: Props) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [status, setStatus] = useState<RepoStatus | null>(null);
   const [detection, setDetection] = useState<ClaudeDetection | null>(null);
   const [counts, setCounts] = useState<ConfigCounts | null>(null);
+  const [backupModal, setBackupModal] = useState<BackupModalMode>(null);
+  const [exportJson, setExportJson] = useState("");
+  const [importJson, setImportJson] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [showImportWizard, setShowImportWizard] = useState(false);
+  const [entityData, setEntityData] = useState<{
+    agents: Agent[];
+    hooks: HookEvent[];
+    skills: Skill[];
+    mcpServers: McpServer[];
+    memoryStores: MemoryStore[];
+  } | null>(null);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isGlobal = scope?.type === "global";
@@ -59,14 +80,63 @@ export function OverviewPage({ scope }: Props) {
         hasConfig: !!(config?.model || config?.permissions || (config?.ignorePatterns && config.ignorePatterns.length > 0)),
         model: config?.model ?? null,
       });
+      setEntityData({ agents, hooks, skills, mcpServers, memoryStores });
     });
   }, [basePath, isGlobal]);
+
+  const handleExport = useCallback(async () => {
+    if (!basePath) return;
+    try {
+      const json = await api.exportConfigBundle(basePath, isGlobal);
+      setExportJson(json);
+      setBackupModal("export");
+    } catch (err) {
+      toast.error("Export failed", String(err));
+    }
+  }, [basePath, isGlobal, toast]);
+
+  const handleImport = useCallback(
+    async (mode: "merge" | "overwrite") => {
+      if (!basePath || !importJson.trim()) return;
+      setImporting(true);
+      try {
+        const result = await api.importConfigBundle(basePath, isGlobal, importJson, mode);
+        const parts: string[] = [];
+        if (result.agentsImported > 0) parts.push(`${result.agentsImported} agent(s)`);
+        if (result.skillsImported > 0) parts.push(`${result.skillsImported} skill(s)`);
+        if (result.hooksImported > 0) parts.push(`${result.hooksImported} hook event(s)`);
+        if (result.mcpServersImported > 0) parts.push(`${result.mcpServersImported} MCP server(s)`);
+        if (result.settingsImported) parts.push("settings");
+
+        const summary = parts.length > 0 ? `Imported: ${parts.join(", ")}` : "Nothing new to import";
+        toast.success("Import complete", summary);
+        setBackupModal(null);
+        setImportJson("");
+        reloadData();
+      } catch (err) {
+        toast.error("Import failed", String(err));
+      } finally {
+        setImporting(false);
+      }
+    },
+    [basePath, isGlobal, importJson, toast, reloadData]
+  );
+
+  const handleCopyToClipboard = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(exportJson);
+      toast.success("Copied to clipboard");
+    } catch {
+      toast.error("Failed to copy to clipboard");
+    }
+  }, [exportJson, toast]);
 
   useEffect(() => {
     if (!basePath) {
       setStatus(null);
       setDetection(null);
       setCounts(null);
+      setEntityData(null);
       return;
     }
     if (!isGlobal) {
@@ -189,6 +259,74 @@ export function OverviewPage({ scope }: Props) {
         </div>
       </div>
 
+      {/* Backup & Restore */}
+      <div className="backup-restore-actions">
+        <button className="btn btn-sm" onClick={handleExport}>
+          Export Config
+        </button>
+        <button className="btn btn-sm" onClick={() => { setImportJson(""); setBackupModal("import"); }}>
+          Import Config
+        </button>
+        <button className="btn btn-sm" onClick={() => setShowImportWizard(true)}>
+          Import Project
+        </button>
+      </div>
+
+      {/* Backup/Restore modal */}
+      {backupModal && (
+        <div className="backup-modal-overlay" onClick={() => setBackupModal(null)}>
+          <div className="backup-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="backup-modal-header">
+              <h3>{backupModal === "export" ? "Export Configuration" : "Import Configuration"}</h3>
+              <button className="btn btn-sm" onClick={() => setBackupModal(null)} aria-label="Close">
+                &times;
+              </button>
+            </div>
+            {backupModal === "export" ? (
+              <div className="backup-modal-body">
+                <p>Copy this JSON bundle to back up your configuration.</p>
+                <textarea
+                  readOnly
+                  value={exportJson}
+                  data-testid="export-textarea"
+                />
+                <div className="backup-modal-actions">
+                  <button className="btn btn-sm btn-primary" onClick={handleCopyToClipboard}>
+                    Copy to Clipboard
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="backup-modal-body">
+                <p>Paste a config bundle JSON below, then choose how to import.</p>
+                <textarea
+                  value={importJson}
+                  onChange={(e) => setImportJson(e.target.value)}
+                  placeholder="Paste config bundle JSON here..."
+                  data-testid="import-textarea"
+                />
+                <div className="backup-modal-actions">
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={() => handleImport("merge")}
+                    disabled={importing || !importJson.trim()}
+                  >
+                    {importing ? "Importing..." : "Merge"}
+                  </button>
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => handleImport("overwrite")}
+                    disabled={importing || !importJson.trim()}
+                  >
+                    {importing ? "Importing..." : "Overwrite"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Repo status (project scope only) */}
       {!isGlobal && status && (
         <div className="overview-repo-status">
@@ -197,6 +335,12 @@ export function OverviewPage({ scope }: Props) {
           {detection && <StatusIndicator label="CLAUDE.md" ok={detection.hasClaudeMd} />}
         </div>
       )}
+
+      {/* Config health check */}
+      <ConfigHealth scope={scope} />
+
+      {/* Effective merged config view */}
+      <EffectiveConfig scope={scope} homePath={homePath ?? null} />
 
       {/* Config cards grid */}
       <div className="overview-cards-grid">
@@ -241,6 +385,25 @@ export function OverviewPage({ scope }: Props) {
           );
         })}
       </div>
+
+      {/* Cross-references visualization */}
+      {entityData && totalConfigured > 0 && (
+        <CrossRefs
+          agents={entityData.agents}
+          hooks={entityData.hooks}
+          skills={entityData.skills}
+          mcpServers={entityData.mcpServers}
+          memoryStores={entityData.memoryStores}
+        />
+      )}
+
+      {/* Import from existing project wizard */}
+      {showImportWizard && (
+        <ImportWizard
+          onClose={() => setShowImportWizard(false)}
+          onImported={reloadData}
+        />
+      )}
     </div>
   );
 }

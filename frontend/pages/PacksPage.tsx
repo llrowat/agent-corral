@@ -7,6 +7,7 @@ import type {
   PackUpdateCheck,
 } from "@/types";
 import * as api from "@/lib/tauri";
+import { useToast } from "@/components/Toast";
 
 interface Props {
   scope?: Scope | null;
@@ -16,6 +17,7 @@ type View = "list" | "export" | "import-preview" | "git-install";
 
 export function PacksPage({ scope }: Props) {
   const repo = scope?.type === "project" ? scope.repo : null;
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<"my" | "library" | "git">("my");
   const [packs, setPacks] = useState<PackSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ export function PacksPage({ scope }: Props) {
 
   const startExport = async () => {
     if (!repo) {
-      alert("Select a repository first");
+      toast.warn("Select a repository first");
       return;
     }
     try {
@@ -92,7 +94,7 @@ export function PacksPage({ scope }: Props) {
       setExportIncludeConfig(true);
       setView("export");
     } catch (e) {
-      alert(`Failed to read agents: ${e}`);
+      toast.error("Failed to read agents", String(e));
     }
   };
 
@@ -109,11 +111,11 @@ export function PacksPage({ scope }: Props) {
         exportSelectedIds,
         exportVersion.trim() || undefined
       );
-      alert(`Pack exported to: ${path}`);
+      toast.success(`Pack exported to: ${path}`);
       setView("list");
       await loadPacks();
     } catch (e) {
-      alert(`Export failed: ${e}`);
+      toast.error("Export failed", String(e));
     } finally {
       setExporting(false);
     }
@@ -127,7 +129,7 @@ export function PacksPage({ scope }: Props) {
         gitUrl.trim(),
         gitBranch.trim() || undefined
       );
-      alert(
+      toast.success(
         `Installed ${installed.length} pack(s): ${installed.map((p) => p.name).join(", ")}`
       );
       setView("list");
@@ -136,7 +138,7 @@ export function PacksPage({ scope }: Props) {
       setActiveTab("git");
       await loadPacks();
     } catch (e) {
-      alert(`Install failed: ${e}`);
+      toast.error("Install failed", String(e));
     } finally {
       setInstalling(false);
     }
@@ -149,12 +151,12 @@ export function PacksPage({ scope }: Props) {
       setUpdates(result);
       const available = result.filter((u) => u.updateAvailable);
       if (available.length === 0) {
-        alert("All packs are up to date.");
+        toast.info("All packs are up to date.");
       } else {
-        alert(`${available.length} update(s) available.`);
+        toast.info(`${available.length} update(s) available.`);
       }
     } catch (e) {
-      alert(`Failed to check updates: ${e}`);
+      toast.error("Failed to check updates", String(e));
     } finally {
       setCheckingUpdates(false);
     }
@@ -164,13 +166,13 @@ export function PacksPage({ scope }: Props) {
     setUpdatingPack(pack.filePath);
     try {
       const updated = await api.updatePack(pack.filePath);
-      alert(`Updated "${updated.name}" to v${updated.version}`);
+      toast.success(`Updated "${updated.name}" to v${updated.version}`);
       setUpdates((prev) =>
         prev.filter((u) => u.filePath !== pack.filePath)
       );
       await loadPacks();
     } catch (e) {
-      alert(`Update failed: ${e}`);
+      toast.error("Update failed", String(e));
     } finally {
       setUpdatingPack(null);
     }
@@ -178,7 +180,7 @@ export function PacksPage({ scope }: Props) {
 
   const startImport = async (pack: PackSummary) => {
     if (!repo) {
-      alert("Select a repository to import into");
+      toast.warn("Select a repository to import into");
       return;
     }
     try {
@@ -187,7 +189,7 @@ export function PacksPage({ scope }: Props) {
       setImportPreview(preview);
       setView("import-preview");
     } catch (e) {
-      alert(`Failed to preview import: ${e}`);
+      toast.error("Failed to preview import", String(e));
     }
   };
 
@@ -196,10 +198,10 @@ export function PacksPage({ scope }: Props) {
     setImporting(true);
     try {
       await api.importPack(importPackPath, repo.path, mode);
-      alert("Pack imported successfully!");
+      toast.success("Pack imported successfully!");
       setView("list");
     } catch (e) {
-      alert(`Import failed: ${e}`);
+      toast.error("Import failed", String(e));
     } finally {
       setImporting(false);
     }
@@ -211,7 +213,7 @@ export function PacksPage({ scope }: Props) {
       await api.deletePack(pack.filePath);
       await loadPacks();
     } catch (e) {
-      alert(`Failed to delete pack: ${e}`);
+      toast.error("Failed to delete pack", String(e));
     }
   };
 
