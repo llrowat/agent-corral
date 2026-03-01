@@ -21,7 +21,7 @@ You've got Claude Code agents scattered across a dozen repos. Hooks defined in o
 - **Share setups across repos** — The plugin system bundles your agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, or install directly from git.
 - **Keep configs in sync** — Import sync tracks which plugins you've pulled into each repo, auto-updates them when the source changes, and lets you pin versions when you need stability.
 - **Global or project, your call** — Flip between global (`~/.claude/`) and project-scoped (`.claude/`) config with a single toggle. See exactly what applies where.
-- **Share config with your team through git** — Project-scoped config lives in your repo's `.claude/` directory, so your agents, hooks, skills, and settings travel with the code. Commit once and every teammate gets the same Claude Code setup when they pull. The plugin system and import sync make it easy to keep shared configs up to date across repos.
+- **Share config with your team through git** — Export your agents, skills, hooks, and MCP servers as a plugin, host it in a git repo, and teammates can install it in one step. Import sync keeps everyone up to date automatically when the source repo changes.
 - **Bootstrap new repos fast** — The Quick Setup wizard detects unconfigured repos and offers starter presets to get a full Claude Code setup running in one click.
 
 No more digging through dotfiles. No more wondering which repo has that hook you wrote last month. No more breaking your config because you missed a comma in a JSON file.
