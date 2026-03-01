@@ -38,7 +38,7 @@ export function OverviewPage({ scope }: Props) {
     return (
       <div className="page page-empty">
         <h2>Howdy, partner.</h2>
-        <p>Welcome to AgentCorral — your configuration management studio.</p>
+        <p>Welcome to AgentCorral — your Claude Code configuration management studio.</p>
         <p>Select Global Settings or a repository to get started.</p>
       </div>
     );

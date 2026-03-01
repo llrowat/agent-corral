@@ -4,7 +4,7 @@
 
 <h1 align="center">AgentCorral</h1>
 
-<p align="center"><strong>Configuration Management Studio</strong></p>
+<p align="center"><strong>Claude Code Configuration Management Studio</strong></p>
 
 ---
 
@@ -14,7 +14,7 @@ You've got Claude Code agents scattered across a dozen repos. Hooks defined in o
 
 **That's the mess.** Claude Code is powerful, but its configuration lives in a tangle of dotfiles, JSON blobs, YAML frontmatter, and markdown spread across `~/.claude/` and every project's `.claude/` directory. There's no single place to see what you've got, no easy way to share setups between repos, and no guard rails when you're hand-editing config at 2am.
 
-**AgentCorral rounds it all up.** This is your configuration management studio — a desktop app that gives you a visual, unified interface to wrangle every piece of your Claude Code setup:
+**AgentCorral rounds it all up.** This is your Claude Code configuration management studio — a desktop app that gives you a visual, unified interface to wrangle every piece of your Claude Code setup:
 
 - **See everything at a glance** — One dashboard across all your repos. Know instantly which projects have agents, hooks, skills, MCP servers, and memory configured.
 - **Stop copy-pasting JSON** — Visual editors for agents, hooks, skills, MCP servers, config, and memory. Built-in presets so you're not starting from scratch.
