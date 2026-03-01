@@ -5,7 +5,4 @@ pub mod pack;
 pub mod plugin;
 pub mod preferences;
 pub mod repo;
-pub mod session;
 pub mod skills;
-pub mod terminal;
-pub mod worktree;

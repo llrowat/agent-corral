@@ -5,8 +5,6 @@ mod pack_manager;
 mod plugin_manager;
 mod preferences;
 mod repo_registry;
-mod session_manager;
-mod terminal_launcher;
 
 #[cfg(feature = "tauri-app")]
 use pack_manager::PackManager;
@@ -17,14 +15,11 @@ use preferences::PreferencesManager;
 #[cfg(feature = "tauri-app")]
 use repo_registry::RepoRegistry;
 #[cfg(feature = "tauri-app")]
-use session_manager::SessionManager;
-#[cfg(feature = "tauri-app")]
 use std::sync::Mutex;
 
 #[cfg(feature = "tauri-app")]
 pub struct AppState {
     pub repo_registry: Mutex<RepoRegistry>,
-    pub session_manager: Mutex<SessionManager>,
     pub pack_manager: Mutex<PackManager>,
     pub plugin_manager: Mutex<PluginManager>,
     pub preferences: Mutex<PreferencesManager>,
@@ -38,10 +33,6 @@ pub fn run() {
         .join("AgentCorral");
 
     std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data directory");
-    std::fs::create_dir_all(app_data_dir.join("sessions"))
-        .expect("Failed to create sessions dir");
-    std::fs::create_dir_all(app_data_dir.join("worktrees"))
-        .expect("Failed to create worktrees dir");
     std::fs::create_dir_all(app_data_dir.join("packs")).expect("Failed to create packs dir");
     std::fs::create_dir_all(app_data_dir.join("packs/library"))
         .expect("Failed to create library dir");
@@ -50,23 +41,18 @@ pub fn run() {
         .expect("Failed to create plugins library dir");
 
     let db_path = app_data_dir.join("repos.db");
-    let sessions_dir = app_data_dir.join("sessions");
-    let worktrees_dir = app_data_dir.join("worktrees");
     let packs_dir = app_data_dir.join("packs");
     let packs_library_dir = app_data_dir.join("packs/library");
     let plugins_dir = app_data_dir.join("plugins");
     let plugins_library_dir = app_data_dir.join("plugins/library");
 
     let repo_registry = RepoRegistry::new(&db_path).expect("Failed to initialize repo registry");
-    let session_manager = SessionManager::new(sessions_dir, worktrees_dir)
-        .expect("Failed to initialize session manager");
     let pack_manager = PackManager::new(packs_dir, packs_library_dir);
     let plugin_manager = PluginManager::new(plugins_dir, plugins_library_dir);
     let preferences_manager = PreferencesManager::new(&app_data_dir);
 
     let state = AppState {
         repo_registry: Mutex::new(repo_registry),
-        session_manager: Mutex::new(session_manager),
         pack_manager: Mutex::new(pack_manager),
         plugin_manager: Mutex::new(plugin_manager),
         preferences: Mutex::new(preferences_manager),
@@ -83,11 +69,6 @@ pub fn run() {
             commands::repo::remove_repo,
             commands::repo::list_repos,
             commands::repo::get_repo_status,
-            // Session commands
-            commands::session::list_sessions,
-            commands::session::poll_session_states,
-            commands::session::delete_session,
-            commands::session::focus_session,
             // Claude adapter commands
             commands::claude::get_claude_home,
             commands::claude::detect_claude_config,
@@ -105,14 +86,11 @@ pub fn run() {
             commands::claude::delete_memory_store,
             commands::claude::reset_memory,
             commands::claude::get_known_tools,
-            // Terminal commands
-            commands::terminal::launch_session,
-            commands::terminal::resume_session,
-            commands::terminal::open_session_folder,
-            commands::terminal::prepare_ai_command,
+            commands::claude::prepare_ai_command,
+            commands::claude::launch_terminal,
+            commands::claude::is_process_alive,
             // Preferences commands
             commands::preferences::get_preferences,
-            commands::preferences::set_terminal_preference,
             commands::preferences::get_platform,
             // Hooks commands
             commands::hooks::read_hooks,
@@ -157,13 +135,6 @@ pub fn run() {
             commands::plugin::read_import_registry,
             commands::plugin::set_plugin_sync_interval,
             commands::plugin::get_plugin_sync_interval,
-            // Worktree commands
-            commands::worktree::get_worktree_status,
-            commands::worktree::get_worktree_diff,
-            commands::worktree::list_branches,
-            commands::worktree::commit_worktree_changes,
-            commands::worktree::merge_worktree_branch,
-            commands::worktree::prune_worktrees,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

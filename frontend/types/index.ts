@@ -16,38 +16,6 @@ export interface RepoStatus {
   has_agents: boolean;
 }
 
-// -- Session Manager --
-
-export interface SessionEnvelope {
-  sessionId: string;
-  repoPath: string;
-  commandName: string;
-  command: string;
-  startedAt: string;
-  pid: number | null;
-  worktreePath: string | null;
-  worktreeBranch: string | null;
-  worktreeBaseBranch: string | null;
-  processAlive: boolean;
-}
-
-export interface WorktreeStatus {
-  branch: string;
-  baseBranch: string | null;
-  worktreePath: string;
-  hasUncommittedChanges: boolean;
-  commitCount: number;
-  latestCommitSummary: string | null;
-  insertions: number;
-  deletions: number;
-}
-
-/** Activity state for a running session, inferred from CPU usage between polls. */
-export type SessionActivity = "active" | "idle" | "exited";
-
-/** Map of session ID to activity state, returned by poll_session_states. */
-export type SessionActivityMap = Record<string, SessionActivity>;
-
 // -- Claude Adapter --
 
 export interface ClaudeDetection {
@@ -300,7 +268,6 @@ export type PageId =
   | "agents"
   | "config"
   | "memory"
-  | "sessions"
   | "hooks"
   | "skills"
   | "mcp"

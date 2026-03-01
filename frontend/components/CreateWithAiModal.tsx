@@ -20,7 +20,7 @@ function buildPrompt(entityType: AiEntityType, description: string): string {
         "",
         "Instructions:",
         "1. Create the .claude/agents/ directory if it doesn't exist.",
-        "2. Create a markdown file at .claude/agents/<slug-id>.md with YAML frontmatter and system prompt body. Choose an appropriate slug ID based on the description (lowercase, hyphens only, e.g. \"code-reviewer\").",
+        '2. Create a markdown file at .claude/agents/<slug-id>.md with YAML frontmatter and system prompt body. Choose an appropriate slug ID based on the description (lowercase, hyphens only, e.g. "code-reviewer").',
         "3. The file must have YAML frontmatter delimited by --- lines at the top, followed by the system prompt in markdown. Example structure:",
         "   ---",
         '   name: "Agent Display Name"',
@@ -124,29 +124,25 @@ function buildPrompt(entityType: AiEntityType, description: string): string {
 
 const LABELS: Record<
   AiEntityType,
-  { title: string; commandName: string; placeholder: string }
+  { title: string; placeholder: string }
 > = {
   agent: {
     title: "Create Agent with AI",
-    commandName: "AI Create Agent",
     placeholder:
       "e.g. A code review agent that focuses on security vulnerabilities and suggests fixes...",
   },
   skill: {
     title: "Create Skill with AI",
-    commandName: "AI Create Skill",
     placeholder:
       "e.g. A skill that generates unit tests for the current file using the project's testing framework...",
   },
   hook: {
     title: "Create Hook with AI",
-    commandName: "AI Create Hook",
     placeholder:
       "e.g. A pre-tool-use hook that runs ESLint before any Write operations...",
   },
   mcp: {
     title: "Set up MCP Server with AI",
-    commandName: "AI Setup MCP",
     placeholder:
       "e.g. Set up the filesystem MCP server so Claude can browse project files...",
   },
@@ -167,7 +163,7 @@ export function CreateWithAiModal({
   const [launching, setLaunching] = useState(false);
   const [state, setState] = useState<ModalState>("input");
   const [errorMsg, setErrorMsg] = useState("");
-  const sessionIdRef = useRef<string | null>(null);
+  const pidRef = useRef<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -188,30 +184,23 @@ export function CreateWithAiModal({
 
   const handleLaunch = async () => {
     if (!description.trim()) {
-      alert("Please provide a description");
       return;
     }
 
     setLaunching(true);
     try {
       const prompt = buildPrompt(entityType, description.trim());
-      // Write prompt to file and get a wrapper script that pipes it to claude -p
       const command = await api.prepareAiCommand(repoPath, prompt);
-      const sessionId = await api.launchSession(
-        repoPath,
-        label.commandName,
-        command
-      );
-      sessionIdRef.current = sessionId;
+      const pid = await api.launchTerminal(repoPath, command);
+      pidRef.current = pid;
       setState("waiting");
 
-      // Poll session state until it exits
+      // Poll process state until it exits
       pollRef.current = setInterval(async () => {
+        if (pidRef.current === null) return;
         try {
-          const states = await api.pollSessionStates();
-          const activity = states[sessionId];
-          // Session exited or is no longer tracked
-          if (activity === "exited" || activity === undefined) {
+          const alive = await api.isProcessAlive(pidRef.current);
+          if (!alive) {
             cleanup();
             setState("done");
             onCreated();
@@ -228,25 +217,10 @@ export function CreateWithAiModal({
         onCreated();
       }, TIMEOUT_MS);
     } catch (e) {
-      setErrorMsg(`Failed to launch session: ${e}`);
+      setErrorMsg(`Failed to launch terminal: ${e}`);
       setState("error");
     } finally {
       setLaunching(false);
-    }
-  };
-
-  const handleFocusSession = async () => {
-    if (!sessionIdRef.current) return;
-    try {
-      const sessions = await api.listSessions();
-      const session = sessions.find(
-        (s) => s.sessionId === sessionIdRef.current
-      );
-      if (session?.pid) {
-        await api.focusSession(session.pid);
-      }
-    } catch {
-      // ignore focus errors
     }
   };
 
@@ -261,7 +235,7 @@ export function CreateWithAiModal({
             <h3>{label.title}</h3>
             <p className="text-muted" style={{ marginBottom: 16 }}>
               Describe what you want and Claude Code will create it in a
-              terminal session.
+              terminal window.
             </p>
             <div className="form-group">
               <label>Description</label>
@@ -292,17 +266,14 @@ export function CreateWithAiModal({
           <>
             <h3>Creating with AI...</h3>
             <p className="text-muted" style={{ marginBottom: 16 }}>
-              Claude Code is working in a terminal session. This modal will
-              update automatically when the session finishes.
+              Claude Code is working in a terminal window. This modal will
+              update automatically when the process finishes.
             </p>
             <div className="ai-create-progress">
               <div className="ai-create-spinner" />
-              <span>Session running</span>
+              <span>Running</span>
             </div>
             <div className="form-actions">
-              <button className="btn" onClick={handleFocusSession}>
-                Show Terminal
-              </button>
               <button
                 className="btn"
                 onClick={() => {
@@ -319,7 +290,7 @@ export function CreateWithAiModal({
 
         {state === "done" && (
           <>
-            <h3>Session Complete</h3>
+            <h3>Complete</h3>
             <p className="text-muted" style={{ marginBottom: 16 }}>
               Claude Code has finished. The list has been refreshed with any new
               items.

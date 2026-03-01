@@ -2,9 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Repo,
   RepoStatus,
-  SessionEnvelope,
-  SessionActivityMap,
-  WorktreeStatus,
   ClaudeDetection,
   NormalizedConfig,
   Agent,
@@ -42,24 +39,6 @@ export async function listRepos(): Promise<Repo[]> {
 
 export async function getRepoStatus(path: string): Promise<RepoStatus> {
   return invoke("get_repo_status", { path });
-}
-
-// -- Session commands --
-
-export async function listSessions(): Promise<SessionEnvelope[]> {
-  return invoke("list_sessions");
-}
-
-export async function deleteSession(sessionId: string): Promise<void> {
-  return invoke("delete_session", { sessionId });
-}
-
-export async function focusSession(pid: number): Promise<void> {
-  return invoke("focus_session", { pid });
-}
-
-export async function pollSessionStates(): Promise<SessionActivityMap> {
-  return invoke("poll_session_states");
 }
 
 // -- Claude home --
@@ -160,6 +139,24 @@ export async function getKnownTools(): Promise<string[]> {
   return invoke("get_known_tools");
 }
 
+export async function prepareAiCommand(
+  repoPath: string,
+  prompt: string
+): Promise<string> {
+  return invoke("prepare_ai_command", { repoPath, prompt });
+}
+
+export async function launchTerminal(
+  repoPath: string,
+  command: string
+): Promise<number> {
+  return invoke("launch_terminal", { repoPath, command });
+}
+
+export async function isProcessAlive(pid: number): Promise<boolean> {
+  return invoke("is_process_alive", { pid });
+}
+
 // -- Hooks commands --
 
 export async function readHooks(repoPath: string): Promise<HookEvent[]> {
@@ -221,91 +218,15 @@ export async function deleteMcpServer(
 // -- Preferences commands --
 
 export interface AppPreferences {
-  terminal_emulator: string | null;
+  plugin_sync_interval_minutes: number;
 }
 
 export async function getPreferences(): Promise<AppPreferences> {
   return invoke("get_preferences");
 }
 
-export async function setTerminalPreference(
-  terminal: string | null
-): Promise<void> {
-  return invoke("set_terminal_preference", { terminal });
-}
-
 export async function getPlatform(): Promise<string> {
   return invoke("get_platform");
-}
-
-// -- Terminal commands --
-
-export async function prepareAiCommand(
-  repoPath: string,
-  prompt: string
-): Promise<string> {
-  return invoke("prepare_ai_command", { repoPath, prompt });
-}
-
-export async function launchSession(
-  repoPath: string,
-  commandName: string,
-  command: string,
-  useWorktree?: boolean,
-  baseBranch?: string | null
-): Promise<string> {
-  return invoke("launch_session", {
-    repoPath,
-    commandName,
-    command,
-    useWorktree: useWorktree || false,
-    baseBranch: baseBranch || null,
-  });
-}
-
-export async function resumeSession(
-  sessionId: string,
-  command: string
-): Promise<void> {
-  return invoke("resume_session", { sessionId, command });
-}
-
-export async function openSessionFolder(sessionId: string): Promise<void> {
-  return invoke("open_session_folder", { sessionId });
-}
-
-// -- Worktree commands --
-
-export async function getWorktreeStatus(
-  sessionId: string
-): Promise<WorktreeStatus> {
-  return invoke("get_worktree_status", { sessionId });
-}
-
-export async function getWorktreeDiff(sessionId: string): Promise<string> {
-  return invoke("get_worktree_diff", { sessionId });
-}
-
-export async function listBranches(repoPath: string): Promise<string[]> {
-  return invoke("list_branches", { repoPath });
-}
-
-export async function commitWorktreeChanges(
-  sessionId: string,
-  message: string
-): Promise<string> {
-  return invoke("commit_worktree_changes", { sessionId, message });
-}
-
-export async function mergeWorktreeBranch(
-  sessionId: string,
-  targetBranch: string
-): Promise<string> {
-  return invoke("merge_worktree_branch", { sessionId, targetBranch });
-}
-
-export async function pruneWorktrees(): Promise<void> {
-  return invoke("prune_worktrees");
 }
 
 // -- Pack commands --
@@ -523,4 +444,3 @@ export async function setPluginSyncInterval(
 export async function getPluginSyncInterval(): Promise<number> {
   return invoke("get_plugin_sync_interval");
 }
-

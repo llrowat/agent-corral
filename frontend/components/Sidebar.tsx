@@ -18,7 +18,6 @@ const navGroups: NavGroup[] = [
     label: "Project",
     items: [
       { path: "/overview", label: "Overview", icon: "grid" },
-      { path: "/sessions", label: "Sessions", icon: "terminal" },
     ],
   },
   {
@@ -97,8 +96,7 @@ function getIcon(name: string): string {
     mcp: "\u2302",
     settings: "\u2638",
     database: "\u25C8",
-    terminal: "\u25B6",
-    package: "\u25A3",
+package: "\u25A3",
     template: "\u25B8",
     wrench: "\u2692",
   };

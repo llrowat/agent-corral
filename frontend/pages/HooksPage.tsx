@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import type { Scope, HookEvent, HookGroup, HookHandler } from "@/types";
 import { HOOK_EVENTS } from "@/types";
 import * as api from "@/lib/tauri";
-import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { PresetPicker } from "@/components/PresetPicker";
+import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { HOOK_PRESETS, type HookPreset } from "@/lib/presets";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import { DocsLink } from "@/components/DocsLink";
@@ -29,8 +29,8 @@ export function HooksPage({ scope, homePath }: Props) {
   const [editing, setEditing] = useState<HookEvent | null>(null);
   const [saving, setSaving] = useState(false);
   const [isNew, setIsNew] = useState(false);
-  const [showAiModal, setShowAiModal] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isProjectScope = scope?.type === "project";
@@ -509,20 +509,20 @@ export function HooksPage({ scope, homePath }: Props) {
           )}
         </div>
       </div>
-      {showAiModal && basePath && (
-        <CreateWithAiModal
-          entityType="hook"
-          repoPath={basePath}
-          onClose={() => setShowAiModal(false)}
-          onCreated={() => loadHooks()}
-        />
-      )}
       {showPresets && (
         <PresetPicker
           title="Hook Templates"
           presets={HOOK_PRESETS}
           onSelect={handleSelectPreset}
           onClose={() => setShowPresets(false)}
+        />
+      )}
+      {showAiModal && basePath && (
+        <CreateWithAiModal
+          entityType="hook"
+          repoPath={basePath}
+          onClose={() => setShowAiModal(false)}
+          onCreated={() => loadHooks()}
         />
       )}
     </div>

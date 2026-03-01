@@ -4,7 +4,7 @@
 
 <h1 align="center">AgentCorral</h1>
 
-<p align="center"><strong>Claude Code Workspace Manager</strong> — a desktop app for managing Claude Code agents, configs, hooks, skills, MCP servers, memory, sessions, and plugins across your repositories.</p>
+<p align="center"><strong>Claude Code Configuration Manager</strong> — a desktop app for managing Claude Code agents, configs, hooks, skills, MCP servers, memory, and plugins across your repositories.</p>
 
 Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
@@ -18,11 +18,10 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 - **MCP Servers** — Configure Model Context Protocol servers at global or project scope.
 - **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. See raw JSON and shareability tags.
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
-- **Session Manager** — Launch terminal sessions, view active sessions, resume sessions, focus terminal windows, and auto-cleanup when terminals close. Supports **git worktree isolation** — run sessions in an isolated worktree with their own branch, view diffs, and merge changes back. Session activity monitoring (active/idle/exited).
 - **Plugin System** — Directory-based plugin format bundling agents, skills, hooks, and MCP servers. Import/export, install from git, auto-update, and import sync (track, pin, auto-sync imported plugins).
-- **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code with a tailored prompt.
+- **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal window.
 - **Quick Setup** — First-run wizard detects repos with no Claude config and offers starter presets to bootstrap a working setup in one click.
-- **Settings** — Configure terminal emulator preference and plugin sync interval.
+- **Settings** — Configure plugin sync interval for automatic update checking.
 - **Inline Validation** — Real-time form validation with auto-fix suggestions for IDs and slugs.
 - **Docs Links** — Each feature page links to the corresponding Anthropic documentation.
 
@@ -61,19 +60,17 @@ agent-corral/
 │   ├── src/
 │   │   ├── lib.rs              # App entry, state management
 │   │   ├── main.rs             # Binary entry
-│   │   ├── preferences.rs      # App preferences (terminal emulator, plugin sync interval)
-│   │   ├── commands/           # Tauri IPC command handlers (11 modules)
+│   │   ├── preferences.rs      # App preferences (plugin sync interval)
+│   │   ├── commands/           # Tauri IPC command handlers (8 modules)
 │   │   ├── repo_registry/      # SQLite repo management
-│   │   ├── session_manager/    # Session tracking, process lifecycle, window focus, git worktree lifecycle
 │   │   ├── claude_adapter/     # Claude Code file format adapter (agents, hooks, skills, MCP, memory)
 │   │   ├── plugin_manager/     # Plugin export/import/git install/update, import sync registry
-│   │   ├── pack_manager/       # Legacy pack system (kept for migration)
-│   │   └── terminal_launcher/  # Native terminal spawning (per-platform)
+│   │   └── pack_manager/       # Legacy pack system (kept for migration)
 │   └── tauri.conf.json
 ├── frontend/           # React frontend
-│   ├── components/     # Shared UI components (10 components)
-│   ├── pages/          # Page components (12 pages)
-│   ├── hooks/          # React hooks (useRepos, useSessions, usePluginSync)
+│   ├── components/     # Shared UI components (9 components)
+│   ├── pages/          # Page components (10 pages)
+│   ├── hooks/          # React hooks (useRepos, usePluginSync)
 │   ├── lib/            # Tauri API bindings + built-in presets
 │   ├── types/          # TypeScript type definitions
 │   └── styles.css      # Global styles (dark theme)
