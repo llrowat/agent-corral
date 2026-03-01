@@ -10,117 +10,23 @@ interface Props {
   homePath: string | null;
 }
 
-const CLAUDE_MD_TEMPLATES = [
-  {
-    id: "general",
-    label: "General Project",
-    content: `# Project Instructions
+const CLAUDE_MD_PROMPT = `Analyze this project and create a CLAUDE.md file in the project root. The file should contain:
 
-## Overview
-[Describe your project here]
+1. A brief project overview (what it does, key technologies)
+2. Coding standards specific to this codebase (naming conventions, patterns you see already in use)
+3. Architecture notes (key directories, how the code is organized, important abstractions)
+4. Testing requirements (test framework in use, where tests live, how to run them)
+5. Build and development commands
+6. Any patterns or conventions you can infer from the existing code
 
-## Coding Standards
-- Write clean, readable code with meaningful variable names
-- Add comments only where the logic is non-obvious
-- Follow existing patterns in the codebase
-
-## Testing
-- Every change must include tests
-- Run the test suite before committing
-
-## Architecture
-[Describe key architectural decisions]
-
-## Common Patterns
-[Describe patterns Claude should follow]
-`,
-  },
-  {
-    id: "typescript",
-    label: "TypeScript / React",
-    content: `# Project Instructions
-
-## Tech Stack
-- TypeScript with strict mode
-- React (functional components, hooks)
-- CSS Modules / Tailwind for styling
-
-## Conventions
-- Use named exports (not default exports)
-- Prefer \`interface\` over \`type\` for object shapes
-- Use \`const\` by default, \`let\` only when mutation is needed
-- No \`any\` types — use \`unknown\` and narrow
-
-## File Structure
-- Components: PascalCase directories with index.tsx
-- Hooks: camelCase with \`use\` prefix
-- Tests: colocated \`.test.tsx\` files
-
-## Testing
-- Use Vitest + React Testing Library
-- Test behavior, not implementation
-- Mock external dependencies, not internal modules
-`,
-  },
-  {
-    id: "python",
-    label: "Python",
-    content: `# Project Instructions
-
-## Tech Stack
-- Python 3.11+
-- Type hints required on all functions
-- Use dataclasses or Pydantic models
-
-## Conventions
-- Follow PEP 8 style guide
-- Use f-strings for formatting
-- Prefer pathlib over os.path
-- Use \`logging\` module, not print statements
-
-## Testing
-- pytest with fixtures
-- Tests in \`tests/\` directory mirroring source structure
-- Aim for >80% coverage on new code
-
-## Dependencies
-- Add to pyproject.toml, not requirements.txt
-- Pin major versions
-`,
-  },
-  {
-    id: "rust",
-    label: "Rust",
-    content: `# Project Instructions
-
-## Conventions
-- Use \`thiserror\` for error types
-- Prefer \`&str\` over \`String\` in function parameters
-- Use \`clippy\` lints: run \`cargo clippy\` before committing
-- Document public APIs with \`///\` doc comments
-
-## Error Handling
-- Use \`Result<T, E>\` — no panics in library code
-- Use \`anyhow\` in binaries, \`thiserror\` in libraries
-- Propagate errors with \`?\`, don't unwrap
-
-## Testing
-- Inline \`#[cfg(test)] mod tests\` blocks
-- Use \`tempfile::tempdir()\` for filesystem tests
-- Test both happy path and error cases
-`,
-  },
-];
+Keep it concise and practical — focus on things that would help an AI coding assistant work effectively in this repo. Don't include generic advice; base everything on what you actually see in the codebase.`;
 
 export function ClaudeMdPage({ scope, homePath }: Props) {
   const toast = useToast();
   const [content, setContent] = useState("");
-  const [savedContent, setSavedContent] = useState("");
   const [globalContent, setGlobalContent] = useState("");
   const [nestedFiles, setNestedFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
 
   const basePath =
     scope?.type === "global"
@@ -139,11 +45,9 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
         api.listClaudeMdFiles(basePath).catch(() => [] as string[]),
       ]);
       setContent(md);
-      setSavedContent(md);
       setNestedFiles(nested);
     } catch {
       setContent("");
-      setSavedContent("");
     } finally {
       setLoading(false);
     }
@@ -167,33 +71,19 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
     loadGlobal();
   }, [loadContent, loadGlobal]);
 
-  const isDirty = content !== savedContent;
-  const isEmpty = !savedContent;
+  const isEmpty = !content;
 
-  const handleSave = async () => {
-    if (!basePath) return;
-    try {
-      await api.writeClaudeMd(basePath, content);
-      setSavedContent(content);
-      toast.success("CLAUDE.md saved");
-    } catch (e) {
-      toast.error("Failed to save CLAUDE.md", String(e));
-    }
-  };
-
-  const handleDiscard = () => {
-    setContent(savedContent);
-  };
-
-  const handleApplyTemplate = (template: (typeof CLAUDE_MD_TEMPLATES)[number]) => {
-    setContent(template.content);
-    setShowTemplates(false);
+  const handleCopyPrompt = () => {
+    navigator.clipboard.writeText(CLAUDE_MD_PROMPT).then(
+      () => toast.success("Prompt copied — paste it into Claude Code"),
+      () => toast.error("Failed to copy to clipboard")
+    );
   };
 
   if (!scope) {
     return (
       <div className="page page-empty">
-        <p>Select a scope to edit CLAUDE.md.</p>
+        <p>Select a scope to view CLAUDE.md.</p>
       </div>
     );
   }
@@ -205,86 +95,46 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
         <h2>
           CLAUDE.md <DocsLink page="config" />
         </h2>
-        <div className="header-actions">
-          {isEmpty && (
-            <button
-              className="btn btn-sm"
-              onClick={() => setShowTemplates(true)}
-            >
-              From Template
-            </button>
-          )}
-          <button
-            className="btn btn-sm"
-            onClick={() => setShowPreview(!showPreview)}
-          >
-            {showPreview ? "Editor" : "Preview"}
-          </button>
-        </div>
       </div>
 
       <p className="page-description">
         Project instructions that Claude Code reads at the start of every
-        session. This is the most important configuration file — it shapes
-        Claude's behavior for your entire project.
+        session. CLAUDE.md is version-controlled — edit it in your code editor
+        alongside your source code.
       </p>
 
       {loading ? (
         <p className="text-muted">Loading...</p>
       ) : (
         <>
-          {isEmpty && !isDirty && (
+          {isEmpty && (
             <div className="claude-md-empty">
               <h3>No CLAUDE.md Found</h3>
               <p>
-                Create a CLAUDE.md to give Claude Code project-specific
-                instructions.
+                CLAUDE.md is the most important Claude Code config file — it tells
+                Claude how to work in your project. The best way to create one is
+                to have Claude Code generate it by analyzing your actual codebase.
               </p>
-              <div className="form-actions" style={{ justifyContent: "center" }}>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => setShowTemplates(true)}
-                >
-                  Start from Template
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => setContent("# Project Instructions\n\n")}
-                >
-                  Start Blank
-                </button>
+              <div className="claude-md-prompt-section">
+                <h4>Prompt for Claude Code</h4>
+                <pre className="prompt-preview">{CLAUDE_MD_PROMPT}</pre>
+                <div className="form-actions" style={{ marginTop: 12 }}>
+                  <button className="btn btn-primary" onClick={handleCopyPrompt}>
+                    Copy Prompt
+                  </button>
+                </div>
+                <p className="text-muted" style={{ marginTop: 8, fontSize: 12 }}>
+                  Paste this into Claude Code in your project directory. It will
+                  analyze your codebase and create a tailored CLAUDE.md.
+                </p>
               </div>
             </div>
           )}
 
-          {(isDirty || !isEmpty) && (
+          {!isEmpty && (
             <div className="claude-md-editor-layout">
-              {showPreview ? (
-                <div className="claude-md-preview">
-                  <MarkdownPreview content={content} />
-                </div>
-              ) : (
-                <textarea
-                  className="claude-md-editor"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="# Project Instructions&#10;&#10;Write your Claude Code instructions here..."
-                  spellCheck={false}
-                />
-              )}
-            </div>
-          )}
-
-          {isDirty && (
-            <div className="config-save-bar" data-testid="save-bar">
-              <span>You have unsaved changes</span>
-              <div className="config-save-actions">
-                <button className="btn" onClick={handleDiscard}>
-                  Discard
-                </button>
-                <button className="btn btn-primary" onClick={handleSave}>
-                  Save CLAUDE.md
-                </button>
+              <div className="claude-md-preview">
+                <MarkdownPreview content={content} />
               </div>
             </div>
           )}
@@ -314,7 +164,7 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
                   Global CLAUDE.md
                 </span>
                 <span className="global-section-hint">
-                  Switch to Global Settings to edit
+                  Switch to Global Settings to view
                 </span>
               </div>
               <pre className="prompt-preview" style={{ maxHeight: 200 }}>
@@ -323,30 +173,6 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
             </div>
           )}
         </>
-      )}
-
-      {showTemplates && (
-        <div className="modal-overlay" onClick={() => setShowTemplates(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>CLAUDE.md Templates</h3>
-            <div className="preset-grid">
-              {CLAUDE_MD_TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  className="preset-card"
-                  onClick={() => handleApplyTemplate(t)}
-                >
-                  <span className="preset-label">{t.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="form-actions" style={{ marginTop: 16 }}>
-              <button className="btn" onClick={() => setShowTemplates(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

@@ -42,13 +42,13 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 - **MCP Servers** — Configure Model Context Protocol servers at global or project scope. Health check per server to verify availability.
 - **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. See raw JSON and shareability tags.
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
-- **CLAUDE.md Editor** — Dedicated editor for CLAUDE.md project instructions with split editor/preview, built-in templates (TypeScript/React, Python, Rust, General), and support for nested CLAUDE.md files.
+- **CLAUDE.md Viewer** — Read-only view of your project's CLAUDE.md with markdown preview, nested file discovery, and a Claude Code prompt you can copy to generate a tailored CLAUDE.md for your project. (CLAUDE.md is version-controlled source — edit it in your code editor.)
 
 ### Visibility & Insights
 - **Effective Config Preview** — See the merged result of global + project configuration with source annotations ("from global", "project override") for each setting.
 - **Config Health Score** — Automated linting widget that checks for common issues: missing CLAUDE.md, no model configured, agents with short prompts, hooks without timeouts, MCP placeholder env vars, and more.
 - **Cross-Reference Visualization** — See how entities relate: which agents bind to which memory stores, hook coverage by event, orphaned entities, and dangling references.
-- **Config Version History** — Snapshot config at any point, view timeline, and one-click restore to any previous state.
+- **Config Version History** — Snapshot settings.json at any point, view timeline, and one-click restore to any previous state.
 
 ### Productivity
 - **Global Search** — Cmd+K / Ctrl+K search overlay that indexes all agents, hooks, skills, MCP servers, and memory stores with instant navigation.
@@ -60,7 +60,7 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
 ### Import & Export
 - **Plugin System** — Directory-based plugin format bundling agents, skills, hooks, and MCP servers. Import/export, install from git, auto-update, and import sync (track, pin, auto-sync imported plugins).
-- **Config Backup & Restore** — Export entire Claude Code configuration as a JSON bundle. Import with merge or overwrite modes.
+- **Config Backup & Restore** — Export Claude Code configuration (agents, skills, hooks, MCP servers, settings) as a JSON bundle. Import with merge or overwrite modes. CLAUDE.md is excluded since it's version-controlled.
 - **Import from Existing Project** — Scan wizard to discover Claude Code config in any project directory and register it in AgentCorral.
 - **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal window.
 

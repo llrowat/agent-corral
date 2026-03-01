@@ -162,7 +162,6 @@ pub struct ConfigSnapshot {
     pub label: String,
     pub timestamp: String,
     pub settings_json: Option<String>,
-    pub claude_md: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -172,7 +171,6 @@ pub struct ConfigSnapshotSummary {
     pub label: String,
     pub timestamp: String,
     pub has_settings: bool,
-    pub has_claude_md: bool,
 }
 
 // -- Config Bundle types (backup/restore) --
@@ -188,7 +186,6 @@ pub struct ConfigBundle {
     pub hooks: Vec<serde_json::Value>,
     pub mcp_servers: serde_json::Value,
     pub settings: serde_json::Value,
-    pub claude_md: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,7 +196,6 @@ pub struct ImportBundleResult {
     pub hooks_imported: usize,
     pub mcp_servers_imported: usize,
     pub settings_imported: bool,
-    pub claude_md_imported: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1100,8 +1096,6 @@ impl ClaudeRepoAdapter {
             .map(|c| c.raw)
             .unwrap_or_else(|_| serde_json::json!({}));
 
-        let claude_md = Self::read_claude_md(base_path).ok().filter(|s| !s.is_empty());
-
         let bundle = ConfigBundle {
             version: "1.0".to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
@@ -1115,7 +1109,6 @@ impl ClaudeRepoAdapter {
             hooks: hooks_json,
             mcp_servers: serde_json::Value::Object(mcp_map),
             settings,
-            claude_md,
         };
 
         let bytes = serde_json::to_vec_pretty(&bundle)?;
@@ -1138,7 +1131,6 @@ impl ClaudeRepoAdapter {
             hooks_imported: 0,
             mcp_servers_imported: 0,
             settings_imported: false,
-            claude_md_imported: false,
         };
 
         // Import agents
@@ -1244,15 +1236,6 @@ impl ClaudeRepoAdapter {
                     atomic_write(&settings_path, &json)?;
                     result.settings_imported = true;
                 }
-            }
-        }
-
-        // Import CLAUDE.md
-        if let Some(ref md_content) = bundle.claude_md {
-            let md_path = Path::new(base_path).join("CLAUDE.md");
-            if overwrite || !md_path.exists() {
-                Self::write_claude_md(base_path, md_content)?;
-                result.claude_md_imported = true;
             }
         }
 
@@ -1721,13 +1704,6 @@ impl ClaudeRepoAdapter {
         Ok(fs::read_to_string(&md_path)?)
     }
 
-    /// Write CLAUDE.md content to a repo (or global home). Creates the file if it doesn't exist.
-    pub fn write_claude_md(repo_path: &str, content: &str) -> Result<(), ClaudeAdapterError> {
-        let md_path = Path::new(repo_path).join("CLAUDE.md");
-        atomic_write(&md_path, content)?;
-        Ok(())
-    }
-
     /// List nested CLAUDE.md files in subdirectories (not the root one)
     pub fn list_claude_md_files(repo_path: &str) -> Result<Vec<String>, ClaudeAdapterError> {
         let base = Path::new(repo_path);
@@ -1759,17 +1735,10 @@ impl ClaudeRepoAdapter {
         let timestamp = chrono::Utc::now().to_rfc3339();
         let snapshot_id = format!("{}_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"), label.replace(' ', "_"));
 
-        // Capture current state
+        // Capture current state (settings.json only — CLAUDE.md is version-controlled)
         let settings_path = claude_dir.join("settings.json");
         let settings_content = if settings_path.exists() {
             Some(fs::read_to_string(&settings_path)?)
-        } else {
-            None
-        };
-
-        let claude_md_path = Path::new(repo_path).join("CLAUDE.md");
-        let claude_md_content = if claude_md_path.exists() {
-            Some(fs::read_to_string(&claude_md_path)?)
         } else {
             None
         };
@@ -1779,7 +1748,6 @@ impl ClaudeRepoAdapter {
             label: label.to_string(),
             timestamp: timestamp.clone(),
             settings_json: settings_content,
-            claude_md: claude_md_content,
         };
 
         let snapshot_path = history_dir.join(format!("{}.json", snapshot_id));
@@ -1807,7 +1775,6 @@ impl ClaudeRepoAdapter {
                             label: snapshot.label,
                             timestamp: snapshot.timestamp,
                             has_settings: snapshot.settings_json.is_some(),
-                            has_claude_md: snapshot.claude_md.is_some(),
                         });
                     }
                 }
@@ -1833,10 +1800,6 @@ impl ClaudeRepoAdapter {
             let claude_dir = Path::new(repo_path).join(".claude");
             fs::create_dir_all(&claude_dir)?;
             atomic_write(&claude_dir.join("settings.json"), settings)?;
-        }
-
-        if let Some(ref md) = snapshot.claude_md {
-            atomic_write(&Path::new(repo_path).join("CLAUDE.md"), md)?;
         }
 
         Ok(())
@@ -2895,11 +2858,11 @@ mod tests {
     }
 
     #[test]
-    fn write_and_read_claude_md_roundtrip() {
+    fn read_claude_md_reads_existing_file() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().to_str().unwrap();
         let content = "# Project Instructions\n\nAlways write tests.";
-        ClaudeRepoAdapter::write_claude_md(path, content).unwrap();
+        std::fs::write(dir.path().join("CLAUDE.md"), content).unwrap();
         let result = ClaudeRepoAdapter::read_claude_md(path).unwrap();
         assert_eq!(result, content);
     }
@@ -2924,19 +2887,16 @@ mod tests {
         let claude_dir = dir.path().join(".claude");
         std::fs::create_dir_all(&claude_dir).unwrap();
         std::fs::write(claude_dir.join("settings.json"), r#"{"model":"claude-sonnet-4-6"}"#).unwrap();
-        std::fs::write(dir.path().join("CLAUDE.md"), "# Test").unwrap();
 
         let snapshot = ClaudeRepoAdapter::save_config_snapshot(path, "test snapshot").unwrap();
         assert!(!snapshot.snapshot_id.is_empty());
         assert_eq!(snapshot.label, "test snapshot");
         assert!(snapshot.settings_json.is_some());
-        assert!(snapshot.claude_md.is_some());
 
         let list = ClaudeRepoAdapter::list_config_snapshots(path).unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].label, "test snapshot");
         assert!(list[0].has_settings);
-        assert!(list[0].has_claude_md);
     }
 
     #[test]
@@ -3437,7 +3397,6 @@ mod tests {
         assert!(bundle.hooks.is_empty());
         assert_eq!(bundle.mcp_servers, serde_json::json!({}));
         assert_eq!(bundle.settings, serde_json::json!({}));
-        assert!(bundle.claude_md.is_none());
     }
 
     #[test]
@@ -3471,8 +3430,6 @@ mod tests {
         };
         ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
 
-        ClaudeRepoAdapter::write_claude_md(path, "# Project Instructions").unwrap();
-
         let config = NormalizedConfig {
             model: Some("claude-sonnet-4-6".to_string()),
             permissions: None,
@@ -3486,7 +3443,6 @@ mod tests {
 
         assert_eq!(bundle.agents.len(), 1);
         assert_eq!(bundle.skills.len(), 1);
-        assert_eq!(bundle.claude_md, Some("# Project Instructions".to_string()));
         assert_eq!(bundle.settings["model"], "claude-sonnet-4-6");
     }
 
@@ -3545,7 +3501,6 @@ mod tests {
             hooks: vec![],
             mcp_servers: serde_json::json!({}),
             settings: serde_json::json!({}),
-            claude_md: None,
         };
 
         let bundle_bytes = serde_json::to_vec(&bundle).unwrap();
@@ -3594,7 +3549,6 @@ mod tests {
             hooks: vec![],
             mcp_servers: serde_json::json!({}),
             settings: serde_json::json!({}),
-            claude_md: None,
         };
 
         let bundle_bytes = serde_json::to_vec(&bundle).unwrap();
@@ -3613,60 +3567,6 @@ mod tests {
     }
 
     #[test]
-    fn import_config_bundle_imports_claude_md() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().to_str().unwrap();
-
-        let bundle = ConfigBundle {
-            version: "1.0".to_string(),
-            created_at: "2026-03-01T00:00:00Z".to_string(),
-            scope: "project".to_string(),
-            agents: vec![],
-            skills: vec![],
-            hooks: vec![],
-            mcp_servers: serde_json::json!({}),
-            settings: serde_json::json!({}),
-            claude_md: Some("# Imported Instructions".to_string()),
-        };
-
-        let bundle_bytes = serde_json::to_vec(&bundle).unwrap();
-        let result =
-            ClaudeRepoAdapter::import_config_bundle(path, false, &bundle_bytes, "merge").unwrap();
-
-        assert!(result.claude_md_imported);
-        let md = ClaudeRepoAdapter::read_claude_md(path).unwrap();
-        assert_eq!(md, "# Imported Instructions");
-    }
-
-    #[test]
-    fn import_config_bundle_merge_skips_existing_claude_md() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().to_str().unwrap();
-
-        ClaudeRepoAdapter::write_claude_md(path, "# Original").unwrap();
-
-        let bundle = ConfigBundle {
-            version: "1.0".to_string(),
-            created_at: "2026-03-01T00:00:00Z".to_string(),
-            scope: "project".to_string(),
-            agents: vec![],
-            skills: vec![],
-            hooks: vec![],
-            mcp_servers: serde_json::json!({}),
-            settings: serde_json::json!({}),
-            claude_md: Some("# Should not overwrite".to_string()),
-        };
-
-        let bundle_bytes = serde_json::to_vec(&bundle).unwrap();
-        let result =
-            ClaudeRepoAdapter::import_config_bundle(path, false, &bundle_bytes, "merge").unwrap();
-
-        assert!(!result.claude_md_imported);
-        let md = ClaudeRepoAdapter::read_claude_md(path).unwrap();
-        assert_eq!(md, "# Original");
-    }
-
-    #[test]
     fn export_import_roundtrip() {
         let src = tempfile::tempdir().unwrap();
         let src_path = src.path().to_str().unwrap();
@@ -3681,7 +3581,6 @@ mod tests {
             memory: None,
         };
         ClaudeRepoAdapter::write_agent(src_path, &agent).unwrap();
-        ClaudeRepoAdapter::write_claude_md(src_path, "# My Project").unwrap();
 
         let config = NormalizedConfig {
             model: Some("claude-sonnet-4-6".to_string()),
@@ -3700,14 +3599,10 @@ mod tests {
             ClaudeRepoAdapter::import_config_bundle(dst_path, false, &exported, "merge").unwrap();
         assert_eq!(result.agents_imported, 1);
         assert!(result.settings_imported);
-        assert!(result.claude_md_imported);
 
         let agents = ClaudeRepoAdapter::read_agents(dst_path).unwrap();
         assert_eq!(agents.len(), 1);
         assert_eq!(agents[0].agent_id, "helper");
-
-        let md = ClaudeRepoAdapter::read_claude_md(dst_path).unwrap();
-        assert_eq!(md, "# My Project");
 
         let cfg = ClaudeRepoAdapter::read_config(dst_path).unwrap();
         assert_eq!(cfg.model, Some("claude-sonnet-4-6".to_string()));
@@ -3747,7 +3642,6 @@ mod tests {
                 }
             }),
             settings: serde_json::json!({}),
-            claude_md: None,
         };
 
         let bundle_bytes = serde_json::to_vec(&bundle).unwrap();

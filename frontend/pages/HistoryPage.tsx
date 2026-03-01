@@ -97,8 +97,8 @@ export function HistoryPage({ scope }: Props) {
       </div>
 
       <p className="page-description">
-        Snapshots capture the current state of your settings.json and CLAUDE.md.
-        Restore any snapshot to revert changes.
+        Snapshots capture the current state of your settings.json.
+        Restore any snapshot to revert config changes.
       </p>
 
       {showCreate && (
@@ -152,9 +152,6 @@ export function HistoryPage({ scope }: Props) {
               <div className="history-item-meta">
                 {snap.hasSettings && (
                   <span className="tool-tag">settings.json</span>
-                )}
-                {snap.hasClaudeMd && (
-                  <span className="tool-tag">CLAUDE.md</span>
                 )}
               </div>
               <div className="history-item-actions">

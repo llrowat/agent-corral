@@ -305,7 +305,6 @@ describe("OverviewPage", () => {
       hooksImported: 0,
       mcpServersImported: 0,
       settingsImported: false,
-      claudeMdImported: true,
     });
 
     renderWithRouter(PROJECT_SCOPE);
@@ -338,7 +337,6 @@ describe("OverviewPage", () => {
       hooksImported: 0,
       mcpServersImported: 0,
       settingsImported: true,
-      claudeMdImported: false,
     });
 
     renderWithRouter(PROJECT_SCOPE);

@@ -459,13 +459,6 @@ export async function readClaudeMd(repoPath: string): Promise<string> {
   return invoke("read_claude_md", { repoPath });
 }
 
-export async function writeClaudeMd(
-  repoPath: string,
-  content: string
-): Promise<void> {
-  return invoke("write_claude_md", { repoPath, content });
-}
-
 export async function listClaudeMdFiles(
   repoPath: string
 ): Promise<string[]> {
@@ -479,7 +472,6 @@ export interface ConfigSnapshotSummary {
   label: string;
   timestamp: string;
   hasSettings: boolean;
-  hasClaudeMd: boolean;
 }
 
 export interface ConfigSnapshot {
@@ -487,7 +479,6 @@ export interface ConfigSnapshot {
   label: string;
   timestamp: string;
   settingsJson: string | null;
-  claudeMd: string | null;
 }
 
 export async function saveConfigSnapshot(
@@ -632,7 +623,6 @@ export interface ImportBundleResult {
   hooksImported: number;
   mcpServersImported: number;
   settingsImported: boolean;
-  claudeMdImported: boolean;
 }
 
 export async function exportConfigBundle(

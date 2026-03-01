@@ -107,7 +107,6 @@ export function OverviewPage({ scope, homePath }: Props) {
         if (result.hooksImported > 0) parts.push(`${result.hooksImported} hook event(s)`);
         if (result.mcpServersImported > 0) parts.push(`${result.mcpServersImported} MCP server(s)`);
         if (result.settingsImported) parts.push("settings");
-        if (result.claudeMdImported) parts.push("CLAUDE.md");
 
         const summary = parts.length > 0 ? `Imported: ${parts.join(", ")}` : "Nothing new to import";
         toast.success("Import complete", summary);
