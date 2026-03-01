@@ -713,7 +713,7 @@ export function PluginsPage({ scope }: Props) {
             <strong>
               Imported Plugins ({syncStatuses.length})
               {syncUpdatesAvailable > 0 && (
-                <span className="badge-update" style={{ marginLeft: 8 }}>
+                <span className="badge-update">
                   {syncUpdatesAvailable} update(s)
                 </span>
               )}
