@@ -230,11 +230,11 @@ describe("Tauri API bindings", () => {
 
     it("defaults useWorktree to false", async () => {
       mockInvoke.mockResolvedValue("sess-456");
-      await api.launchSession("/tmp/repo", "Chat", "claude --chat");
+      await api.launchSession("/tmp/repo", "Chat", "claude");
       expect(mockInvoke).toHaveBeenCalledWith("launch_session", {
         repoPath: "/tmp/repo",
         commandName: "Chat",
-        command: "claude --chat",
+        command: "claude",
         useWorktree: false,
         baseBranch: null,
       });

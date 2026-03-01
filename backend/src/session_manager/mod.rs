@@ -54,6 +54,8 @@ pub struct WorktreeStatus {
     pub has_uncommitted_changes: bool,
     pub commit_count: u32,
     pub latest_commit_summary: Option<String>,
+    pub insertions: u32,
+    pub deletions: u32,
 }
 
 /// Activity state for a running session, inferred from CPU usage between polls.
@@ -283,6 +285,19 @@ impl SessionManager {
             }
         });
 
+        // Compute total insertions/deletions vs base (committed + uncommitted)
+        let (insertions, deletions) = if let Some(ref base) = resolved_base {
+            parse_shortstat_output(
+                &Command::new("git")
+                    .args(["diff", "--shortstat", base])
+                    .current_dir(worktree_path)
+                    .output()
+                    .ok(),
+            )
+        } else {
+            (0, 0)
+        };
+
         Ok(WorktreeStatus {
             branch: branch.to_string(),
             base_branch: resolved_base,
@@ -290,6 +305,8 @@ impl SessionManager {
             has_uncommitted_changes: has_uncommitted,
             commit_count,
             latest_commit_summary,
+            insertions,
+            deletions,
         })
     }
 
@@ -518,42 +535,89 @@ impl SessionManager {
     }
 }
 
-/// Get cumulative CPU time in milliseconds for a process. Returns None if the
-/// process doesn't exist or the information can't be read.
+/// Get cumulative CPU time in milliseconds for a process tree (the process
+/// itself plus all descendant processes). This is needed because the tracked
+/// PID is typically the terminal host (e.g. cmd.exe) while Claude Code runs
+/// as a child process — checking only the parent would always show idle.
 fn get_process_cpu_time(pid: u32) -> Option<u64> {
     #[cfg(target_os = "linux")]
     {
-        // Read /proc/{pid}/stat — fields 14 (utime) and 15 (stime) are
-        // cumulative CPU ticks in user and kernel mode respectively.
-        let stat_path = format!("/proc/{}/stat", pid);
-        let contents = fs::read_to_string(&stat_path).ok()?;
-        // The comm field (field 2) may contain spaces/parens, so find the
-        // closing paren and parse from there.
-        let after_comm = contents.rfind(')')? + 2;
-        let fields: Vec<&str> = contents[after_comm..].split_whitespace().collect();
-        // After the closing paren and the state char, fields are 0-indexed:
-        // index 11 = utime (field 14), index 12 = stime (field 15)
-        if fields.len() < 13 {
-            return None;
+        fn read_cpu_ms(pid: u32) -> Option<u64> {
+            let stat_path = format!("/proc/{}/stat", pid);
+            let contents = fs::read_to_string(&stat_path).ok()?;
+            let after_comm = contents.rfind(')')? + 2;
+            let fields: Vec<&str> = contents[after_comm..].split_whitespace().collect();
+            if fields.len() < 13 {
+                return None;
+            }
+            let utime: u64 = fields[11].parse().ok()?;
+            let stime: u64 = fields[12].parse().ok()?;
+            Some((utime + stime) * 10)
         }
-        let utime: u64 = fields[11].parse().ok()?;
-        let stime: u64 = fields[12].parse().ok()?;
-        // Convert from clock ticks to ms (assuming 100 Hz = 10ms per tick)
-        Some((utime + stime) * 10)
+
+        fn collect_descendants(root: u32) -> Vec<u32> {
+            let mut pids = vec![root];
+            let mut i = 0;
+            while i < pids.len() {
+                let parent = pids[i];
+                if let Ok(entries) = fs::read_dir("/proc") {
+                    for entry in entries.flatten() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if let Ok(child_pid) = name.parse::<u32>() {
+                            let stat_path = format!("/proc/{}/stat", child_pid);
+                            if let Ok(contents) = fs::read_to_string(&stat_path) {
+                                if let Some(pos) = contents.rfind(')') {
+                                    let after = &contents[pos + 2..];
+                                    let fields: Vec<&str> = after.split_whitespace().collect();
+                                    // Field index 1 (after state) = ppid
+                                    if fields.len() > 1 {
+                                        if let Ok(ppid) = fields[1].parse::<u32>() {
+                                            if ppid == parent && !pids.contains(&child_pid) {
+                                                pids.push(child_pid);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                i += 1;
+            }
+            pids
+        }
+
+        let tree = collect_descendants(pid);
+        let total: u64 = tree.iter().filter_map(|&p| read_cpu_ms(p)).sum();
+        if total > 0 || tree.len() > 0 { Some(total) } else { None }
     }
 
     #[cfg(target_os = "macos")]
     {
+        // Use ps to get CPU time for the entire process group
         let output = Command::new("ps")
-            .args(["-o", "cputime=", "-p", &pid.to_string()])
+            .args(["-o", "cputime=", "-g", &pid.to_string()])
             .output()
             .ok()?;
         if !output.status.success() {
-            return None;
+            // Fall back to single process
+            let output = Command::new("ps")
+                .args(["-o", "cputime=", "-p", &pid.to_string()])
+                .output()
+                .ok()?;
+            if !output.status.success() {
+                return None;
+            }
+            let time_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            return parse_cputime_to_ms(&time_str);
         }
-        // Format is HH:MM:SS or M:SS
-        let time_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        parse_cputime_to_ms(&time_str)
+        // Sum all lines (one per process in the group)
+        let text = String::from_utf8_lossy(&output.stdout);
+        let total: u64 = text
+            .lines()
+            .filter_map(|line| parse_cputime_to_ms(line.trim()))
+            .sum();
+        if total > 0 { Some(total) } else { None }
     }
 
     #[cfg(target_os = "windows")]
@@ -568,24 +632,87 @@ fn get_process_cpu_time(pid: u32) -> Option<u64> {
                 kernel: *mut u64,
                 user: *mut u64,
             ) -> i32;
+            fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> isize;
+            fn Process32First(snapshot: isize, entry: *mut ProcessEntry32) -> i32;
+            fn Process32Next(snapshot: isize, entry: *mut ProcessEntry32) -> i32;
         }
+
+        #[repr(C)]
+        struct ProcessEntry32 {
+            dw_size: u32,
+            cnt_usage: u32,
+            th32_process_id: u32,
+            th32_default_heap_id: usize,
+            th32_module_id: u32,
+            cnt_threads: u32,
+            th32_parent_process_id: u32,
+            pc_pri_class_base: i32,
+            dw_flags: u32,
+            sz_exe_file: [u8; 260],
+        }
+
         const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+        const TH32CS_SNAPPROCESS: u32 = 0x00000002;
+        const INVALID_HANDLE_VALUE: isize = -1;
+
+        fn get_single_cpu_time(pid: u32) -> Option<u64> {
+            unsafe {
+                let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+                if handle == 0 {
+                    return None;
+                }
+                let mut creation: u64 = 0;
+                let mut exit: u64 = 0;
+                let mut kernel: u64 = 0;
+                let mut user: u64 = 0;
+                let ok = GetProcessTimes(handle, &mut creation, &mut exit, &mut kernel, &mut user);
+                CloseHandle(handle);
+                if ok == 0 {
+                    return None;
+                }
+                Some((kernel + user) / 10_000)
+            }
+        }
+
+        // Collect all descendant PIDs using a process snapshot
+        let mut tree_pids = vec![pid];
         unsafe {
-            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-            if handle == 0 {
-                return None;
+            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if snapshot != INVALID_HANDLE_VALUE {
+                let mut entry: ProcessEntry32 = std::mem::zeroed();
+                entry.dw_size = std::mem::size_of::<ProcessEntry32>() as u32;
+
+                // Build a list of (child_pid, parent_pid) pairs
+                let mut all_procs: Vec<(u32, u32)> = Vec::new();
+                if Process32First(snapshot, &mut entry) != 0 {
+                    all_procs.push((entry.th32_process_id, entry.th32_parent_process_id));
+                    while Process32Next(snapshot, &mut entry) != 0 {
+                        all_procs.push((entry.th32_process_id, entry.th32_parent_process_id));
+                    }
+                }
+                CloseHandle(snapshot);
+
+                // Walk descendants breadth-first
+                let mut i = 0;
+                while i < tree_pids.len() {
+                    let parent = tree_pids[i];
+                    for &(child, ppid) in &all_procs {
+                        if ppid == parent && !tree_pids.contains(&child) {
+                            tree_pids.push(child);
+                        }
+                    }
+                    i += 1;
+                }
             }
-            let mut creation: u64 = 0;
-            let mut exit: u64 = 0;
-            let mut kernel: u64 = 0;
-            let mut user: u64 = 0;
-            let ok = GetProcessTimes(handle, &mut creation, &mut exit, &mut kernel, &mut user);
-            CloseHandle(handle);
-            if ok == 0 {
-                return None;
-            }
-            // kernel and user are in 100-nanosecond intervals, convert to ms
-            Some((kernel + user) / 10_000)
+        }
+
+        // Sum CPU time across the entire process tree
+        let total: u64 = tree_pids.iter().filter_map(|&p| get_single_cpu_time(p)).sum();
+        // Return None only if we couldn't read the root process at all
+        if get_single_cpu_time(pid).is_some() {
+            Some(total)
+        } else {
+            None
         }
     }
 
@@ -722,6 +849,30 @@ fn kill_process_tree(pid: u32) {
     }
 }
 
+/// Parse `git diff --shortstat` output into (insertions, deletions).
+/// Example output: " 3 files changed, 10 insertions(+), 5 deletions(-)"
+fn parse_shortstat_output(output: &Option<std::process::Output>) -> (u32, u32) {
+    let text = match output {
+        Some(o) => String::from_utf8_lossy(&o.stdout).to_string(),
+        None => return (0, 0),
+    };
+    let mut insertions = 0u32;
+    let mut deletions = 0u32;
+    for part in text.split(',') {
+        let part = part.trim();
+        if part.contains("insertion") {
+            if let Some(n) = part.split_whitespace().next().and_then(|s| s.parse().ok()) {
+                insertions = n;
+            }
+        } else if part.contains("deletion") {
+            if let Some(n) = part.split_whitespace().next().and_then(|s| s.parse().ok()) {
+                deletions = n;
+            }
+        }
+    }
+    (insertions, deletions)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -851,5 +1002,42 @@ mod tests {
         assert_eq!(json, "\"idle\"");
         let json = serde_json::to_string(&SessionActivity::Exited).unwrap();
         assert_eq!(json, "\"exited\"");
+    }
+
+    fn make_output(stdout: &str) -> Option<std::process::Output> {
+        Some(std::process::Output {
+            status: std::process::ExitStatus::default(),
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: vec![],
+        })
+    }
+
+    #[test]
+    fn parse_shortstat_both_insertions_and_deletions() {
+        let output = make_output(" 3 files changed, 10 insertions(+), 5 deletions(-)\n");
+        assert_eq!(parse_shortstat_output(&output), (10, 5));
+    }
+
+    #[test]
+    fn parse_shortstat_insertions_only() {
+        let output = make_output(" 2 files changed, 7 insertions(+)\n");
+        assert_eq!(parse_shortstat_output(&output), (7, 0));
+    }
+
+    #[test]
+    fn parse_shortstat_deletions_only() {
+        let output = make_output(" 1 file changed, 3 deletions(-)\n");
+        assert_eq!(parse_shortstat_output(&output), (0, 3));
+    }
+
+    #[test]
+    fn parse_shortstat_empty_output() {
+        let output = make_output("");
+        assert_eq!(parse_shortstat_output(&output), (0, 0));
+    }
+
+    #[test]
+    fn parse_shortstat_none_output() {
+        assert_eq!(parse_shortstat_output(&None), (0, 0));
     }
 }

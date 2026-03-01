@@ -4,9 +4,7 @@ import * as api from "@/lib/tauri";
 
 const BUILTIN_IDS = [
   "run-claude",
-  "run-chat",
   "run-agent",
-  "run-prompt",
   "run-review",
 ];
 

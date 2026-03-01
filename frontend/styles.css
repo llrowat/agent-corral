@@ -1684,6 +1684,23 @@ code {
   color: var(--text-muted);
 }
 
+/* -- Diff Stats -- */
+.diff-stats {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+}
+
+.diff-plus {
+  color: var(--success);
+}
+
+.diff-minus {
+  color: var(--danger);
+}
+
 /* -- Activity Badges -- */
 .activity-badge {
   display: inline-flex;

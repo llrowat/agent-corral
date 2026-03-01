@@ -10,8 +10,8 @@ const mockSessions: SessionEnvelope[] = [
   {
     sessionId: "s1",
     repoPath: "/home/user/api-service",
-    commandName: "Claude Chat",
-    command: "claude --chat",
+    commandName: "Claude Code",
+    command: "claude",
     startedAt: "2026-02-28T10:00:00Z",
     pid: 1001,
     worktreePath: null,
@@ -107,7 +107,7 @@ describe("SessionsPage", () => {
     render(<SessionsPage scope={scope} />);
 
     // Wait for sessions to load, should show session names
-    expect(await screen.findByText("Claude Chat")).toBeInTheDocument();
+    expect(await screen.findByText("Claude Code")).toBeInTheDocument();
     // Should NOT show repo group header buttons
     const groupHeaders = screen.queryAllByRole("button", {
       name: /api-service/,
@@ -123,7 +123,7 @@ describe("SessionsPage", () => {
     render(<SessionsPage scope={null} />);
 
     // Wait for data to load
-    await screen.findByText("Claude Chat");
+    await screen.findByText("Claude Code");
 
     // Check for activity labels
     const workingBadges = screen.getAllByText("working");
@@ -150,13 +150,13 @@ describe("SessionsPage", () => {
     setupMocks();
     render(<SessionsPage scope={null} />);
 
-    await screen.findByText("Claude Chat");
+    await screen.findByText("Claude Code");
 
     // Click "Working" filter
     fireEvent.click(screen.getByText("Working (1)"));
 
     // Should still show the active session
-    expect(screen.getByText("Claude Chat")).toBeInTheDocument();
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
 
     // The exited session should be gone
     expect(screen.queryByText("Claude Fix")).not.toBeInTheDocument();
@@ -175,13 +175,13 @@ describe("SessionsPage", () => {
     setupMocks();
     render(<SessionsPage scope={null} />);
 
-    await screen.findByText("Claude Chat");
+    await screen.findByText("Claude Code");
 
     // Click on a session
-    fireEvent.click(screen.getByText("Claude Chat"));
+    fireEvent.click(screen.getByText("Claude Code"));
 
     // Detail panel should show the command in code elements
-    const codeElements = screen.getAllByText("claude --chat");
+    const codeElements = screen.getAllByText("claude");
     expect(codeElements.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -212,12 +212,12 @@ describe("SessionsPage", () => {
     setupMocks();
     render(<SessionsPage scope={null} />);
 
-    await screen.findByText("Claude Chat");
+    await screen.findByText("Claude Code");
 
     // Filter to "Working" then apply a repo-scope filter that matches no active sessions
     fireEvent.click(screen.getByText("Working (1)"));
 
     // There should be 1 working session, so not empty
-    expect(screen.getByText("Claude Chat")).toBeInTheDocument();
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
   });
 });
