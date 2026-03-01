@@ -875,6 +875,7 @@ body {
 }
 
 .config-field-hint {
+  display: block;
   font-size: 12px;
   color: var(--text-muted);
   margin-bottom: 8px;
@@ -1096,7 +1097,17 @@ body {
   margin-bottom: 6px;
 }
 
+.form-group label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
 input[type="text"],
+input[type="number"],
 textarea,
 select {
   width: 100%;
@@ -1110,6 +1121,7 @@ select {
 }
 
 input[type="text"]:focus,
+input[type="number"]:focus,
 textarea:focus,
 select:focus {
   outline: none;
@@ -1236,15 +1248,16 @@ code {
 .tools-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 6px;
+  gap: 8px;
+  margin-top: 4px;
   margin-bottom: 4px;
 }
 
 .tool-checkbox {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 8px;
+  padding: 6px 10px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1417,6 +1430,7 @@ code {
 }
 
 .badge-update {
+  display: inline-block;
   padding: 1px 6px;
   background: rgba(251, 191, 36, 0.15);
   color: var(--warning);
@@ -1424,6 +1438,8 @@ code {
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 
 /* -- Git Pack Source Info -- */
@@ -2683,6 +2699,7 @@ textarea.input-error {
   display: flex;
   gap: 8px;
   font-size: 11px;
+  margin-left: 12px;
 }
 
 .health-count-error { color: var(--danger); }
