@@ -36,7 +36,8 @@ agent-corral/
 │   │   ├── InlineValidation   # Form validation with auto-fix suggestions
 │   │   ├── PresetPicker       # Generic preset selection modal
 │   │   ├── QuickSetup         # First-run setup wizard with starter presets
-│   │   └── CreateWithAiModal  # AI-powered entity creation (launches terminal)
+│   │   ├── CreateWithAiModal  # AI-powered entity creation (launches terminal)
+│   │   └── SchemaForm         # Generic JSON Schema → form renderer
 │   ├── pages/          # Page components
 │   │   ├── OverviewPage       # Dashboard with config summary
 │   │   ├── AgentsPage         # Agent studio (create/edit/delete)
@@ -50,10 +51,12 @@ agent-corral/
 │   │   └── SettingsPage       # App preferences (plugin sync interval)
 │   ├── hooks/          # React hooks
 │   │   ├── useRepos           # Repository list
-│   │   └── usePluginSync      # Plugin import sync polling
+│   │   ├── usePluginSync      # Plugin import sync polling
+│   │   └── useSchema          # JSON Schema loading (local + remote)
 │   ├── lib/            # Shared libraries
 │   │   ├── tauri              # Tauri IPC API bindings
-│   │   └── presets            # Built-in presets (agents, hooks, skills, MCP, config, starter presets)
+│   │   ├── presets            # Built-in presets (agents, hooks, skills, MCP, config, starter presets)
+│   │   └── schemas/           # JSON Schemas (official settings + local agent/skill/MCP)
 │   ├── types/          # TypeScript type definitions
 │   └── styles.css      # Global styles (dark theme)
 ├── .github/workflows/  # CI (test.yml runs Rust + frontend tests)
@@ -76,6 +79,7 @@ agent-corral/
 - **Inline Validation** (`InlineValidation`) provides real-time form validation for agent IDs, skill IDs, and server IDs with auto-fix suggestions (e.g., converting invalid slugs to valid ones).
 - **Create with AI** (`CreateWithAiModal`) launches Claude Code in a terminal with a tailored prompt to generate agents, skills, hooks, or MCP server configs from a natural-language description. Uses a lightweight terminal launcher (no session tracking).
 - **Docs Links** (`DocsLink`) links each feature page to the corresponding Anthropic documentation (agents, hooks, skills, MCP, config, memory).
+- **Schema-Driven Forms** — Entity editors (agents, skills, MCP servers) use JSON Schema definitions to dynamically generate form controls via the `SchemaForm` component. The official settings.json schema is fetched at runtime from SchemaStore (`https://json.schemastore.org/claude-code-settings.json`) with a bundled snapshot fallback. Local schemas in `frontend/lib/schemas/` define agents, skills, and MCP servers. Schemas use `x-field` extensions (widget hints, conditional visibility, nullable handling) to control rendering. Adding a field to a schema auto-generates the corresponding form control without touching page components.
 - **Pack-to-Plugin Migration** — The `migrate_agentpack` command converts legacy `.agentpack` files to the new directory-based plugin format.
 
 ### Plugin Directory Format

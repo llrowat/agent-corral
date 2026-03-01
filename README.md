@@ -45,6 +45,7 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 - **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal window.
 - **Quick Setup** — First-run wizard detects repos with no Claude config and offers starter presets to bootstrap a working setup in one click.
 - **Settings** — Configure plugin sync interval for automatic update checking.
+- **Schema-Driven Forms** — Entity editors (agents, skills, MCP servers) are generated dynamically from JSON Schema definitions. The settings.json schema is fetched at runtime from [SchemaStore](https://json.schemastore.org/claude-code-settings.json) (Anthropic's official schema), while agent/skill/MCP schemas are bundled locally. Adding a new field to a schema automatically renders the corresponding form control.
 - **Inline Validation** — Real-time form validation with auto-fix suggestions for IDs and slugs.
 - **Docs Links** — Each feature page links to the corresponding Anthropic documentation.
 
@@ -94,7 +95,7 @@ agent-corral/
 │   ├── components/     # Shared UI components (9 components)
 │   ├── pages/          # Page components (10 pages)
 │   ├── hooks/          # React hooks (useRepos, usePluginSync)
-│   ├── lib/            # Tauri API bindings + built-in presets
+│   ├── lib/            # Tauri API bindings, built-in presets, JSON schemas
 │   ├── types/          # TypeScript type definitions
 │   └── styles.css      # Global styles (dark theme)
 ├── .github/workflows/  # CI (Rust + frontend tests)

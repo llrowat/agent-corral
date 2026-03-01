@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "mcp-server.schema.json",
+  "description": "Claude Code MCP server definition (stored in .mcp.json for project, ~/.claude.json for global)",
+  "type": "object",
+  "properties": {
+    "serverId": {
+      "type": "string",
+      "title": "Server ID",
+      "description": "Unique identifier for this MCP server (alphanumeric, hyphens, underscores)",
+      "pattern": "^[a-zA-Z0-9_-]+$",
+      "minLength": 1,
+      "examples": ["filesystem", "github", "postgres"],
+      "x-field": { "placeholder": "my-server", "disableOnEdit": true }
+    },
+    "serverType": {
+      "type": "string",
+      "title": "Type",
+      "description": "Transport protocol for this MCP server",
+      "enum": ["stdio", "http", "sse"],
+      "default": "stdio",
+      "x-field": {
+        "widget": "select",
+        "options": [
+          { "value": "stdio", "label": "stdio" },
+          { "value": "http", "label": "http" },
+          { "value": "sse", "label": "sse" }
+        ]
+      }
+    },
+    "command": {
+      "type": ["string", "null"],
+      "title": "Command",
+      "description": "Shell command to start the MCP server (stdio transport only)",
+      "x-field": {
+        "placeholder": "npx -y @modelcontextprotocol/server-name",
+        "nullable": true,
+        "showWhen": { "field": "serverType", "value": "stdio" }
+      }
+    },
+    "args": {
+      "type": ["array", "null"],
+      "title": "Arguments",
+      "description": "Command-line arguments for the server command (one per line)",
+      "items": { "type": "string" },
+      "x-field": {
+        "widget": "textarea-lines",
+        "rows": 3,
+        "placeholder": "arg1\narg2",
+        "nullable": true,
+        "showWhen": { "field": "serverType", "value": "stdio" }
+      }
+    },
+    "url": {
+      "type": ["string", "null"],
+      "title": "URL",
+      "description": "URL of the MCP server (http/sse transport only)",
+      "format": "uri",
+      "x-field": {
+        "placeholder": "http://localhost:3000/mcp",
+        "nullable": true,
+        "showWhen": { "field": "serverType", "values": ["http", "sse"] }
+      }
+    },
+    "env": {
+      "type": ["object", "null"],
+      "title": "Environment Variables",
+      "description": "Environment variables to set when launching the server",
+      "additionalProperties": { "type": "string" },
+      "x-field": {
+        "widget": "key-value-pairs",
+        "keyPlaceholder": "KEY",
+        "valuePlaceholder": "value",
+        "nullable": true
+      }
+    },
+    "headers": {
+      "type": ["object", "null"],
+      "title": "Headers",
+      "description": "HTTP headers to include in requests (http/sse transport only)",
+      "additionalProperties": { "type": "string" },
+      "x-field": {
+        "widget": "key-value-pairs",
+        "keyPlaceholder": "Header-Name",
+        "valuePlaceholder": "value",
+        "nullable": true,
+        "showWhen": { "field": "serverType", "values": ["http", "sse"] }
+      }
+    }
+  },
+  "required": ["serverId", "serverType"]
+}

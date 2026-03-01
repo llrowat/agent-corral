@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "skill.schema.json",
+  "description": "Claude Code skill definition (stored as .claude/skills/<skill-id>/SKILL.md with YAML frontmatter)",
+  "type": "object",
+  "properties": {
+    "skillId": {
+      "type": "string",
+      "title": "Skill ID",
+      "description": "Unique slug identifier for this skill (lowercase, hyphens, numbers only)",
+      "pattern": "^[a-z0-9-]+$",
+      "minLength": 1,
+      "examples": ["generate-tests", "explain-code", "review-pr"],
+      "x-field": { "placeholder": "my-skill", "disableOnEdit": true }
+    },
+    "name": {
+      "type": "string",
+      "title": "Name",
+      "description": "Human-readable display name for this skill",
+      "minLength": 1,
+      "examples": ["Generate Tests", "Explain Code"],
+      "x-field": { "placeholder": "My Skill" }
+    },
+    "description": {
+      "type": ["string", "null"],
+      "title": "Description",
+      "description": "Optional description of what this skill does",
+      "x-field": { "placeholder": "What this skill does..." }
+    },
+    "userInvocable": {
+      "type": ["boolean", "null"],
+      "title": "User Invocable",
+      "description": "Whether this skill can be invoked as a /command from the CLI",
+      "default": false,
+      "x-field": { "widget": "checkbox", "label": "User invocable (can be called with /skill-id)" }
+    },
+    "allowedTools": {
+      "type": "array",
+      "title": "Allowed Tools",
+      "description": "Tools this skill is allowed to use. Empty means all tools are available.",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "x-field": { "widget": "tool-checkboxes" }
+    },
+    "model": {
+      "type": ["string", "null"],
+      "title": "Model Override",
+      "description": "Override the default model for this skill",
+      "x-field": {
+        "widget": "select",
+        "options": [
+          { "value": "", "label": "Default" },
+          { "value": "claude-opus-4-6", "label": "Claude Opus 4.6" },
+          { "value": "claude-sonnet-4-6", "label": "Claude Sonnet 4.6" },
+          { "value": "claude-haiku-4-5-20251001", "label": "Claude Haiku 4.5" }
+        ],
+        "nullable": true
+      }
+    },
+    "argumentHint": {
+      "type": ["string", "null"],
+      "title": "Argument Hint",
+      "description": "Hint text displayed to users when they invoke this skill (e.g. <file-path>)",
+      "x-field": { "placeholder": "e.g. <file-path>", "nullable": true }
+    },
+    "content": {
+      "type": "string",
+      "title": "Content",
+      "description": "The skill's prompt template and instructions (markdown)",
+      "x-field": { "widget": "textarea", "rows": 16, "placeholder": "Skill instructions and prompt template..." }
+    }
+  },
+  "required": ["skillId", "name"]
+}
