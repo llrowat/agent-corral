@@ -38,7 +38,7 @@ function App() {
         <div className="app-brand">
           <img src={appIcon} alt="" className="app-icon" />
           <h1>AgentCorral</h1>
-          <span className="app-subtitle">Claude Code Workspace Manager</span>
+          <span className="app-subtitle">Claude Code Configuration Manager</span>
         </div>
         <div className="app-header-actions">
           <ThemeToggle />
