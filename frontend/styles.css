@@ -104,6 +104,8 @@ body {
   border-right: 1px solid var(--border);
   padding: 12px 0;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-group {
@@ -155,6 +157,14 @@ body {
   width: 20px;
   text-align: center;
   font-size: 14px;
+}
+
+.sidebar-disclaimer {
+  margin-top: auto;
+  padding: 12px 20px;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 /* -- Repo Switcher -- */

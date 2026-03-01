@@ -85,6 +85,9 @@ export function Sidebar({ scope }: SidebarProps) {
           </ul>
         </div>
       ))}
+      <div className="sidebar-disclaimer">
+        Not affiliated with or endorsed by Anthropic.
+      </div>
     </nav>
   );
 }

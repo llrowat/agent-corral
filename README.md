@@ -136,6 +136,10 @@ You can also trigger a build manually from the **Actions** tab using the "Run wo
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
+## Disclaimer
+
+AgentCorral is an independent, community-driven open source project. It is **not** affiliated with, endorsed by, or sponsored by Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic. This project uses those names solely to describe the software it integrates with.
+
 ## License
 
 [MIT](LICENSE)

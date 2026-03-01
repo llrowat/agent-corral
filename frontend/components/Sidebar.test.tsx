@@ -42,4 +42,9 @@ describe("Sidebar", () => {
     expect(hooksIdx).toBeGreaterThan(-1);
     expect(agentsIdx).toBeLessThan(hooksIdx);
   });
+
+  it("renders the disclaimer", () => {
+    renderSidebar();
+    expect(screen.getByText(/not affiliated with.*anthropic/i)).toBeInTheDocument();
+  });
 });
