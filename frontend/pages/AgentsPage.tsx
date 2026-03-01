@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import type { Scope, Agent, MemoryStore } from "@/types";
+import type { Scope, Agent } from "@/types";
 import * as api from "@/lib/tauri";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { PresetPicker } from "@/components/PresetPicker";
@@ -22,10 +22,11 @@ function newAgent(): Agent {
   return {
     agentId: "",
     name: "",
+    description: "",
     systemPrompt: "",
     tools: [],
     modelOverride: null,
-    memoryBinding: null,
+    memory: null,
   };
 }
 
@@ -37,7 +38,6 @@ export function AgentsPage({ scope, homePath }: Props) {
   const [editing, setEditing] = useState<Agent | null>(null);
   const [saving, setSaving] = useState(false);
   const [knownTools, setKnownTools] = useState<string[]>([]);
-  const [memoryStores, setMemoryStores] = useState<MemoryStore[]>([]);
   const [showAiModal, setShowAiModal] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [errors, setErrors] = useState<Record<string, ValidationError | null>>({});
@@ -71,9 +71,6 @@ export function AgentsPage({ scope, homePath }: Props) {
     loadAgents();
     loadGlobalAgents();
     api.getKnownTools().then(setKnownTools);
-    if (basePath) {
-      api.readMemoryStores(basePath).then(setMemoryStores).catch(() => setMemoryStores([]));
-    }
   }, [loadAgents, loadGlobalAgents, basePath]);
 
   if (!scope) {
@@ -116,6 +113,7 @@ export function AgentsPage({ scope, homePath }: Props) {
     const newErrors: Record<string, ValidationError | null> = {};
     newErrors.agentId = validateAgentId(editing.agentId);
     newErrors.name = validateRequired("name", editing.name, "Agent name");
+    newErrors.description = validateRequired("description", editing.description, "Description");
     newErrors.systemPrompt = validateRequired(
       "systemPrompt",
       editing.systemPrompt,
@@ -313,6 +311,20 @@ export function AgentsPage({ scope, homePath }: Props) {
                 <FieldError error={errors.name ?? null} />
               </div>
               <div className="form-group">
+                <label>Description</label>
+                <textarea
+                  rows={2}
+                  value={editing.description}
+                  onChange={(e) => {
+                    setEditing({ ...editing, description: e.target.value });
+                    setErrors({ ...errors, description: null });
+                  }}
+                  placeholder="Brief description of what this agent does"
+                  className={errors.description ? "input-error" : ""}
+                />
+                <FieldError error={errors.description ?? null} />
+              </div>
+              <div className="form-group">
                 <label>System Prompt</label>
                 <textarea
                   rows={12}
@@ -360,29 +372,27 @@ export function AgentsPage({ scope, homePath }: Props) {
                   }
                 >
                   <option value="">Default</option>
-                  <option value="claude-opus-4-6">Claude Opus 4.6</option>
-                  <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                  <option value="opus">Opus</option>
+                  <option value="sonnet">Sonnet</option>
+                  <option value="haiku">Haiku</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label>Memory Binding (optional)</label>
+                <label>Memory Scope (optional)</label>
                 <select
-                  value={editing.memoryBinding ?? ""}
+                  value={editing.memory ?? ""}
                   onChange={(e) =>
                     setEditing({
                       ...editing,
-                      memoryBinding: e.target.value || null,
+                      memory: e.target.value || null,
                     })
                   }
                 >
                   <option value="">None</option>
-                  {memoryStores.map((store) => (
-                    <option key={store.storeId} value={store.storeId}>
-                      {store.name} ({store.entryCount} entries)
-                    </option>
-                  ))}
+                  <option value="user">User</option>
+                  <option value="project">Project</option>
+                  <option value="local">Local</option>
                 </select>
               </div>
 
@@ -414,13 +424,19 @@ export function AgentsPage({ scope, homePath }: Props) {
                 <label>ID</label>
                 <code>{selected!.agentId}</code>
               </div>
+              {selected!.description && (
+                <div className="detail-field">
+                  <label>Description</label>
+                  <p>{selected!.description}</p>
+                </div>
+              )}
               <div className="detail-field">
                 <label>System Prompt</label>
                 <pre className="prompt-preview">{selected!.systemPrompt}</pre>
               </div>
-              {selected!.tools.length > 0 && (
-                <div className="detail-field">
-                  <label>Tools</label>
+              <div className="detail-field">
+                <label>Tools</label>
+                {selected!.tools.length > 0 ? (
                   <div className="tool-tags">
                     {selected!.tools.map((t) => (
                       <span key={t} className="tool-tag">
@@ -428,18 +444,20 @@ export function AgentsPage({ scope, homePath }: Props) {
                       </span>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <span className="text-muted">All tools (unrestricted)</span>
+                )}
+              </div>
               {selected!.modelOverride && (
                 <div className="detail-field">
                   <label>Model Override</label>
                   <code>{selected!.modelOverride}</code>
                 </div>
               )}
-              {selected!.memoryBinding && (
+              {selected!.memory && (
                 <div className="detail-field">
-                  <label>Memory Binding</label>
-                  <code>{selected!.memoryBinding}</code>
+                  <label>Memory Scope</label>
+                  <code>{selected!.memory}</code>
                 </div>
               )}
               <div className="form-actions">

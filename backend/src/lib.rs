@@ -115,7 +115,7 @@ pub fn run() {
             commands::terminal::launch_session,
             commands::terminal::resume_session,
             commands::terminal::open_session_folder,
-            commands::terminal::write_temp_prompt,
+            commands::terminal::prepare_ai_command,
             // Preferences commands
             commands::preferences::get_preferences,
             commands::preferences::set_terminal_preference,

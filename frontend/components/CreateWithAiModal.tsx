@@ -20,11 +20,21 @@ function buildPrompt(entityType: AiEntityType, description: string): string {
         "",
         "Instructions:",
         "1. Create the .claude/agents/ directory if it doesn't exist.",
-        "2. Create a markdown file at .claude/agents/<slug-id>.md containing the system prompt. Choose an appropriate slug ID based on the description (lowercase, hyphens only, e.g. \"code-reviewer\").",
-        "3. Create a matching metadata sidecar file at .claude/agents/<slug-id>.meta.json with this exact JSON structure:",
-        '   {"name": "Agent Display Name", "tools": [], "modelOverride": null, "memoryBinding": null}',
-        "4. Choose appropriate tools from this list if the agent needs restricted tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, TodoWrite, NotebookEdit, Task. Leave tools as [] to grant access to all tools.",
-        "5. Make the system prompt detailed, well-structured, and effective for the described use case.",
+        "2. Create a markdown file at .claude/agents/<slug-id>.md with YAML frontmatter and system prompt body. Choose an appropriate slug ID based on the description (lowercase, hyphens only, e.g. \"code-reviewer\").",
+        "3. The file must have YAML frontmatter delimited by --- lines at the top, followed by the system prompt in markdown. Example structure:",
+        "   ---",
+        '   name: "Agent Display Name"',
+        '   description: "Brief description of what the agent does"',
+        '   tools: "Read, Write, Edit, Bash, Glob, Grep"',
+        '   model: "sonnet"',
+        "   ---",
+        "",
+        "   System prompt instructions go here...",
+        "",
+        "4. The tools field is a comma-separated string. Choose from: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, TodoWrite, NotebookEdit, Agent. Omit the tools field entirely to grant access to all tools.",
+        "5. The model field is optional. Valid values: sonnet, opus, haiku. Omit to use the default model.",
+        "6. Do NOT create a .meta.json sidecar file.",
+        "7. Make the system prompt detailed, well-structured, and effective for the described use case.",
       ].join("\n");
 
     case "skill":
@@ -185,13 +195,8 @@ export function CreateWithAiModal({
     setLaunching(true);
     try {
       const prompt = buildPrompt(entityType, description.trim());
-      const promptPath = await api.writeTempPrompt(repoPath, prompt);
-      const platform = await api.getPlatform();
-      // Pipe the prompt file to claude -p via stdin to avoid shell escaping issues
-      const command =
-        platform === "windows"
-          ? `type "${promptPath}" | claude -p`
-          : `cat "${promptPath}" | claude -p`;
+      // Write prompt to file and get a wrapper script that pipes it to claude -p
+      const command = await api.prepareAiCommand(repoPath, prompt);
       const sessionId = await api.launchSession(
         repoPath,
         label.commandName,

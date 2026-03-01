@@ -106,8 +106,8 @@ describe("Tauri API bindings", () => {
     it("calls invoke with repo path and agent", async () => {
       mockInvoke.mockResolvedValue(undefined);
       const agent = {
-        agentId: "test", name: "Test", systemPrompt: "Hello",
-        tools: [], modelOverride: null, memoryBinding: null,
+        agentId: "test", name: "Test", description: "A test agent", systemPrompt: "Hello",
+        tools: [], modelOverride: null, memory: null,
       };
       await api.writeAgent("/tmp/repo", agent);
       expect(mockInvoke).toHaveBeenCalledWith("write_agent", { repoPath: "/tmp/repo", agent });

@@ -69,10 +69,11 @@ export interface NormalizedConfig {
 export interface Agent {
   agentId: string;
   name: string;
+  description: string;
   systemPrompt: string;
   tools: string[];
   modelOverride: string | null;
-  memoryBinding: string | null;
+  memory: string | null;
 }
 
 export interface MemoryStore {

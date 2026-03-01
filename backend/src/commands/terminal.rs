@@ -4,15 +4,44 @@ use crate::AppState;
 use std::process::Command;
 use uuid::Uuid;
 
-/// Write a prompt string to a temp file under the repo's .claude/ directory.
-/// Returns the absolute path to the temp file so it can be piped to `claude -p`.
+/// Write a prompt to a temp file and a wrapper script that launches Claude Code
+/// in interactive mode with the prompt as the initial message.
+/// Returns the shell command to execute (the wrapper script path).
 #[tauri::command]
-pub fn write_temp_prompt(repo_path: String, content: String) -> Result<String, String> {
+pub fn prepare_ai_command(repo_path: String, prompt: String) -> Result<String, String> {
     let dir = std::path::Path::new(&repo_path).join(".claude");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(".ai-prompt.tmp");
-    std::fs::write(&path, &content).map_err(|e| e.to_string())?;
-    Ok(path.to_string_lossy().to_string())
+
+    let prompt_path = dir.join(".ai-prompt.tmp");
+    std::fs::write(&prompt_path, &prompt).map_err(|e| e.to_string())?;
+
+    if cfg!(target_os = "windows") {
+        // Use a .cmd wrapper that calls PowerShell to read the prompt file
+        // and pass it as an argument to `claude` in interactive mode.
+        // This avoids all cmd.exe escaping issues with long/special prompts.
+        let script_path = dir.join(".ai-create.cmd");
+        let script = format!(
+            "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -Command \
+\"$p = [IO.File]::ReadAllText('%~dp0.ai-prompt.tmp'); & claude $p\"\r\n",
+        );
+        std::fs::write(&script_path, &script).map_err(|e| e.to_string())?;
+        Ok(script_path.to_string_lossy().to_string())
+    } else {
+        // On Unix, use command substitution to read the file and pass as argument.
+        let script_path = dir.join(".ai-create.sh");
+        let script = r#"#!/bin/sh
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec claude "$(cat "$SCRIPT_DIR/.ai-prompt.tmp")"
+"#;
+        std::fs::write(&script_path, script).map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o755);
+            std::fs::set_permissions(&script_path, perms).map_err(|e| e.to_string())?;
+        }
+        Ok(script_path.to_string_lossy().to_string())
+    }
 }
 
 #[tauri::command]

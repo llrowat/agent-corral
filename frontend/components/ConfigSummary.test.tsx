@@ -30,7 +30,7 @@ describe("ConfigSummary", () => {
       raw: {},
     });
     mockReadAgents.mockResolvedValue([
-      { agentId: "a", name: "Agent A", systemPrompt: "test", tools: [], modelOverride: null, memoryBinding: null },
+      { agentId: "a", name: "Agent A", description: "Test agent", systemPrompt: "test", tools: [], modelOverride: null, memory: null },
     ]);
     mockReadHooks.mockResolvedValue([
       { event: "PreToolUse", groups: [{ matcher: null, hooks: [{ hookType: "command", command: "test" }] }] },
@@ -77,7 +77,7 @@ describe("ConfigSummary", () => {
       raw: {},
     });
     mockReadAgents.mockResolvedValue([
-      { agentId: "a", name: "Agent A", systemPrompt: "test", tools: [], modelOverride: null, memoryBinding: null },
+      { agentId: "a", name: "Agent A", description: "Test agent", systemPrompt: "test", tools: [], modelOverride: null, memory: null },
     ]);
     mockReadHooks.mockResolvedValue([]);
     mockReadSkills.mockResolvedValue([]);

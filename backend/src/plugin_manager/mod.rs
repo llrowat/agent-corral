@@ -230,24 +230,49 @@ impl PluginManager {
             let agents_dir = plugin_dir.join("agents");
             fs::create_dir_all(&agents_dir)?;
             for agent in &selected_agents {
-                // Write agent markdown
-                let mut content = String::new();
-                content.push_str(&format!("# {}\n\n", agent.name));
-                content.push_str(&agent.system_prompt);
-                content.push('\n');
-                atomic_write(&agents_dir.join(format!("{}.md", agent.agent_id)), &content)?;
+                // Write agent with YAML frontmatter (same format as ClaudeRepoAdapter::write_agent)
+                let mut frontmatter = serde_json::Map::new();
+                frontmatter.insert(
+                    "name".to_string(),
+                    serde_json::Value::String(agent.name.clone()),
+                );
+                frontmatter.insert(
+                    "description".to_string(),
+                    serde_json::Value::String(agent.description.clone()),
+                );
+                if !agent.tools.is_empty() {
+                    frontmatter.insert(
+                        "tools".to_string(),
+                        serde_json::Value::String(agent.tools.join(", ")),
+                    );
+                }
+                if let Some(ref model) = agent.model_override {
+                    frontmatter.insert(
+                        "model".to_string(),
+                        serde_json::Value::String(model.clone()),
+                    );
+                }
+                if let Some(ref memory) = agent.memory {
+                    frontmatter.insert(
+                        "memory".to_string(),
+                        serde_json::Value::String(memory.clone()),
+                    );
+                }
 
-                // Write metadata sidecar
-                let meta = serde_json::json!({
-                    "tools": agent.tools,
-                    "modelOverride": agent.model_override,
-                    "memoryBinding": agent.memory_binding,
-                });
-                let meta_json = serde_json::to_string_pretty(&meta)?;
-                atomic_write(
-                    &agents_dir.join(format!("{}.meta.json", agent.agent_id)),
-                    &meta_json,
-                )?;
+                let yaml_val = serde_json::Value::Object(frontmatter);
+                let yaml_str = serde_yaml::to_string(&yaml_val)
+                    .map_err(|e| PluginError::Adapter(e.to_string()))?;
+
+                let mut content = String::new();
+                content.push_str("---\n");
+                content.push_str(&yaml_str);
+                content.push_str("---\n\n");
+                content.push_str(&agent.system_prompt);
+                if !agent.system_prompt.ends_with('\n') {
+                    content.push('\n');
+                }
+
+                atomic_write(&agents_dir.join(format!("{}.md", agent.agent_id)), &content)?;
             }
         }
 
@@ -963,22 +988,49 @@ impl PluginManager {
                 fs::create_dir_all(&agents_dir)?;
                 for agent_val in agents {
                     if let Ok(agent) = serde_json::from_value::<Agent>(agent_val.clone()) {
-                        let mut content = String::new();
-                        content.push_str(&format!("# {}\n\n", agent.name));
-                        content.push_str(&agent.system_prompt);
-                        content.push('\n');
-                        atomic_write(&agents_dir.join(format!("{}.md", agent.agent_id)), &content)?;
+                        // Write agent with YAML frontmatter
+                        let mut frontmatter = serde_json::Map::new();
+                        frontmatter.insert(
+                            "name".to_string(),
+                            serde_json::Value::String(agent.name.clone()),
+                        );
+                        frontmatter.insert(
+                            "description".to_string(),
+                            serde_json::Value::String(agent.description.clone()),
+                        );
+                        if !agent.tools.is_empty() {
+                            frontmatter.insert(
+                                "tools".to_string(),
+                                serde_json::Value::String(agent.tools.join(", ")),
+                            );
+                        }
+                        if let Some(ref model) = agent.model_override {
+                            frontmatter.insert(
+                                "model".to_string(),
+                                serde_json::Value::String(model.clone()),
+                            );
+                        }
+                        if let Some(ref memory) = agent.memory {
+                            frontmatter.insert(
+                                "memory".to_string(),
+                                serde_json::Value::String(memory.clone()),
+                            );
+                        }
 
-                        let meta = serde_json::json!({
-                            "tools": agent.tools,
-                            "modelOverride": agent.model_override,
-                            "memoryBinding": agent.memory_binding,
-                        });
-                        let meta_json = serde_json::to_string_pretty(&meta)?;
-                        atomic_write(
-                            &agents_dir.join(format!("{}.meta.json", agent.agent_id)),
-                            &meta_json,
-                        )?;
+                        let yaml_val = serde_json::Value::Object(frontmatter);
+                        let yaml_str = serde_yaml::to_string(&yaml_val)
+                            .map_err(|e| PluginError::Adapter(e.to_string()))?;
+
+                        let mut content = String::new();
+                        content.push_str("---\n");
+                        content.push_str(&yaml_str);
+                        content.push_str("---\n\n");
+                        content.push_str(&agent.system_prompt);
+                        if !agent.system_prompt.ends_with('\n') {
+                            content.push('\n');
+                        }
+
+                        atomic_write(&agents_dir.join(format!("{}.md", agent.agent_id)), &content)?;
                     }
                 }
             }
@@ -1322,51 +1374,65 @@ impl PluginManager {
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_default();
                 let contents = fs::read_to_string(&path)?;
-                let name = contents
-                    .lines()
-                    .find(|l| l.starts_with("# "))
-                    .map(|l| l[2..].trim().to_string())
-                    .unwrap_or_else(|| agent_id.clone());
-                let system_prompt = contents
-                    .lines()
-                    .skip_while(|l| !l.starts_with("# "))
-                    .skip(1)
-                    .collect::<Vec<&str>>()
-                    .join("\n")
-                    .trim()
+
+                // Parse YAML frontmatter (between --- delimiters)
+                let (frontmatter, body) = if contents.starts_with("---") {
+                    let after_first = &contents[3..];
+                    if let Some(end_idx) = after_first.find("\n---") {
+                        let yaml_str = &after_first[..end_idx];
+                        let body_start = end_idx + 4;
+                        let body = after_first[body_start..].trim_start_matches('\n').to_string();
+                        let fm: serde_json::Value = serde_yaml::from_str(yaml_str)
+                            .map_err(|e| PluginError::Adapter(e.to_string()))?;
+                        (fm, body)
+                    } else {
+                        (serde_json::json!({}), contents)
+                    }
+                } else {
+                    (serde_json::json!({}), contents)
+                };
+
+                let name = frontmatter
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&agent_id)
                     .to_string();
 
-                let meta_path = agents_dir.join(format!("{}.meta.json", agent_id));
-                let (tools, model_override, memory_binding) = if meta_path.exists() {
-                    let meta_str = fs::read_to_string(&meta_path)?;
-                    let meta: serde_json::Value = serde_json::from_str(&meta_str)?;
-                    (
-                        meta.get("tools")
-                            .and_then(|v| v.as_array())
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(String::from))
-                                    .collect()
-                            })
-                            .unwrap_or_default(),
-                        meta.get("modelOverride")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
-                        meta.get("memoryBinding")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
-                    )
-                } else {
-                    (vec![], None, None)
-                };
+                let description = frontmatter
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                let tools = frontmatter
+                    .get("tools")
+                    .and_then(|v| v.as_str())
+                    .map(|s| {
+                        s.split(',')
+                            .map(|t| t.trim().to_string())
+                            .filter(|t| !t.is_empty())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let model_override = frontmatter
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+
+                let memory = frontmatter
+                    .get("memory")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
 
                 agents.push(Agent {
                     agent_id,
                     name,
-                    system_prompt,
+                    description,
+                    system_prompt: body,
                     tools,
                     model_override,
-                    memory_binding,
+                    memory,
                 });
             }
         }

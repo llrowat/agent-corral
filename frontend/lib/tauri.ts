@@ -241,11 +241,11 @@ export async function getPlatform(): Promise<string> {
 
 // -- Terminal commands --
 
-export async function writeTempPrompt(
+export async function prepareAiCommand(
   repoPath: string,
-  content: string
+  prompt: string
 ): Promise<string> {
-  return invoke("write_temp_prompt", { repoPath, content });
+  return invoke("prepare_ai_command", { repoPath, prompt });
 }
 
 export async function launchSession(

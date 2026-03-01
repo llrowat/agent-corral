@@ -112,13 +112,16 @@ describe("Type definitions", () => {
       const agent: Agent = {
         agentId: "my-agent",
         name: "My Agent",
+        description: "A helpful agent",
         systemPrompt: "You are helpful.",
         tools: ["Read", "Write", "Bash"],
-        modelOverride: "claude-sonnet-4-20250514",
-        memoryBinding: "context",
+        modelOverride: "sonnet",
+        memory: "user",
       };
       expect(agent.tools).toHaveLength(3);
       expect(agent.tools).toContain("Bash");
+      expect(agent.description).toBe("A helpful agent");
+      expect(agent.memory).toBe("user");
     });
   });
 

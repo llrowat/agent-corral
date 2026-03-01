@@ -54,10 +54,11 @@ pub struct NormalizedConfig {
 pub struct Agent {
     pub agent_id: String,
     pub name: String,
+    pub description: String,
     pub system_prompt: String,
     pub tools: Vec<String>,
     pub model_override: Option<String>,
-    pub memory_binding: Option<String>,
+    pub memory: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,7 +148,7 @@ pub const KNOWN_TOOLS: &[&str] = &[
     "WebSearch",
     "TodoWrite",
     "NotebookEdit",
-    "Task",
+    "Agent",
 ];
 
 pub struct ClaudeRepoAdapter;
@@ -272,29 +273,60 @@ impl ClaudeRepoAdapter {
         Ok(agents)
     }
 
-    /// Write an agent to .claude/agents/<agent_id>.md + metadata sidecar
+    /// Write an agent to .claude/agents/<agent_id>.md with YAML frontmatter
     pub fn write_agent(repo_path: &str, agent: &Agent) -> Result<(), ClaudeAdapterError> {
         let agents_dir = Path::new(repo_path).join(".claude/agents");
         fs::create_dir_all(&agents_dir)?;
         let agent_path = agents_dir.join(format!("{}.md", agent.agent_id));
 
-        // Build agent markdown file
+        // Build YAML frontmatter
+        let mut frontmatter = serde_json::Map::new();
+        frontmatter.insert(
+            "name".to_string(),
+            serde_json::Value::String(agent.name.clone()),
+        );
+        frontmatter.insert(
+            "description".to_string(),
+            serde_json::Value::String(agent.description.clone()),
+        );
+        if !agent.tools.is_empty() {
+            frontmatter.insert(
+                "tools".to_string(),
+                serde_json::Value::String(agent.tools.join(", ")),
+            );
+        }
+        if let Some(ref model) = agent.model_override {
+            frontmatter.insert(
+                "model".to_string(),
+                serde_json::Value::String(model.clone()),
+            );
+        }
+        if let Some(ref memory) = agent.memory {
+            frontmatter.insert(
+                "memory".to_string(),
+                serde_json::Value::String(memory.clone()),
+            );
+        }
+
+        let yaml_val = serde_json::Value::Object(frontmatter);
+        let yaml_str = serde_yaml::to_string(&yaml_val)?;
+
         let mut content = String::new();
-        content.push_str(&format!("# {}\n\n", agent.name));
+        content.push_str("---\n");
+        content.push_str(&yaml_str);
+        content.push_str("---\n\n");
         content.push_str(&agent.system_prompt);
-        content.push('\n');
+        if !agent.system_prompt.ends_with('\n') {
+            content.push('\n');
+        }
 
         atomic_write(&agent_path, &content)?;
 
-        // Write metadata sidecar JSON (tools, model override, memory binding)
+        // Clean up stale .meta.json sidecar if it exists (backwards compat)
         let meta_path = agents_dir.join(format!("{}.meta.json", agent.agent_id));
-        let meta = serde_json::json!({
-            "tools": agent.tools,
-            "modelOverride": agent.model_override,
-            "memoryBinding": agent.memory_binding,
-        });
-        let meta_json = serde_json::to_string_pretty(&meta)?;
-        atomic_write(&meta_path, &meta_json)?;
+        if meta_path.exists() {
+            let _ = fs::remove_file(&meta_path);
+        }
 
         Ok(())
     }
@@ -952,68 +984,68 @@ impl ClaudeRepoAdapter {
     fn parse_agent_file(
         path: &Path,
         agent_id: &str,
-        repo_path: &str,
+        _repo_path: &str,
     ) -> Result<Agent, ClaudeAdapterError> {
         let contents = fs::read_to_string(path)?;
 
-        // Extract name from first markdown heading
-        let name = contents
-            .lines()
-            .find(|l| l.starts_with("# "))
-            .map(|l| l[2..].trim().to_string())
-            .unwrap_or_else(|| agent_id.to_string());
+        // Parse YAML frontmatter (between --- delimiters) — same pattern as parse_skill_file
+        let (frontmatter, body) = if contents.starts_with("---") {
+            let after_first = &contents[3..];
+            if let Some(end_idx) = after_first.find("\n---") {
+                let yaml_str = &after_first[..end_idx];
+                let body_start = end_idx + 4; // skip \n---
+                let body = after_first[body_start..].trim_start_matches('\n').to_string();
+                let fm: serde_json::Value = serde_yaml::from_str(yaml_str)?;
+                (fm, body)
+            } else {
+                (serde_json::json!({}), contents)
+            }
+        } else {
+            (serde_json::json!({}), contents)
+        };
 
-        // Everything after the heading is the system prompt
-        let system_prompt = contents
-            .lines()
-            .skip_while(|l| !l.starts_with("# "))
-            .skip(1)
-            .collect::<Vec<&str>>()
-            .join("\n")
-            .trim()
+        let name = frontmatter
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(agent_id)
             .to_string();
 
-        // Read metadata sidecar if it exists
-        let meta_path = Path::new(repo_path)
-            .join(".claude/agents")
-            .join(format!("{}.meta.json", agent_id));
+        let description = frontmatter
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
-        let (tools, model_override, memory_binding) = if meta_path.exists() {
-            let meta_str = fs::read_to_string(&meta_path)?;
-            let meta: serde_json::Value = serde_json::from_str(&meta_str)?;
+        // Tools: comma-separated string → Vec
+        let tools = frontmatter
+            .get("tools")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                s.split(',')
+                    .map(|t| t.trim().to_string())
+                    .filter(|t| !t.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
 
-            let tools = meta
-                .get("tools")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
-                .unwrap_or_default();
+        let model_override = frontmatter
+            .get("model")
+            .and_then(|v| v.as_str())
+            .map(String::from);
 
-            let model_override = meta
-                .get("modelOverride")
-                .and_then(|v| v.as_str())
-                .map(String::from);
-
-            let memory_binding = meta
-                .get("memoryBinding")
-                .and_then(|v| v.as_str())
-                .map(String::from);
-
-            (tools, model_override, memory_binding)
-        } else {
-            (vec![], None, None)
-        };
+        let memory = frontmatter
+            .get("memory")
+            .and_then(|v| v.as_str())
+            .map(String::from);
 
         Ok(Agent {
             agent_id: agent_id.to_string(),
             name,
-            system_prompt,
+            description,
+            system_prompt: body,
             tools,
             model_override,
-            memory_binding,
+            memory,
         })
     }
 
@@ -1297,10 +1329,11 @@ mod tests {
         let agent = Agent {
             agent_id: "test-agent".to_string(),
             name: "Test Agent".to_string(),
+            description: "A test agent for unit tests".to_string(),
             system_prompt: "You are a test agent.".to_string(),
             tools: vec!["Read".to_string(), "Write".to_string()],
-            model_override: Some("claude-sonnet-4-20250514".to_string()),
-            memory_binding: Some("context".to_string()),
+            model_override: Some("sonnet".to_string()),
+            memory: Some("user".to_string()),
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -1309,10 +1342,11 @@ mod tests {
         assert_eq!(agents.len(), 1);
         assert_eq!(agents[0].agent_id, "test-agent");
         assert_eq!(agents[0].name, "Test Agent");
-        assert_eq!(agents[0].system_prompt, "You are a test agent.");
+        assert_eq!(agents[0].description, "A test agent for unit tests");
+        assert_eq!(agents[0].system_prompt, "You are a test agent.\n");
         assert_eq!(agents[0].tools, vec!["Read", "Write"]);
-        assert_eq!(agents[0].model_override, Some("claude-sonnet-4-20250514".to_string()));
-        assert_eq!(agents[0].memory_binding, Some("context".to_string()));
+        assert_eq!(agents[0].model_override, Some("sonnet".to_string()));
+        assert_eq!(agents[0].memory, Some("user".to_string()));
     }
 
     #[test]
@@ -1323,10 +1357,11 @@ mod tests {
         let agent = Agent {
             agent_id: "doomed".to_string(),
             name: "Doomed Agent".to_string(),
+            description: "Will be deleted".to_string(),
             system_prompt: "Gone soon.".to_string(),
             tools: vec![],
             model_override: None,
-            memory_binding: None,
+            memory: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -1343,23 +1378,32 @@ mod tests {
     }
 
     #[test]
-    fn write_agent_creates_sidecar() {
+    fn write_agent_uses_yaml_frontmatter() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().to_str().unwrap();
 
         let agent = Agent {
             agent_id: "my-agent".to_string(),
             name: "My Agent".to_string(),
+            description: "A helpful agent".to_string(),
             system_prompt: "Hello".to_string(),
             tools: vec!["Bash".to_string()],
             model_override: None,
-            memory_binding: None,
+            memory: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
 
         assert!(tmp.path().join(".claude/agents/my-agent.md").exists());
-        assert!(tmp.path().join(".claude/agents/my-agent.meta.json").exists());
+        // No sidecar file should be created
+        assert!(!tmp.path().join(".claude/agents/my-agent.meta.json").exists());
+
+        // Verify YAML frontmatter content
+        let content = fs::read_to_string(tmp.path().join(".claude/agents/my-agent.md")).unwrap();
+        assert!(content.starts_with("---\n"));
+        assert!(content.contains("name: My Agent"));
+        assert!(content.contains("description: A helpful agent"));
+        assert!(content.contains("tools: Bash"));
     }
 
     // -- memory entry parsing tests --
@@ -1795,15 +1839,18 @@ mod tests {
         let agent = Agent {
             agent_id: "test".to_string(),
             name: "Test".to_string(),
+            description: "A test".to_string(),
             system_prompt: "Hello".to_string(),
             tools: vec![],
             model_override: None,
-            memory_binding: None,
+            memory: None,
         };
         let json = serde_json::to_value(&agent).unwrap();
         assert!(json.get("agentId").is_some());
         assert!(json.get("systemPrompt").is_some());
         assert!(json.get("modelOverride").is_some());
+        assert!(json.get("description").is_some());
+        assert!(json.get("memory").is_some());
     }
 
     #[test]
