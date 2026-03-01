@@ -91,7 +91,7 @@ agent-corral/
 │   ├── lib/            # Tauri API bindings, built-in presets, JSON schemas
 │   ├── types/          # TypeScript type definitions
 │   └── styles.css      # Global styles (dark + light themes)
-├── .github/workflows/  # CI (Rust + frontend tests)
+├── .github/workflows/  # CI (tests) + release (cross-platform builds)
 ├── Cargo.toml          # Workspace root
 ├── package.json        # Frontend dependencies
 └── vite.config.ts      # Vite configuration
@@ -106,6 +106,30 @@ Plugins use a directory-based format (`.claude-plugin/plugin.json`) bundling age
 - **Installed from Git** — point to any git repo containing a `.claude-plugin/` directory
 - **Updated** — git-sourced plugins track their source commit and can be checked for updates
 - **Auto-synced** — imported plugins can be tracked and automatically updated when the library version changes. Supports pinning (lock version) and auto-sync toggles per import.
+
+## Releases
+
+Pre-built executables are published as GitHub Releases. Each release includes installers for:
+
+| Platform        | Artifact                        |
+|-----------------|---------------------------------|
+| Linux (x64)     | `.deb`, `.AppImage`             |
+| macOS (Apple Silicon) | `.dmg`                    |
+| macOS (Intel)   | `.dmg`                          |
+| Windows (x64)   | `.msi`, `.exe` (NSIS installer) |
+
+### Creating a release
+
+Tag a commit and push the tag to trigger the release workflow:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The [release workflow](.github/workflows/release.yml) builds on all platforms in parallel and creates a **draft** GitHub Release with the artifacts attached. Review the draft and publish it when ready.
+
+You can also trigger a build manually from the **Actions** tab using the "Run workflow" button.
 
 ## Contributing
 
