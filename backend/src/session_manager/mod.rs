@@ -849,6 +849,53 @@ fn kill_process_tree(pid: u32) {
     }
 }
 
+/// Check whether a working directory has uncommitted changes (untracked,
+/// modified, or staged files).
+pub fn has_uncommitted_changes(worktree_path: &str) -> Result<bool, String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| format!("git status failed: {}", e))?;
+    Ok(!output.stdout.is_empty())
+}
+
+/// Stage all files and commit in a working directory. Returns git commit
+/// output on success.
+pub fn git_commit_all(worktree_path: &str, message: &str) -> Result<String, String> {
+    if !has_uncommitted_changes(worktree_path)? {
+        return Err("No changes to commit.".to_string());
+    }
+
+    let add = Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| format!("git add failed: {}", e))?;
+
+    if !add.status.success() {
+        return Err(format!(
+            "git add failed: {}",
+            String::from_utf8_lossy(&add.stderr)
+        ));
+    }
+
+    let commit = Command::new("git")
+        .args(["commit", "-m", message])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| format!("git commit failed: {}", e))?;
+
+    if !commit.status.success() {
+        return Err(format!(
+            "git commit failed: {}",
+            String::from_utf8_lossy(&commit.stderr)
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&commit.stdout).to_string())
+}
+
 /// Parse `git diff --shortstat` output into (insertions, deletions).
 /// Example output: " 3 files changed, 10 insertions(+), 5 deletions(-)"
 fn parse_shortstat_output(output: &Option<std::process::Output>) -> (u32, u32) {
@@ -1039,5 +1086,83 @@ mod tests {
     #[test]
     fn parse_shortstat_none_output() {
         assert_eq!(parse_shortstat_output(&None), (0, 0));
+    }
+
+    /// Create a real git repo in a temp directory with an initial commit.
+    /// Disables GPG signing so tests work in environments with signing configured.
+    fn init_test_repo() -> tempfile::TempDir {
+        let dir = tempdir().unwrap();
+        let path = dir.path();
+
+        Command::new("git")
+            .args(["init"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "user.name", "Test"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["config", "commit.gpgsign", "false"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+
+        fs::write(path.join("README.md"), "# Test").unwrap();
+        Command::new("git")
+            .args(["add", "-A"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["commit", "-m", "initial"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+
+        dir
+    }
+
+    #[test]
+    fn has_uncommitted_changes_clean_repo() {
+        let repo = init_test_repo();
+        let result = has_uncommitted_changes(repo.path().to_str().unwrap()).unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn has_uncommitted_changes_dirty_repo() {
+        let repo = init_test_repo();
+        fs::write(repo.path().join("new_file.txt"), "hello").unwrap();
+        let result = has_uncommitted_changes(repo.path().to_str().unwrap()).unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn git_commit_all_commits_changes() {
+        let repo = init_test_repo();
+        fs::write(repo.path().join("feature.txt"), "new feature").unwrap();
+
+        let result = git_commit_all(repo.path().to_str().unwrap(), "add feature");
+        assert!(result.is_ok());
+
+        // Verify working tree is clean after commit
+        let clean = has_uncommitted_changes(repo.path().to_str().unwrap()).unwrap();
+        assert!(!clean);
+    }
+
+    #[test]
+    fn git_commit_all_fails_when_clean() {
+        let repo = init_test_repo();
+        let result = git_commit_all(repo.path().to_str().unwrap(), "nothing to commit");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No changes to commit"));
     }
 }

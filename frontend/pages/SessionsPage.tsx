@@ -91,6 +91,8 @@ export function SessionsPage({ scope, repos }: Props) {
   const [mergeTarget, setMergeTarget] = useState<string>("");
   const [branches, setBranches] = useState<string[]>([]);
   const [mergeResult, setMergeResult] = useState<string | null>(null);
+  const [commitMessage, setCommitMessage] = useState<string>("");
+  const [commitResult, setCommitResult] = useState<string | null>(null);
   const [collapsedRepos, setCollapsedRepos] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<
     "all" | "active" | "idle" | "exited"
@@ -133,6 +135,8 @@ export function SessionsPage({ scope, repos }: Props) {
       setSelectedSession(session);
       setMergeResult(null);
       setMergeTarget("");
+      setCommitResult(null);
+      setCommitMessage("");
       loadWorktreeInfo(session);
     },
     [loadWorktreeInfo]
@@ -211,6 +215,21 @@ export function SessionsPage({ scope, repos }: Props) {
     },
     [handleSelectSession]
   );
+
+  const handleCommit = useCallback(async () => {
+    if (!selectedSession || !commitMessage.trim()) return;
+    try {
+      const result = await api.commitWorktreeChanges(
+        selectedSession.sessionId,
+        commitMessage.trim()
+      );
+      setCommitResult(result);
+      setCommitMessage("");
+      loadWorktreeInfo(selectedSession);
+    } catch (e) {
+      setCommitResult(`Error: ${e}`);
+    }
+  }, [selectedSession, commitMessage, loadWorktreeInfo]);
 
   const handleMerge = useCallback(async () => {
     if (!selectedSession || !mergeTarget) return;
@@ -576,6 +595,42 @@ export function SessionsPage({ scope, repos }: Props) {
                     <div className="worktree-diff">
                       <h4>Changes</h4>
                       <pre className="log-output">{worktreeDiff}</pre>
+                    </div>
+                  )}
+
+                  {worktreeStatus.hasUncommittedChanges && (
+                    <div className="worktree-commit">
+                      <h4>Commit Changes</h4>
+                      <div className="worktree-commit-controls">
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="Commit message..."
+                          value={commitMessage}
+                          onChange={(e) => setCommitMessage(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleCommit();
+                          }}
+                        />
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={!commitMessage.trim()}
+                          onClick={handleCommit}
+                        >
+                          Commit All
+                        </button>
+                      </div>
+                      {commitResult && (
+                        <div
+                          className={`worktree-merge-result ${
+                            commitResult.startsWith("Error")
+                              ? "worktree-merge-error"
+                              : "worktree-merge-success"
+                          }`}
+                        >
+                          {commitResult}
+                        </div>
+                      )}
                     </div>
                   )}
 

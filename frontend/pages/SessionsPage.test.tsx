@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { SessionsPage } from "./SessionsPage";
-import type { Repo, Scope, SessionEnvelope, SessionActivityMap } from "@/types";
+import type { Repo, Scope, SessionEnvelope, SessionActivityMap, WorktreeStatus } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
 
 const mockInvoke = invoke as ReturnType<typeof vi.fn>;
@@ -250,5 +250,125 @@ describe("SessionsPage", () => {
 
     // There should be 1 working session, so not empty
     expect(screen.getByText("Claude Code")).toBeInTheDocument();
+  });
+
+  describe("worktree commit UI", () => {
+    const dirtyWorktreeStatus: WorktreeStatus = {
+      branch: "worktree/s3",
+      baseBranch: "main",
+      worktreePath: "/tmp/worktree",
+      hasUncommittedChanges: true,
+      commitCount: 0,
+      latestCommitSummary: null,
+      insertions: 5,
+      deletions: 2,
+    };
+
+    const cleanWorktreeStatus: WorktreeStatus = {
+      branch: "worktree/s3",
+      baseBranch: "main",
+      worktreePath: "/tmp/worktree",
+      hasUncommittedChanges: false,
+      commitCount: 1,
+      latestCommitSummary: "add feature",
+      insertions: 5,
+      deletions: 2,
+    };
+
+    function setupWorktreeMocks(worktreeStatus: WorktreeStatus) {
+      mockInvoke.mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "list_sessions":
+            return mockSessions;
+          case "poll_session_states":
+            return mockActivities;
+          case "get_worktree_status":
+            return worktreeStatus;
+          case "get_worktree_diff":
+            return "Unstaged changes:\n file.txt | 5 +++++\n";
+          case "list_branches":
+            return ["main", "develop"];
+          case "commit_worktree_changes":
+            return "1 file changed, 5 insertions(+)";
+          default:
+            return null;
+        }
+      });
+    }
+
+    it("shows commit section when worktree has uncommitted changes", async () => {
+      setupWorktreeMocks(dirtyWorktreeStatus);
+      render(<SessionsPage scope={null} repos={mockRepos} />);
+
+      // Click on the worktree session (s3)
+      const refactorSession = await screen.findByText("Claude Refactor");
+      fireEvent.click(refactorSession);
+
+      // Should show the Commit Changes heading
+      expect(await screen.findByText("Commit Changes")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Commit message...")).toBeInTheDocument();
+      expect(screen.getByText("Commit All")).toBeInTheDocument();
+    });
+
+    it("hides commit section when worktree is clean", async () => {
+      setupWorktreeMocks(cleanWorktreeStatus);
+      render(<SessionsPage scope={null} repos={mockRepos} />);
+
+      // Click on the worktree session
+      const refactorSession = await screen.findByText("Claude Refactor");
+      fireEvent.click(refactorSession);
+
+      // Wait for worktree status to load (Merge Branch appears for both clean/dirty)
+      expect(await screen.findByText("Merge Branch")).toBeInTheDocument();
+
+      // Commit section should NOT appear
+      expect(screen.queryByText("Commit Changes")).not.toBeInTheDocument();
+    });
+
+    it("disables commit button when message is empty", async () => {
+      setupWorktreeMocks(dirtyWorktreeStatus);
+      render(<SessionsPage scope={null} repos={mockRepos} />);
+
+      const refactorSession = await screen.findByText("Claude Refactor");
+      fireEvent.click(refactorSession);
+
+      const commitBtn = await screen.findByText("Commit All");
+      expect(commitBtn).toBeDisabled();
+    });
+
+    it("enables commit button when message is entered", async () => {
+      setupWorktreeMocks(dirtyWorktreeStatus);
+      render(<SessionsPage scope={null} repos={mockRepos} />);
+
+      const refactorSession = await screen.findByText("Claude Refactor");
+      fireEvent.click(refactorSession);
+
+      const input = await screen.findByPlaceholderText("Commit message...");
+      fireEvent.change(input, { target: { value: "fix bug" } });
+
+      const commitBtn = screen.getByText("Commit All");
+      expect(commitBtn).not.toBeDisabled();
+    });
+
+    it("calls commit_worktree_changes on commit click", async () => {
+      setupWorktreeMocks(dirtyWorktreeStatus);
+      render(<SessionsPage scope={null} repos={mockRepos} />);
+
+      const refactorSession = await screen.findByText("Claude Refactor");
+      fireEvent.click(refactorSession);
+
+      const input = await screen.findByPlaceholderText("Commit message...");
+      fireEvent.change(input, { target: { value: "add feature" } });
+
+      const commitBtn = screen.getByText("Commit All");
+      fireEvent.click(commitBtn);
+
+      await waitFor(() => {
+        expect(mockInvoke).toHaveBeenCalledWith("commit_worktree_changes", {
+          sessionId: "s3",
+          message: "add feature",
+        });
+      });
+    });
   });
 });
