@@ -39,7 +39,6 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 - **MCP Servers** — Configure Model Context Protocol servers with health checks to verify availability.
 - **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. Snapshot configuration at any point and restore from history.
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
-- **CLAUDE.md Viewer** — Read-only markdown preview with nested file discovery and a prompt you can copy to generate a tailored CLAUDE.md.
 - **Plugin System** — Bundle agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, install from git, and auto-sync when the source changes.
 - **Config Backup & Restore** — Export/import full configuration as a JSON bundle with merge or overwrite modes.
 - **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal.
@@ -83,8 +82,7 @@ agent-corral/
 │   │   ├── commands/           # Tauri IPC command handlers (8 modules)
 │   │   ├── repo_registry/      # SQLite repo management
 │   │   ├── claude_adapter/     # Claude Code file format adapter (agents, hooks, skills, MCP, memory)
-│   │   ├── plugin_manager/     # Plugin export/import/git install/update, import sync registry
-│   │   └── pack_manager/       # Legacy pack system (kept for migration)
+│   │   └── plugin_manager/     # Plugin export/import/git install/update, import sync registry
 │   └── tauri.conf.json
 ├── frontend/           # React frontend
 │   ├── components/     # Shared UI components (15+ components)
@@ -108,7 +106,6 @@ Plugins use a directory-based format (`.claude-plugin/plugin.json`) bundling age
 - **Installed from Git** — point to any git repo containing a `.claude-plugin/` directory
 - **Updated** — git-sourced plugins track their source commit and can be checked for updates
 - **Auto-synced** — imported plugins can be tracked and automatically updated when the library version changes. Supports pinning (lock version) and auto-sync toggles per import.
-- **Migrated** — legacy `.agentpack` files can be converted to the new plugin format
 
 ## Contributing
 
