@@ -215,12 +215,12 @@ export function MemoryPage({ scope, homePath }: Props) {
               </li>
             ))}
             {stores.length === 0 && !isProjectScope && (
-              <li className="text-muted" style={{ padding: "12px" }}>
+              <li className="list-empty">
                 No memory stores found
               </li>
             )}
             {isProjectScope && stores.length === 0 && globalStores.length === 0 && (
-              <li className="text-muted" style={{ padding: "12px" }}>
+              <li className="list-empty">
                 No memory stores found
               </li>
             )}
@@ -241,7 +241,7 @@ export function MemoryPage({ scope, homePath }: Props) {
                     <button onClick={() => { setSelectedStore(store); setSelectedIsGlobal(true); setEditingIndex(null); }}>
                       <span className="store-name">
                         {store.name}
-                        <span className="badge-global" style={{ marginLeft: 6 }}>global</span>
+                        <span className="badge-global">global</span>
                       </span>
                       <span className="store-count">
                         {store.entryCount} entries
@@ -264,10 +264,10 @@ export function MemoryPage({ scope, homePath }: Props) {
               <div className="panel-header">
                 <h3>
                   {selectedStore.name}
-                  {selectedIsGlobal && <span className="badge-global" style={{ marginLeft: 8 }}>global</span>}
+                  {selectedIsGlobal && <span className="badge-global">global</span>}
                 </h3>
                 {!selectedIsGlobal && (
-                  <div style={{ display: "flex", gap: "8px" }}>
+                  <div className="header-actions">
                     <button className="btn btn-sm" onClick={handleReset}>
                       Reset
                     </button>
