@@ -290,6 +290,13 @@ export async function listBranches(repoPath: string): Promise<string[]> {
   return invoke("list_branches", { repoPath });
 }
 
+export async function commitWorktreeChanges(
+  sessionId: string,
+  message: string
+): Promise<string> {
+  return invoke("commit_worktree_changes", { sessionId, message });
+}
+
 export async function mergeWorktreeBranch(
   sessionId: string,
   targetBranch: string

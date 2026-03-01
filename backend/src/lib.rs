@@ -161,6 +161,7 @@ pub fn run() {
             commands::worktree::get_worktree_status,
             commands::worktree::get_worktree_diff,
             commands::worktree::list_branches,
+            commands::worktree::commit_worktree_changes,
             commands::worktree::merge_worktree_branch,
             commands::worktree::prune_worktrees,
         ])

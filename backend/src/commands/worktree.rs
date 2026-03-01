@@ -1,4 +1,4 @@
-use crate::session_manager::WorktreeStatus;
+use crate::session_manager::{self, WorktreeStatus};
 use crate::AppState;
 use std::process::Command;
 
@@ -136,6 +136,9 @@ pub fn list_branches(repo_path: String) -> Result<Vec<String>, String> {
 }
 
 /// Merge a worktree branch back into a target branch.
+///
+/// Refuses to merge if the worktree has uncommitted changes (they would be
+/// silently left behind) or if the main repo working tree is dirty.
 #[tauri::command]
 pub fn merge_worktree_branch(
     state: tauri::State<AppState>,
@@ -154,6 +157,17 @@ pub fn merge_worktree_branch(
         .worktree_branch
         .as_ref()
         .ok_or("Session does not have a worktree branch")?;
+
+    // Check that the worktree has no uncommitted changes — those would be
+    // left behind and silently lost after the merge.
+    if let Some(ref wt_path) = session.worktree_path {
+        if session_manager::has_uncommitted_changes(wt_path)? {
+            return Err(
+                "The worktree has uncommitted changes. Please commit them before merging."
+                    .to_string(),
+            );
+        }
+    }
 
     // Check that the main repo working tree is clean before checking out
     let status_check = Command::new("git")
@@ -213,6 +227,29 @@ pub fn merge_worktree_branch(
         "Successfully merged {} into {}",
         branch, target_branch
     ))
+}
+
+/// Commit all changes in a worktree session (stage everything, then commit).
+#[tauri::command]
+pub fn commit_worktree_changes(
+    state: tauri::State<AppState>,
+    session_id: String,
+    message: String,
+) -> Result<String, String> {
+    let mgr = state.session_manager.lock().map_err(|e| e.to_string())?;
+    let sessions = mgr.list_sessions().map_err(|e| e.to_string())?;
+
+    let session = sessions
+        .iter()
+        .find(|s| s.session_id == session_id)
+        .ok_or_else(|| format!("Session not found: {}", session_id))?;
+
+    let wt_path = session
+        .worktree_path
+        .as_ref()
+        .ok_or("Session does not have a worktree")?;
+
+    session_manager::git_commit_all(wt_path, &message)
 }
 
 /// Prune orphaned worktrees that no longer have active sessions.
