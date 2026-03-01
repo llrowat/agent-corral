@@ -51,32 +51,6 @@ describe("Tauri API bindings", () => {
     });
   });
 
-  // -- Session commands --
-
-  describe("listSessions", () => {
-    it("calls invoke correctly", async () => {
-      mockInvoke.mockResolvedValue([]);
-      await api.listSessions();
-      expect(mockInvoke).toHaveBeenCalledWith("list_sessions");
-    });
-  });
-
-  describe("deleteSession", () => {
-    it("calls invoke with session id", async () => {
-      mockInvoke.mockResolvedValue(undefined);
-      await api.deleteSession("sess-1");
-      expect(mockInvoke).toHaveBeenCalledWith("delete_session", { sessionId: "sess-1" });
-    });
-  });
-
-  describe("focusSession", () => {
-    it("calls invoke with pid", async () => {
-      mockInvoke.mockResolvedValue(undefined);
-      await api.focusSession(12345);
-      expect(mockInvoke).toHaveBeenCalledWith("focus_session", { pid: 12345 });
-    });
-  });
-
   // -- Claude adapter commands --
 
   describe("detectClaudeConfig", () => {
@@ -209,60 +183,6 @@ describe("Tauri API bindings", () => {
       mockInvoke.mockResolvedValue([]);
       await api.readMcpServers("/home/user", true);
       expect(mockInvoke).toHaveBeenCalledWith("read_mcp_servers", { repoPath: "/home/user", isGlobal: true });
-    });
-  });
-
-  // -- Terminal commands --
-
-  describe("launchSession", () => {
-    it("calls invoke with all params", async () => {
-      mockInvoke.mockResolvedValue("sess-123");
-      const result = await api.launchSession("/tmp/repo", "Run Claude", "claude", true, "main");
-      expect(mockInvoke).toHaveBeenCalledWith("launch_session", {
-        repoPath: "/tmp/repo",
-        commandName: "Run Claude",
-        command: "claude",
-        useWorktree: true,
-        baseBranch: "main",
-      });
-      expect(result).toBe("sess-123");
-    });
-
-    it("defaults useWorktree to false", async () => {
-      mockInvoke.mockResolvedValue("sess-456");
-      await api.launchSession("/tmp/repo", "Chat", "claude");
-      expect(mockInvoke).toHaveBeenCalledWith("launch_session", {
-        repoPath: "/tmp/repo",
-        commandName: "Chat",
-        command: "claude",
-        useWorktree: false,
-        baseBranch: null,
-      });
-    });
-  });
-
-  // -- Worktree commands --
-
-  describe("getWorktreeStatus", () => {
-    it("calls invoke with session id", async () => {
-      mockInvoke.mockResolvedValue({
-        branch: "worktree/abc", baseBranch: "main",
-        worktreePath: "/tmp/wt", hasUncommittedChanges: false,
-        commitCount: 3, latestCommitSummary: "Fix bug",
-      });
-      const result = await api.getWorktreeStatus("abc");
-      expect(mockInvoke).toHaveBeenCalledWith("get_worktree_status", { sessionId: "abc" });
-      expect(result.commitCount).toBe(3);
-    });
-  });
-
-  describe("mergeWorktreeBranch", () => {
-    it("calls invoke with session id and target branch", async () => {
-      mockInvoke.mockResolvedValue("Merged successfully");
-      await api.mergeWorktreeBranch("sess-1", "main");
-      expect(mockInvoke).toHaveBeenCalledWith("merge_worktree_branch", {
-        sessionId: "sess-1", targetBranch: "main",
-      });
     });
   });
 

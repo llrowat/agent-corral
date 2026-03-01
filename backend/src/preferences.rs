@@ -4,8 +4,6 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppPreferences {
-    /// Which terminal emulator to use. None means auto-detect.
-    pub terminal_emulator: Option<String>,
     /// How often to auto-check git plugins for updates (in minutes). 0 = disabled.
     /// Default is 30 minutes.
     #[serde(default = "default_sync_interval")]
@@ -15,7 +13,6 @@ pub struct AppPreferences {
 impl Default for AppPreferences {
     fn default() -> Self {
         Self {
-            terminal_emulator: None,
             plugin_sync_interval_minutes: 30,
         }
     }
@@ -51,16 +48,6 @@ impl PreferencesManager {
         Ok(())
     }
 
-    pub fn get_terminal_emulator(&self) -> Option<String> {
-        self.load().terminal_emulator
-    }
-
-    pub fn set_terminal_emulator(&self, terminal: Option<String>) -> Result<(), String> {
-        let mut prefs = self.load();
-        prefs.terminal_emulator = terminal;
-        self.save(&prefs)
-    }
-
     pub fn get_plugin_sync_interval(&self) -> u32 {
         self.load().plugin_sync_interval_minutes
     }
@@ -81,7 +68,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mgr = PreferencesManager::new(tmp.path());
         let prefs = mgr.load();
-        assert!(prefs.terminal_emulator.is_none());
+        assert_eq!(prefs.plugin_sync_interval_minutes, 30);
     }
 
     #[test]
@@ -90,25 +77,12 @@ mod tests {
         let mgr = PreferencesManager::new(tmp.path());
 
         let prefs = AppPreferences {
-            terminal_emulator: Some("alacritty".to_string()),
-            ..Default::default()
+            plugin_sync_interval_minutes: 60,
         };
         mgr.save(&prefs).unwrap();
 
         let loaded = mgr.load();
-        assert_eq!(loaded.terminal_emulator, Some("alacritty".to_string()));
-    }
-
-    #[test]
-    fn set_terminal_emulator() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mgr = PreferencesManager::new(tmp.path());
-
-        mgr.set_terminal_emulator(Some("kitty".to_string())).unwrap();
-        assert_eq!(mgr.get_terminal_emulator(), Some("kitty".to_string()));
-
-        mgr.set_terminal_emulator(None).unwrap();
-        assert_eq!(mgr.get_terminal_emulator(), None);
+        assert_eq!(loaded.plugin_sync_interval_minutes, 60);
     }
 
     #[test]
@@ -120,7 +94,7 @@ mod tests {
         let mgr = PreferencesManager::new(tmp.path());
         let prefs = mgr.load();
         // Should return defaults, not panic
-        assert!(prefs.terminal_emulator.is_none());
+        assert_eq!(prefs.plugin_sync_interval_minutes, 30);
     }
 
     #[test]
@@ -129,8 +103,7 @@ mod tests {
         let mgr = PreferencesManager::new(tmp.path());
 
         let prefs = AppPreferences {
-            terminal_emulator: Some("wezterm".to_string()),
-            ..Default::default()
+            plugin_sync_interval_minutes: 15,
         };
         mgr.save(&prefs).unwrap();
 
@@ -146,18 +119,20 @@ mod tests {
     #[test]
     fn app_preferences_default() {
         let prefs = AppPreferences::default();
-        assert!(prefs.terminal_emulator.is_none());
+        assert_eq!(prefs.plugin_sync_interval_minutes, 30);
     }
 
     #[test]
     fn app_preferences_serialization() {
         let prefs = AppPreferences {
-            terminal_emulator: Some("gnome-terminal".to_string()),
-            ..Default::default()
+            plugin_sync_interval_minutes: 45,
         };
         let json = serde_json::to_string(&prefs).unwrap();
         let deserialized: AppPreferences = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.terminal_emulator, prefs.terminal_emulator);
+        assert_eq!(
+            deserialized.plugin_sync_interval_minutes,
+            prefs.plugin_sync_interval_minutes
+        );
     }
 
     #[test]
@@ -194,12 +169,11 @@ mod tests {
     fn old_prefs_without_sync_interval_default_to_30() {
         let tmp = tempfile::tempdir().unwrap();
         let prefs_path = tmp.path().join("preferences.json");
-        // Write JSON without the new field
-        fs::write(&prefs_path, r#"{"terminal_emulator":"kitty"}"#).unwrap();
+        // Write JSON without the sync interval field
+        fs::write(&prefs_path, r#"{}"#).unwrap();
 
         let mgr = PreferencesManager::new(tmp.path());
         let loaded = mgr.load();
-        assert_eq!(loaded.terminal_emulator, Some("kitty".to_string()));
         assert_eq!(loaded.plugin_sync_interval_minutes, 30);
     }
 }

@@ -2,9 +2,6 @@ import { describe, it, expect } from "vitest";
 import type {
   Repo,
   RepoStatus,
-  SessionEnvelope,
-  SessionActivity,
-  SessionActivityMap,
   Agent,
   HookHandler,
   HookGroup,
@@ -68,41 +65,6 @@ describe("Type definitions", () => {
       };
       expect(status.exists).toBe(true);
       expect(status.has_claude_md).toBe(false);
-    });
-  });
-
-  describe("SessionEnvelope type", () => {
-    it("creates a valid session with worktree info", () => {
-      const session: SessionEnvelope = {
-        sessionId: "sess-1",
-        repoPath: "/tmp/repo",
-        commandName: "Run Claude",
-        command: "claude",
-        startedAt: "2026-01-01T00:00:00Z",
-        pid: 12345,
-        worktreePath: "/tmp/worktree",
-        worktreeBranch: "worktree/sess-1",
-        worktreeBaseBranch: "main",
-        processAlive: true,
-      };
-      expect(session.pid).toBe(12345);
-      expect(session.worktreePath).toBe("/tmp/worktree");
-    });
-
-    it("allows null optional fields", () => {
-      const session: SessionEnvelope = {
-        sessionId: "sess-2",
-        repoPath: "/tmp",
-        commandName: "Chat",
-        command: "claude",
-        startedAt: "2026-01-01T00:00:00Z",
-        pid: null,
-        worktreePath: null,
-        worktreeBranch: null,
-        worktreeBaseBranch: null,
-        processAlive: false,
-      };
-      expect(session.pid).toBeNull();
     });
   });
 
@@ -223,13 +185,12 @@ describe("Type definitions", () => {
         "agents",
         "config",
         "memory",
-        "sessions",
         "hooks",
         "skills",
         "mcp",
         "plugins",
       ];
-      expect(pages).toHaveLength(9);
+      expect(pages).toHaveLength(8);
     });
   });
 
@@ -252,29 +213,6 @@ describe("Type definitions", () => {
       };
       expect(summary.agentCount).toBe(2);
       expect(summary.source).toBe("library");
-    });
-  });
-
-  describe("SessionActivity type", () => {
-    it("accepts valid activity values", () => {
-      const active: SessionActivity = "active";
-      const idle: SessionActivity = "idle";
-      const exited: SessionActivity = "exited";
-      expect(active).toBe("active");
-      expect(idle).toBe("idle");
-      expect(exited).toBe("exited");
-    });
-  });
-
-  describe("SessionActivityMap type", () => {
-    it("creates a valid activity map", () => {
-      const map: SessionActivityMap = {
-        "sess-1": "active",
-        "sess-2": "idle",
-        "sess-3": "exited",
-      };
-      expect(map["sess-1"]).toBe("active");
-      expect(Object.keys(map)).toHaveLength(3);
     });
   });
 });

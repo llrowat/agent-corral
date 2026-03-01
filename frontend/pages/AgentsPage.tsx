@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope, Agent } from "@/types";
 import * as api from "@/lib/tauri";
-import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { PresetPicker } from "@/components/PresetPicker";
 import { AGENT_PRESETS, type AgentPreset } from "@/lib/presets";
 import { ScopeBanner } from "@/components/ScopeGuard";
@@ -38,7 +37,6 @@ export function AgentsPage({ scope, homePath }: Props) {
   const [editing, setEditing] = useState<Agent | null>(null);
   const [saving, setSaving] = useState(false);
   const [knownTools, setKnownTools] = useState<string[]>([]);
-  const [showAiModal, setShowAiModal] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [errors, setErrors] = useState<Record<string, ValidationError | null>>({});
 
@@ -174,15 +172,7 @@ export function AgentsPage({ scope, homePath }: Props) {
               >
                 From Template
               </button>
-              {basePath && (
-                <button
-                  className="btn btn-sm"
-                  onClick={() => setShowAiModal(true)}
-                >
-                  AI Create
-                </button>
-              )}
-              <button
+<button
                 className="btn btn-sm"
                 onClick={() => {
                   setEditing(newAgent());
@@ -495,15 +485,7 @@ export function AgentsPage({ scope, homePath }: Props) {
           )}
         </div>
       </div>
-      {showAiModal && basePath && (
-        <CreateWithAiModal
-          entityType="agent"
-          repoPath={basePath}
-          onClose={() => setShowAiModal(false)}
-          onCreated={() => loadAgents()}
-        />
-      )}
-      {showPresets && (
+{showPresets && (
         <PresetPicker
           title="Agent Templates"
           presets={AGENT_PRESETS}

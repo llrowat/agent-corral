@@ -6,7 +6,6 @@ import { OverviewPage } from "./pages/OverviewPage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { MemoryPage } from "./pages/MemoryPage";
-import { SessionsPage } from "./pages/SessionsPage";
 import { HooksPage } from "./pages/HooksPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { McpPage } from "./pages/McpPage";
@@ -80,11 +79,7 @@ function App() {
               path="/memory"
               element={<MemoryPage scope={scope} homePath={homePath} />}
             />
-            <Route
-              path="/sessions"
-              element={<SessionsPage scope={scope} repos={repos} />}
-            />
-            <Route path="/packs" element={<PacksPage scope={scope} />} />
+<Route path="/packs" element={<PacksPage scope={scope} />} />
             <Route path="/plugins" element={<PluginsPage scope={scope} />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
