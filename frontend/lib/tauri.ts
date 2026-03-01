@@ -170,6 +170,14 @@ export async function writeHooks(
   return invoke("write_hooks", { repoPath, hooks });
 }
 
+export async function reorderHookGroups(
+  repoPath: string,
+  event: string,
+  newOrder: number[]
+): Promise<void> {
+  return invoke("reorder_hook_groups", { repoPath, event, newOrder });
+}
+
 // -- Skills commands --
 
 export async function readSkills(repoPath: string): Promise<Skill[]> {
@@ -443,4 +451,202 @@ export async function setPluginSyncInterval(
 
 export async function getPluginSyncInterval(): Promise<number> {
   return invoke("get_plugin_sync_interval");
+}
+
+// -- CLAUDE.md commands --
+
+export async function readClaudeMd(repoPath: string): Promise<string> {
+  return invoke("read_claude_md", { repoPath });
+}
+
+export async function writeClaudeMd(
+  repoPath: string,
+  content: string
+): Promise<void> {
+  return invoke("write_claude_md", { repoPath, content });
+}
+
+export async function listClaudeMdFiles(
+  repoPath: string
+): Promise<string[]> {
+  return invoke("list_claude_md_files", { repoPath });
+}
+
+// -- Config history commands --
+
+export interface ConfigSnapshotSummary {
+  snapshotId: string;
+  label: string;
+  timestamp: string;
+  hasSettings: boolean;
+  hasClaudeMd: boolean;
+}
+
+export interface ConfigSnapshot {
+  snapshotId: string;
+  label: string;
+  timestamp: string;
+  settingsJson: string | null;
+  claudeMd: string | null;
+}
+
+export async function saveConfigSnapshot(
+  repoPath: string,
+  label: string
+): Promise<ConfigSnapshot> {
+  return invoke("save_config_snapshot", { repoPath, label });
+}
+
+export async function listConfigSnapshots(
+  repoPath: string
+): Promise<ConfigSnapshotSummary[]> {
+  return invoke("list_config_snapshots", { repoPath });
+}
+
+export async function restoreConfigSnapshot(
+  repoPath: string,
+  snapshotId: string
+): Promise<void> {
+  return invoke("restore_config_snapshot", { repoPath, snapshotId });
+}
+
+export async function deleteConfigSnapshot(
+  repoPath: string,
+  snapshotId: string
+): Promise<void> {
+  return invoke("delete_config_snapshot", { repoPath, snapshotId });
+}
+
+// -- MCP health check --
+
+export async function checkMcpHealth(
+  repoPath: string,
+  serverId: string,
+  isGlobal: boolean = false
+): Promise<McpHealthResult> {
+  return invoke("check_mcp_health", { repoPath, serverId, isGlobal });
+}
+
+export interface McpHealthResult {
+  serverId: string;
+  status: "healthy" | "error" | "unknown";
+  message: string;
+  checkedAt: string;
+}
+
+// -- Enable/Disable toggle commands --
+
+export async function toggleAgentEnabled(
+  repoPath: string,
+  agentId: string,
+  enabled: boolean
+): Promise<void> {
+  return invoke("toggle_agent_enabled", { repoPath, agentId, enabled });
+}
+
+export async function toggleSkillEnabled(
+  repoPath: string,
+  skillId: string,
+  enabled: boolean
+): Promise<void> {
+  return invoke("toggle_skill_enabled", { repoPath, skillId, enabled });
+}
+
+export async function toggleHookGroupEnabled(
+  repoPath: string,
+  event: string,
+  groupIndex: number,
+  enabled: boolean
+): Promise<void> {
+  return invoke("toggle_hook_group_enabled", {
+    repoPath,
+    event,
+    groupIndex,
+    enabled,
+  });
+}
+
+export async function toggleMcpServerEnabled(
+  repoPath: string,
+  serverId: string,
+  isGlobal: boolean,
+  enabled: boolean
+): Promise<void> {
+  return invoke("toggle_mcp_server_enabled", {
+    repoPath,
+    serverId,
+    isGlobal,
+    enabled,
+  });
+}
+
+export async function listDisabledAgents(
+  repoPath: string
+): Promise<string[]> {
+  return invoke("list_disabled_agents", { repoPath });
+}
+
+export async function listDisabledSkills(
+  repoPath: string
+): Promise<string[]> {
+  return invoke("list_disabled_skills", { repoPath });
+}
+
+// -- Project scan commands --
+
+export interface ProjectScanResult {
+  hasClaudeMd: boolean;
+  claudeMdCount: number;
+  agentCount: number;
+  skillCount: number;
+  hookCount: number;
+  mcpServerCount: number;
+  hasSettings: boolean;
+  hasMemory: boolean;
+  memoryStoreCount: number;
+}
+
+export async function scanProjectConfig(
+  projectPath: string
+): Promise<ProjectScanResult> {
+  return invoke("scan_project_config", { projectPath });
+}
+
+// -- Config bundle (backup/restore) commands --
+
+export interface ConfigBundle {
+  version: string;
+  created_at: string;
+  scope: string;
+  agents: unknown[];
+  skills: unknown[];
+  hooks: unknown[];
+  mcp_servers: unknown;
+  settings: unknown;
+  claude_md: string | null;
+}
+
+export interface ImportBundleResult {
+  agentsImported: number;
+  skillsImported: number;
+  hooksImported: number;
+  mcpServersImported: number;
+  settingsImported: boolean;
+  claudeMdImported: boolean;
+}
+
+export async function exportConfigBundle(
+  repoPath: string,
+  isGlobal: boolean
+): Promise<string> {
+  return invoke("export_config_bundle", { repoPath, isGlobal });
+}
+
+export async function importConfigBundle(
+  repoPath: string,
+  isGlobal: boolean,
+  bundleJson: string,
+  mode: string
+): Promise<ImportBundleResult> {
+  return invoke("import_config_bundle", { repoPath, isGlobal, bundleJson, mode });
 }

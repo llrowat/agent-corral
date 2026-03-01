@@ -1,5 +1,6 @@
 use crate::claude_adapter::{
-    Agent, ClaudeDetection, ClaudeRepoAdapter, MemoryEntry, MemoryStore, NormalizedConfig,
+    Agent, ClaudeDetection, ClaudeRepoAdapter, ConfigSnapshot, ConfigSnapshotSummary,
+    ImportBundleResult, MemoryEntry, MemoryStore, NormalizedConfig, ProjectScanResult,
 };
 
 #[tauri::command]
@@ -183,6 +184,41 @@ pub fn launch_terminal(repo_path: String, command: String) -> Result<u32, String
     Err("Unsupported platform".to_string())
 }
 
+#[tauri::command]
+pub fn read_claude_md(repo_path: String) -> Result<String, String> {
+    ClaudeRepoAdapter::read_claude_md(&repo_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn write_claude_md(repo_path: String, content: String) -> Result<(), String> {
+    ClaudeRepoAdapter::write_claude_md(&repo_path, &content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_claude_md_files(repo_path: String) -> Result<Vec<String>, String> {
+    ClaudeRepoAdapter::list_claude_md_files(&repo_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_config_snapshot(repo_path: String, label: String) -> Result<ConfigSnapshot, String> {
+    ClaudeRepoAdapter::save_config_snapshot(&repo_path, &label).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_config_snapshots(repo_path: String) -> Result<Vec<ConfigSnapshotSummary>, String> {
+    ClaudeRepoAdapter::list_config_snapshots(&repo_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_config_snapshot(repo_path: String, snapshot_id: String) -> Result<(), String> {
+    ClaudeRepoAdapter::restore_config_snapshot(&repo_path, &snapshot_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_config_snapshot(repo_path: String, snapshot_id: String) -> Result<(), String> {
+    ClaudeRepoAdapter::delete_config_snapshot(&repo_path, &snapshot_id).map_err(|e| e.to_string())
+}
+
 /// Check if a process is still alive by PID.
 #[tauri::command]
 pub fn is_process_alive(pid: u32) -> bool {
@@ -213,4 +249,64 @@ pub fn is_process_alive(pid: u32) -> bool {
 
     #[cfg(not(any(unix, windows)))]
     false
+}
+
+#[tauri::command]
+pub fn export_config_bundle(repo_path: String, is_global: bool) -> Result<String, String> {
+    let bytes =
+        ClaudeRepoAdapter::export_config_bundle(&repo_path, is_global).map_err(|e| e.to_string())?;
+    String::from_utf8(bytes).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn import_config_bundle(
+    repo_path: String,
+    is_global: bool,
+    bundle_json: String,
+    mode: String,
+) -> Result<ImportBundleResult, String> {
+    ClaudeRepoAdapter::import_config_bundle(&repo_path, is_global, bundle_json.as_bytes(), &mode)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn scan_project_config(project_path: String) -> Result<ProjectScanResult, String> {
+    ClaudeRepoAdapter::scan_project_config(std::path::Path::new(&project_path))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_agent_enabled(
+    repo_path: String,
+    agent_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    if enabled {
+        ClaudeRepoAdapter::enable_agent(&repo_path, &agent_id).map_err(|e| e.to_string())
+    } else {
+        ClaudeRepoAdapter::disable_agent(&repo_path, &agent_id).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn toggle_skill_enabled(
+    repo_path: String,
+    skill_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    if enabled {
+        ClaudeRepoAdapter::enable_skill(&repo_path, &skill_id).map_err(|e| e.to_string())
+    } else {
+        ClaudeRepoAdapter::disable_skill(&repo_path, &skill_id).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn list_disabled_agents(repo_path: String) -> Result<Vec<String>, String> {
+    ClaudeRepoAdapter::list_disabled_agents(&repo_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_disabled_skills(repo_path: String) -> Result<Vec<String>, String> {
+    ClaudeRepoAdapter::list_disabled_skills(&repo_path).map_err(|e| e.to_string())
 }

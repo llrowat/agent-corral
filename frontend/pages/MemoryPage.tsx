@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { Scope, MemoryStore, MemoryEntry } from "@/types";
 import * as api from "@/lib/tauri";
 import { DocsLink } from "@/components/DocsLink";
+import { useToast } from "@/components/Toast";
 
 interface Props {
   scope: Scope | null;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function MemoryPage({ scope, homePath }: Props) {
+  const toast = useToast();
   const [stores, setStores] = useState<MemoryStore[]>([]);
   const [globalStores, setGlobalStores] = useState<MemoryStore[]>([]);
   const [selectedStore, setSelectedStore] = useState<MemoryStore | null>(null);
@@ -89,7 +91,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       await loadEntries(selectedStore);
       await loadStores();
     } catch (e) {
-      alert(`Failed to add entry: ${e}`);
+      toast.error("Failed to add entry", String(e));
     }
   };
 
@@ -102,7 +104,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       await loadEntries(selectedStore);
       await loadStores();
     } catch (e) {
-      alert(`Failed to update entry: ${e}`);
+      toast.error("Failed to update entry", String(e));
     }
   };
 
@@ -113,7 +115,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       await loadEntries(selectedStore);
       await loadStores();
     } catch (e) {
-      alert(`Failed to delete entry: ${e}`);
+      toast.error("Failed to delete entry", String(e));
     }
   };
 
@@ -124,7 +126,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       await loadEntries(selectedStore);
       await loadStores();
     } catch (e) {
-      alert(`Failed to reset memory: ${e}`);
+      toast.error("Failed to reset memory", String(e));
     }
   };
 
@@ -136,14 +138,14 @@ export function MemoryPage({ scope, homePath }: Props) {
       setEntries([]);
       await loadStores();
     } catch (e) {
-      alert(`Failed to delete store: ${e}`);
+      toast.error("Failed to delete store", String(e));
     }
   };
 
   const handleCreateStore = async () => {
     if (!basePath || !newStoreName.trim()) return;
     if (!/^[a-z0-9-]+$/.test(newStoreName.trim())) {
-      alert("Store name must be a lowercase slug (letters, numbers, hyphens)");
+      toast.warn("Store name must be a lowercase slug (letters, numbers, hyphens)");
       return;
     }
     try {
@@ -153,7 +155,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       await loadStores();
       setSelectedStore(store);
     } catch (e) {
-      alert(`Failed to create store: ${e}`);
+      toast.error("Failed to create store", String(e));
     }
   };
 

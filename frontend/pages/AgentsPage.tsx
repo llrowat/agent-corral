@@ -13,6 +13,7 @@ import {
 import { DocsLink } from "@/components/DocsLink";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { SchemaForm } from "@/components/SchemaForm";
+import { useToast } from "@/components/Toast";
 import { useSchema } from "@/hooks/useSchema";
 
 interface Props {
@@ -42,6 +43,8 @@ export function AgentsPage({ scope, homePath }: Props) {
   const [knownTools, setKnownTools] = useState<string[]>([]);
   const [showPresets, setShowPresets] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [disabledAgents, setDisabledAgents] = useState<string[]>([]);
+  const toast = useToast();
   const [errors, setErrors] = useState<Record<string, ValidationError | null>>({});
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
@@ -51,6 +54,12 @@ export function AgentsPage({ scope, homePath }: Props) {
     if (!basePath) return;
     const result = await api.readAgents(basePath);
     setAgents(result);
+    try {
+      const disabled = await api.listDisabledAgents(basePath);
+      setDisabledAgents(disabled);
+    } catch {
+      setDisabledAgents([]);
+    }
   }, [basePath]);
 
   const loadGlobalAgents = useCallback(async () => {
@@ -131,7 +140,7 @@ export function AgentsPage({ scope, homePath }: Props) {
       setSelected(editing);
       setEditing(null);
     } catch (e) {
-      alert(`Failed to save agent: ${e}`);
+      toast.error("Failed to save agent", String(e));
     } finally {
       setSaving(false);
     }
@@ -146,7 +155,17 @@ export function AgentsPage({ scope, homePath }: Props) {
       if (selected?.agentId === agentId) setSelected(null);
       if (editing?.agentId === agentId) setEditing(null);
     } catch (e) {
-      alert(`Failed to delete agent: ${e}`);
+      toast.error("Failed to delete agent", String(e));
+    }
+  };
+
+  const handleToggleEnabled = async (agentId: string, currentlyDisabled: boolean) => {
+    if (!basePath) return;
+    try {
+      await api.toggleAgentEnabled(basePath, agentId, currentlyDisabled);
+      await loadAgents();
+    } catch (e) {
+      toast.error("Failed to toggle agent", String(e));
     }
   };
 
@@ -210,6 +229,13 @@ export function AgentsPage({ scope, homePath }: Props) {
                   <span className="agent-id">{agent.agentId}</span>
                 </button>
                 <button
+                  className="btn-icon toggle-btn toggle-enabled"
+                  onClick={() => handleToggleEnabled(agent.agentId, false)}
+                  title="Disable agent"
+                >
+                  on
+                </button>
+                <button
                   className="btn-icon"
                   onClick={() => handleDelete(agent.agentId)}
                   title="Delete"
@@ -218,12 +244,30 @@ export function AgentsPage({ scope, homePath }: Props) {
                 </button>
               </li>
             ))}
-            {agents.length === 0 && !isProjectScope && (
+            {disabledAgents.map((agentId) => (
+              <li
+                key={`disabled-${agentId}`}
+                className="agent-list-item entity-disabled"
+              >
+                <span className="agent-select">
+                  <span className="agent-name">{agentId}</span>
+                  <span className="agent-id">{agentId} (disabled)</span>
+                </span>
+                <button
+                  className="btn-icon toggle-btn toggle-disabled"
+                  onClick={() => handleToggleEnabled(agentId, true)}
+                  title="Enable agent"
+                >
+                  off
+                </button>
+              </li>
+            ))}
+            {agents.length === 0 && disabledAgents.length === 0 && !isProjectScope && (
               <li className="list-empty">
                 No agents defined
               </li>
             )}
-            {isProjectScope && agents.length === 0 && globalAgents.length === 0 && (
+            {isProjectScope && agents.length === 0 && disabledAgents.length === 0 && globalAgents.length === 0 && (
               <li className="list-empty">
                 No agents defined
               </li>
@@ -362,6 +406,43 @@ export function AgentsPage({ scope, homePath }: Props) {
                   <code>{selected!.memory}</code>
                 </div>
               )}
+              {/* Quick launch CLI command */}
+              <div className="agent-quick-launch">
+                <label>CLI Command</label>
+                <div className="quick-launch-row">
+                  <code className="quick-launch-cmd">
+                    claude --agent {selected!.agentId}
+                  </code>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `claude --agent ${selected!.agentId}`
+                      );
+                    }}
+                    title="Copy to clipboard"
+                  >
+                    Copy
+                  </button>
+                  {basePath && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={async () => {
+                        try {
+                          const cmd = `claude --agent ${selected!.agentId}`;
+                          await api.launchTerminal(basePath, cmd);
+                        } catch (e) {
+                          console.error("Failed to launch:", e);
+                        }
+                      }}
+                      title="Open Claude Code with this agent in a terminal"
+                    >
+                      Launch
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="form-actions">
                 {!selectedIsGlobal && (
                   <button

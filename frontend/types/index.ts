@@ -70,6 +70,7 @@ export interface HookHandler {
 export interface HookGroup {
   matcher?: string | null;
   hooks: HookHandler[];
+  _disabled?: boolean | null;
 }
 
 export interface HookEvent {
@@ -111,6 +112,7 @@ export interface McpServer {
   url?: string | null;
   env?: Record<string, string> | null;
   headers?: Record<string, string> | null;
+  _disabled?: boolean | null;
 }
 
 // -- Pack Manager (legacy) --
@@ -265,10 +267,12 @@ export type Scope =
 
 export type PageId =
   | "overview"
+  | "claude-md"
   | "agents"
   | "config"
   | "memory"
   | "hooks"
   | "skills"
   | "mcp"
-  | "plugins";
+  | "plugins"
+  | "history";

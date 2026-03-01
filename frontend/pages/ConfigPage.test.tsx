@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { renderWithProviders } from "@/test/test-utils";
 import { ConfigPage } from "./ConfigPage";
 import type { Scope, NormalizedConfig } from "@/types";
 
@@ -55,13 +56,13 @@ describe("ConfigPage", () => {
   });
 
   it("shows empty state when no scope selected", () => {
-    render(<ConfigPage scope={null} />);
+    renderWithProviders(<ConfigPage scope={null} />);
     expect(screen.getByText("Select a scope to manage config.")).toBeInTheDocument();
   });
 
   it("renders form fields directly without edit button", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("Claude Sonnet 4.6")).toBeInTheDocument();
@@ -73,7 +74,7 @@ describe("ConfigPage", () => {
 
   it("renders model dropdown with current value", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       const select = screen.getByDisplayValue("Claude Sonnet 4.6");
@@ -84,7 +85,7 @@ describe("ConfigPage", () => {
 
   it("renders ignore patterns as tags", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText("node_modules")).toBeInTheDocument();
@@ -95,7 +96,7 @@ describe("ConfigPage", () => {
 
   it("renders permission allow/deny tools as tags", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       // Tags appear as .tag elements; hint <code> elements also contain tool names
@@ -106,7 +107,7 @@ describe("ConfigPage", () => {
 
   it("shows save bar when model is changed", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("Claude Sonnet 4.6")).toBeInTheDocument();
@@ -126,7 +127,7 @@ describe("ConfigPage", () => {
 
   it("save bar disappears after discard", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("Claude Sonnet 4.6")).toBeInTheDocument();
@@ -146,7 +147,7 @@ describe("ConfigPage", () => {
 
   it("saves config when Save Changes is clicked", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("Claude Sonnet 4.6")).toBeInTheDocument();
@@ -172,7 +173,7 @@ describe("ConfigPage", () => {
 
   it("can add and remove ignore pattern tags", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText("node_modules")).toBeInTheDocument();
@@ -193,7 +194,7 @@ describe("ConfigPage", () => {
 
   it("can add allowed tool via Enter key", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText("Config Studio")).toBeInTheDocument();
@@ -209,7 +210,7 @@ describe("ConfigPage", () => {
 
   it("toggles advanced JSON section", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText("Advanced (JSON)")).toBeInTheDocument();
@@ -226,7 +227,7 @@ describe("ConfigPage", () => {
 
   it("shows JSON error for invalid advanced JSON", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText("Advanced (JSON)")).toBeInTheDocument();
@@ -247,7 +248,7 @@ describe("ConfigPage", () => {
 
   it("renders empty form when no config file exists", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("Not set")).toBeInTheDocument();
@@ -274,7 +275,7 @@ describe("ConfigPage", () => {
       return EMPTY_CONFIG;
     });
 
-    render(<ConfigPage scope={PROJECT_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={PROJECT_SCOPE} />);
 
     // Wait for global config to load (requires homePath to be set first)
     await waitFor(
@@ -306,7 +307,7 @@ describe("ConfigPage", () => {
       return EMPTY_CONFIG;
     });
 
-    render(<ConfigPage scope={PROJECT_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={PROJECT_SCOPE} />);
 
     await waitFor(
       () => {
@@ -318,7 +319,7 @@ describe("ConfigPage", () => {
 
   it("shows global scope banner for global scope", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText(/Global Scope/)).toBeInTheDocument();
@@ -327,7 +328,7 @@ describe("ConfigPage", () => {
 
   it("does not show source badges in global scope", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText("Config Studio")).toBeInTheDocument();
@@ -339,7 +340,7 @@ describe("ConfigPage", () => {
 
   it("does not show save bar when config is unchanged", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("Claude Sonnet 4.6")).toBeInTheDocument();
@@ -350,7 +351,7 @@ describe("ConfigPage", () => {
 
   it("disables Save button when JSON is invalid", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText("Advanced (JSON)")).toBeInTheDocument();
@@ -369,7 +370,7 @@ describe("ConfigPage", () => {
 
   it("prevents adding duplicate ignore patterns", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
-    render(<ConfigPage scope={GLOBAL_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
 
     await waitFor(() => {
       expect(screen.getByText("node_modules")).toBeInTheDocument();
@@ -399,7 +400,7 @@ describe("ConfigPage", () => {
       return EMPTY_CONFIG;
     });
 
-    render(<ConfigPage scope={PROJECT_SCOPE} />);
+    renderWithProviders(<ConfigPage scope={PROJECT_SCOPE} />);
 
     await waitFor(
       () => {

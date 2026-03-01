@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, fireEvent } from "@testing-library/react";
+import { renderWithProviders } from "@/test/test-utils";
 import { MemoryRouter } from "react-router-dom";
 import { OverviewPage } from "./OverviewPage";
 import type { Scope } from "@/types";
@@ -12,6 +13,8 @@ const mockReadSkills = vi.fn();
 const mockReadMcpServers = vi.fn();
 const mockReadMemoryStores = vi.fn();
 const mockReadClaudeConfig = vi.fn();
+const mockExportConfigBundle = vi.fn();
+const mockImportConfigBundle = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
   detectClaudeConfig: (...args: unknown[]) => mockDetectClaudeConfig(...args),
@@ -22,6 +25,8 @@ vi.mock("@/lib/tauri", () => ({
   readMcpServers: (...args: unknown[]) => mockReadMcpServers(...args),
   readMemoryStores: (...args: unknown[]) => mockReadMemoryStores(...args),
   readClaudeConfig: (...args: unknown[]) => mockReadClaudeConfig(...args),
+  exportConfigBundle: (...args: unknown[]) => mockExportConfigBundle(...args),
+  importConfigBundle: (...args: unknown[]) => mockImportConfigBundle(...args),
 }));
 
 const PROJECT_SCOPE: Scope = {
@@ -41,7 +46,7 @@ const GLOBAL_SCOPE: Scope = {
 };
 
 function renderWithRouter(scope: Scope | null) {
-  return render(
+  return renderWithProviders(
     <MemoryRouter>
       <OverviewPage scope={scope} />
     </MemoryRouter>
@@ -151,7 +156,7 @@ describe("OverviewPage", () => {
 
     await waitFor(() => {
       expect(screen.getByText("2 items")).toBeInTheDocument(); // agents
-      expect(screen.getByText(/Sonnet 4\.6/)).toBeInTheDocument(); // config model
+      expect(screen.getByText("Model: Sonnet 4.6")).toBeInTheDocument(); // config model in overview card
     });
 
     // Multiple cards show "1 item", verify they exist
@@ -240,6 +245,134 @@ describe("OverviewPage", () => {
       expect(screen.getByText("Connect Claude to external tools via Model Context Protocol")).toBeInTheDocument();
       expect(screen.getByText("Persistent notes Claude reads and writes across sessions")).toBeInTheDocument();
       expect(screen.getByText("Set default model, permissions, and file patterns")).toBeInTheDocument();
+    });
+  });
+
+  // -- Backup & Restore tests --
+
+  it("shows Export Config and Import Config buttons", async () => {
+    renderWithRouter(PROJECT_SCOPE);
+
+    expect(screen.getByText("Export Config")).toBeInTheDocument();
+    expect(screen.getByText("Import Config")).toBeInTheDocument();
+  });
+
+  it("opens export modal with JSON when Export Config is clicked", async () => {
+    const bundleJson = JSON.stringify({ version: "1.0", agents: [], skills: [] });
+    mockExportConfigBundle.mockResolvedValue(bundleJson);
+
+    renderWithRouter(PROJECT_SCOPE);
+
+    fireEvent.click(screen.getByText("Export Config"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Export Configuration")).toBeInTheDocument();
+      expect(screen.getByTestId("export-textarea")).toHaveValue(bundleJson);
+      expect(screen.getByText("Copy to Clipboard")).toBeInTheDocument();
+    });
+
+    expect(mockExportConfigBundle).toHaveBeenCalledWith("/projects/my-app", false);
+  });
+
+  it("opens import modal when Import Config is clicked", async () => {
+    renderWithRouter(PROJECT_SCOPE);
+
+    fireEvent.click(screen.getByText("Import Config"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Import Configuration")).toBeInTheDocument();
+      expect(screen.getByTestId("import-textarea")).toBeInTheDocument();
+      expect(screen.getByText("Merge")).toBeInTheDocument();
+      expect(screen.getByText("Overwrite")).toBeInTheDocument();
+    });
+  });
+
+  it("disables import buttons when textarea is empty", async () => {
+    renderWithRouter(PROJECT_SCOPE);
+
+    fireEvent.click(screen.getByText("Import Config"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Merge")).toBeDisabled();
+      expect(screen.getByText("Overwrite")).toBeDisabled();
+    });
+  });
+
+  it("calls importConfigBundle with merge mode when Merge is clicked", async () => {
+    mockImportConfigBundle.mockResolvedValue({
+      agentsImported: 2,
+      skillsImported: 1,
+      hooksImported: 0,
+      mcpServersImported: 0,
+      settingsImported: false,
+      claudeMdImported: true,
+    });
+
+    renderWithRouter(PROJECT_SCOPE);
+
+    fireEvent.click(screen.getByText("Import Config"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("import-textarea")).toBeInTheDocument();
+    });
+
+    const textarea = screen.getByTestId("import-textarea");
+    fireEvent.change(textarea, { target: { value: '{"version":"1.0"}' } });
+
+    fireEvent.click(screen.getByText("Merge"));
+
+    await waitFor(() => {
+      expect(mockImportConfigBundle).toHaveBeenCalledWith(
+        "/projects/my-app",
+        false,
+        '{"version":"1.0"}',
+        "merge"
+      );
+    });
+  });
+
+  it("calls importConfigBundle with overwrite mode when Overwrite is clicked", async () => {
+    mockImportConfigBundle.mockResolvedValue({
+      agentsImported: 0,
+      skillsImported: 0,
+      hooksImported: 0,
+      mcpServersImported: 0,
+      settingsImported: true,
+      claudeMdImported: false,
+    });
+
+    renderWithRouter(PROJECT_SCOPE);
+
+    fireEvent.click(screen.getByText("Import Config"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("import-textarea")).toBeInTheDocument();
+    });
+
+    const textarea = screen.getByTestId("import-textarea");
+    fireEvent.change(textarea, { target: { value: '{"version":"1.0"}' } });
+
+    fireEvent.click(screen.getByText("Overwrite"));
+
+    await waitFor(() => {
+      expect(mockImportConfigBundle).toHaveBeenCalledWith(
+        "/projects/my-app",
+        false,
+        '{"version":"1.0"}',
+        "overwrite"
+      );
+    });
+  });
+
+  it("uses isGlobal=true for global scope export", async () => {
+    mockExportConfigBundle.mockResolvedValue("{}");
+
+    renderWithRouter(GLOBAL_SCOPE);
+
+    fireEvent.click(screen.getByText("Export Config"));
+
+    await waitFor(() => {
+      expect(mockExportConfigBundle).toHaveBeenCalledWith("/home/user", true);
     });
   });
 });

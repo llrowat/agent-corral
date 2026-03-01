@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { renderWithProviders } from "@/test/test-utils";
 import { PluginsPage } from "./PluginsPage";
 import type { Scope, Agent, Skill } from "@/types";
 import { invoke } from "@tauri-apps/api/core";
@@ -72,12 +73,12 @@ describe("PluginsPage", () => {
   });
 
   it("renders export button", async () => {
-    render(<PluginsPage scope={projectScope} />);
+    renderWithProviders(<PluginsPage scope={projectScope} />);
     expect(screen.getByText("Export Plugin")).toBeInTheDocument();
   });
 
   it("allows export from global scope", async () => {
-    render(<PluginsPage scope={globalScope} />);
+    renderWithProviders(<PluginsPage scope={globalScope} />);
 
     // Click the Export Plugin button
     fireEvent.click(screen.getByText("Export Plugin"));
@@ -99,7 +100,7 @@ describe("PluginsPage", () => {
   });
 
   it("allows export from project scope", async () => {
-    render(<PluginsPage scope={projectScope} />);
+    renderWithProviders(<PluginsPage scope={projectScope} />);
 
     fireEvent.click(screen.getByText("Export Plugin"));
 
@@ -114,7 +115,7 @@ describe("PluginsPage", () => {
   });
 
   it("passes isGlobal=true when exporting from global scope", async () => {
-    render(<PluginsPage scope={globalScope} />);
+    renderWithProviders(<PluginsPage scope={globalScope} />);
 
     // Open export wizard
     fireEvent.click(screen.getByText("Export Plugin"));
@@ -146,7 +147,7 @@ describe("PluginsPage", () => {
   });
 
   it("passes isGlobal=false when exporting from project scope", async () => {
-    render(<PluginsPage scope={projectScope} />);
+    renderWithProviders(<PluginsPage scope={projectScope} />);
 
     fireEvent.click(screen.getByText("Export Plugin"));
 
@@ -192,7 +193,7 @@ describe("PluginsPage", () => {
       }
     });
 
-    render(<PluginsPage scope={globalScope} />);
+    renderWithProviders(<PluginsPage scope={globalScope} />);
     fireEvent.click(screen.getByText("Export Plugin"));
 
     await waitFor(() => {

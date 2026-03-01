@@ -3,6 +3,7 @@ import type { Scope, NormalizedConfig } from "@/types";
 import * as api from "@/lib/tauri";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import { DocsLink } from "@/components/DocsLink";
+import { useToast } from "@/components/Toast";
 
 interface Props {
   scope: Scope | null;
@@ -173,6 +174,7 @@ function TagInput({
 // -- Main Component --
 
 export function ConfigPage({ scope }: Props) {
+  const toast = useToast();
   // Saved state from file
   const [savedConfig, setSavedConfig] = useState<NormalizedConfig>(EMPTY_CONFIG);
   const [globalConfig, setGlobalConfig] = useState<NormalizedConfig>(EMPTY_CONFIG);
@@ -316,7 +318,7 @@ export function ConfigPage({ scope }: Props) {
       setSavedConfig(reloaded);
       populateForm(reloaded);
     } catch (e) {
-      alert(`Failed to save config: ${e}`);
+      toast.error("Failed to save config", String(e));
     } finally {
       setSaving(false);
     }

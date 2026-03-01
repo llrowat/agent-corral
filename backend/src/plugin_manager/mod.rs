@@ -444,6 +444,7 @@ impl PluginManager {
                         url: sv.get("url").and_then(|v| v.as_str()).map(String::from),
                         env: sv.get("env").cloned(),
                         headers: sv.get("headers").cloned(),
+                        disabled: sv.get("_disabled").and_then(|v| v.as_bool()),
                     })
                     .collect()
             } else {

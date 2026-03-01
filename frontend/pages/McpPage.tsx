@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope, McpServer } from "@/types";
 import * as api from "@/lib/tauri";
+import { useToast } from "@/components/Toast";
 import { PresetPicker } from "@/components/PresetPicker";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { MCP_PRESETS, type McpPreset } from "@/lib/presets";
@@ -46,6 +47,9 @@ export function McpPage({ scope, homePath }: Props) {
   const [serverIdError, setServerIdError] = useState<ValidationError | null>(
     null
   );
+  const [healthResults, setHealthResults] = useState<Record<string, { status: string; message: string }>>({});
+  const [checking, setChecking] = useState<Record<string, boolean>>({});
+  const toast = useToast();
 
   const { schema: mcpSchema } = useSchema("mcp-server");
 
@@ -129,7 +133,7 @@ export function McpPage({ scope, homePath }: Props) {
       setView("list");
       setEditing(null);
     } catch (e) {
-      console.error(`Failed to save server: ${e}`);
+      toast.error("Failed to save server", String(e));
     } finally {
       setSaving(false);
     }
@@ -142,7 +146,30 @@ export function McpPage({ scope, homePath }: Props) {
       await api.deleteMcpServer(basePath, serverId, isGlobal);
       await loadServers();
     } catch (e) {
-      console.error(`Failed to delete server: ${e}`);
+      toast.error("Failed to delete server", String(e));
+    }
+  };
+
+  const handleHealthCheck = async (serverId: string) => {
+    if (!basePath) return;
+    setChecking(prev => ({ ...prev, [serverId]: true }));
+    try {
+      const result = await api.checkMcpHealth(basePath, serverId, isGlobal);
+      setHealthResults(prev => ({ ...prev, [serverId]: { status: result.status, message: result.message } }));
+    } catch (e) {
+      setHealthResults(prev => ({ ...prev, [serverId]: { status: "error", message: String(e) } }));
+    } finally {
+      setChecking(prev => ({ ...prev, [serverId]: false }));
+    }
+  };
+
+  const handleToggleEnabled = async (serverId: string, currentlyDisabled: boolean) => {
+    if (!basePath) return;
+    try {
+      await api.toggleMcpServerEnabled(basePath, serverId, isGlobal, currentlyDisabled);
+      await loadServers();
+    } catch (e) {
+      console.error(`Failed to toggle server: ${e}`);
     }
   };
 
@@ -260,7 +287,7 @@ export function McpPage({ scope, homePath }: Props) {
           {servers.length > 0 && (
             <div className="packs-grid">
               {servers.map((server) => (
-                <div key={server.serverId} className="pack-card">
+                <div key={server.serverId} className={`pack-card${server._disabled ? " entity-disabled" : ""}`}>
                   <div className="pack-card-header">
                     <h3>{server.serverId}</h3>
                     <span className="pack-source-badge">{server.serverType}</span>
@@ -293,6 +320,20 @@ export function McpPage({ scope, homePath }: Props) {
                   )}
                   <div className="pack-actions">
                     <button
+                      className={`btn btn-sm toggle-btn ${server._disabled ? "toggle-disabled" : "toggle-enabled"}`}
+                      onClick={() => handleToggleEnabled(server.serverId, !!server._disabled)}
+                      title={server._disabled ? "Enable server" : "Disable server"}
+                    >
+                      {server._disabled ? "Enable" : "Disable"}
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => handleHealthCheck(server.serverId)}
+                      disabled={checking[server.serverId]}
+                    >
+                      {checking[server.serverId] ? "Checking..." : "Health Check"}
+                    </button>
+                    <button
                       className="btn btn-sm"
                       onClick={() => startEdit(server)}
                     >
@@ -305,6 +346,15 @@ export function McpPage({ scope, homePath }: Props) {
                       Delete
                     </button>
                   </div>
+                  {healthResults[server.serverId] && (
+                    <div className={`mcp-health-result mcp-health-${healthResults[server.serverId].status}`}>
+                      <span className="mcp-health-dot">
+                        {healthResults[server.serverId].status === "healthy" ? "✓" :
+                         healthResults[server.serverId].status === "error" ? "✗" : "?"}
+                      </span>
+                      <span>{healthResults[server.serverId].message}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

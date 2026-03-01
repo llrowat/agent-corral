@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope, Skill } from "@/types";
 import * as api from "@/lib/tauri";
+import { useToast } from "@/components/Toast";
 import { PresetPicker } from "@/components/PresetPicker";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
 import { SKILL_PRESETS, type SkillPreset } from "@/lib/presets";
@@ -56,6 +57,7 @@ const SKILL_FIELDS = [
 ];
 
 export function SkillsPage({ scope, homePath }: Props) {
+  const toast = useToast();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [globalSkills, setGlobalSkills] = useState<Skill[]>([]);
   const [selected, setSelected] = useState<Skill | null>(null);
@@ -64,6 +66,7 @@ export function SkillsPage({ scope, homePath }: Props) {
   const [saving, setSaving] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [disabledSkills, setDisabledSkills] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, ValidationError | null>>({});
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
@@ -76,6 +79,12 @@ export function SkillsPage({ scope, homePath }: Props) {
       setSkills(result);
     } catch {
       setSkills([]);
+    }
+    try {
+      const disabled = await api.listDisabledSkills(basePath);
+      setDisabledSkills(disabled);
+    } catch {
+      setDisabledSkills([]);
     }
   }, [basePath]);
 
@@ -133,7 +142,7 @@ export function SkillsPage({ scope, homePath }: Props) {
       setSelected(editing);
       setEditing(null);
     } catch (e) {
-      alert(`Failed to save skill: ${e}`);
+      toast.error("Failed to save skill", String(e));
     } finally {
       setSaving(false);
     }
@@ -148,7 +157,17 @@ export function SkillsPage({ scope, homePath }: Props) {
       if (selected?.skillId === skillId) setSelected(null);
       if (editing?.skillId === skillId) setEditing(null);
     } catch (e) {
-      alert(`Failed to delete skill: ${e}`);
+      toast.error("Failed to delete skill", String(e));
+    }
+  };
+
+  const handleToggleEnabled = async (skillId: string, currentlyDisabled: boolean) => {
+    if (!basePath) return;
+    try {
+      await api.toggleSkillEnabled(basePath, skillId, currentlyDisabled);
+      await loadSkills();
+    } catch (e) {
+      toast.error("Failed to toggle skill", String(e));
     }
   };
 
@@ -218,6 +237,13 @@ export function SkillsPage({ scope, homePath }: Props) {
                   <span className="agent-id">{skill.skillId}</span>
                 </button>
                 <button
+                  className="btn-icon toggle-btn toggle-enabled"
+                  onClick={() => handleToggleEnabled(skill.skillId, false)}
+                  title="Disable skill"
+                >
+                  on
+                </button>
+                <button
                   className="btn-icon"
                   onClick={() => handleDelete(skill.skillId)}
                   title="Delete"
@@ -226,12 +252,30 @@ export function SkillsPage({ scope, homePath }: Props) {
                 </button>
               </li>
             ))}
-            {skills.length === 0 && !isProjectScope && (
+            {disabledSkills.map((skillId) => (
+              <li
+                key={`disabled-${skillId}`}
+                className="agent-list-item entity-disabled"
+              >
+                <span className="agent-select">
+                  <span className="agent-name">{skillId}</span>
+                  <span className="agent-id">{skillId} (disabled)</span>
+                </span>
+                <button
+                  className="btn-icon toggle-btn toggle-disabled"
+                  onClick={() => handleToggleEnabled(skillId, true)}
+                  title="Enable skill"
+                >
+                  off
+                </button>
+              </li>
+            ))}
+            {skills.length === 0 && disabledSkills.length === 0 && !isProjectScope && (
               <li className="list-empty">
                 No skills defined
               </li>
             )}
-            {isProjectScope && skills.length === 0 && globalSkills.length === 0 && (
+            {isProjectScope && skills.length === 0 && disabledSkills.length === 0 && globalSkills.length === 0 && (
               <li className="list-empty">
                 No skills defined
               </li>
