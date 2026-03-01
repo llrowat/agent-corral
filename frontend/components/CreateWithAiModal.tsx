@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import * as api from "@/lib/tauri";
 
 export type AiEntityType = "agent" | "skill" | "hook" | "mcp";
@@ -8,10 +8,6 @@ interface Props {
   repoPath: string;
   onClose: () => void;
   onCreated: () => void;
-}
-
-function shellEscape(s: string): string {
-  return "'" + s.replace(/'/g, "'\\''") + "'";
 }
 
 function buildPrompt(entityType: AiEntityType, description: string): string {
@@ -146,6 +142,11 @@ const LABELS: Record<
   },
 };
 
+type ModalState = "input" | "waiting" | "done" | "error";
+
+const POLL_INTERVAL_MS = 2000;
+const TIMEOUT_MS = 300_000; // 5 minutes
+
 export function CreateWithAiModal({
   entityType,
   repoPath,
@@ -154,8 +155,26 @@ export function CreateWithAiModal({
 }: Props) {
   const [description, setDescription] = useState("");
   const [launching, setLaunching] = useState(false);
+  const [state, setState] = useState<ModalState>("input");
+  const [errorMsg, setErrorMsg] = useState("");
+  const sessionIdRef = useRef<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const label = LABELS[entityType];
+
+  const cleanup = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => cleanup, [cleanup]);
 
   const handleLaunch = async () => {
     if (!description.trim()) {
@@ -166,47 +185,161 @@ export function CreateWithAiModal({
     setLaunching(true);
     try {
       const prompt = buildPrompt(entityType, description.trim());
-      const command = `claude -p ${shellEscape(prompt)}`;
-      await api.launchSession(repoPath, label.commandName, command);
-      onCreated();
-      onClose();
+      const promptPath = await api.writeTempPrompt(repoPath, prompt);
+      const platform = await api.getPlatform();
+      // Pipe the prompt file to claude -p via stdin to avoid shell escaping issues
+      const command =
+        platform === "windows"
+          ? `type "${promptPath}" | claude -p`
+          : `cat "${promptPath}" | claude -p`;
+      const sessionId = await api.launchSession(
+        repoPath,
+        label.commandName,
+        command
+      );
+      sessionIdRef.current = sessionId;
+      setState("waiting");
+
+      // Poll session state until it exits
+      pollRef.current = setInterval(async () => {
+        try {
+          const states = await api.pollSessionStates();
+          const activity = states[sessionId];
+          // Session exited or is no longer tracked
+          if (activity === "exited" || activity === undefined) {
+            cleanup();
+            setState("done");
+            onCreated();
+          }
+        } catch {
+          // polling error, keep trying
+        }
+      }, POLL_INTERVAL_MS);
+
+      // Timeout after 5 minutes
+      timeoutRef.current = setTimeout(() => {
+        cleanup();
+        setState("done");
+        onCreated();
+      }, TIMEOUT_MS);
     } catch (e) {
-      alert(`Failed to launch session: ${e}`);
+      setErrorMsg(`Failed to launch session: ${e}`);
+      setState("error");
     } finally {
       setLaunching(false);
     }
   };
 
+  const handleFocusSession = async () => {
+    if (!sessionIdRef.current) return;
+    try {
+      const sessions = await api.listSessions();
+      const session = sessions.find(
+        (s) => s.sessionId === sessionIdRef.current
+      );
+      if (session?.pid) {
+        await api.focusSession(session.pid);
+      }
+    } catch {
+      // ignore focus errors
+    }
+  };
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div
+      className="modal-overlay"
+      onClick={state === "input" ? onClose : undefined}
+    >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h3>{label.title}</h3>
-        <p className="text-muted" style={{ marginBottom: 16 }}>
-          Describe what you want and Claude Code will create it in a terminal
-          session.
-        </p>
-        <div className="form-group">
-          <label>Description</label>
-          <textarea
-            rows={5}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={label.placeholder}
-            autoFocus
-          />
-        </div>
-        <div className="form-actions">
-          <button
-            className="btn btn-primary"
-            onClick={handleLaunch}
-            disabled={launching || !description.trim()}
-          >
-            {launching ? "Launching..." : "Create with AI"}
-          </button>
-          <button className="btn" onClick={onClose} disabled={launching}>
-            Cancel
-          </button>
-        </div>
+        {state === "input" && (
+          <>
+            <h3>{label.title}</h3>
+            <p className="text-muted" style={{ marginBottom: 16 }}>
+              Describe what you want and Claude Code will create it in a
+              terminal session.
+            </p>
+            <div className="form-group">
+              <label>Description</label>
+              <textarea
+                rows={5}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={label.placeholder}
+                autoFocus
+              />
+            </div>
+            <div className="form-actions">
+              <button
+                className="btn btn-primary"
+                onClick={handleLaunch}
+                disabled={launching || !description.trim()}
+              >
+                {launching ? "Launching..." : "Create with AI"}
+              </button>
+              <button className="btn" onClick={onClose} disabled={launching}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+
+        {state === "waiting" && (
+          <>
+            <h3>Creating with AI...</h3>
+            <p className="text-muted" style={{ marginBottom: 16 }}>
+              Claude Code is working in a terminal session. This modal will
+              update automatically when the session finishes.
+            </p>
+            <div className="ai-create-progress">
+              <div className="ai-create-spinner" />
+              <span>Session running</span>
+            </div>
+            <div className="form-actions">
+              <button className="btn" onClick={handleFocusSession}>
+                Show Terminal
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  cleanup();
+                  onCreated();
+                  onClose();
+                }}
+              >
+                Close &amp; Continue
+              </button>
+            </div>
+          </>
+        )}
+
+        {state === "done" && (
+          <>
+            <h3>Session Complete</h3>
+            <p className="text-muted" style={{ marginBottom: 16 }}>
+              Claude Code has finished. The list has been refreshed with any new
+              items.
+            </p>
+            <div className="form-actions">
+              <button className="btn btn-primary" onClick={onClose}>
+                Done
+              </button>
+            </div>
+          </>
+        )}
+
+        {state === "error" && (
+          <>
+            <h3>Error</h3>
+            <p className="text-muted" style={{ marginBottom: 16 }}>
+              {errorMsg}
+            </p>
+            <div className="form-actions">
+              <button className="btn" onClick={onClose}>
+                Close
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

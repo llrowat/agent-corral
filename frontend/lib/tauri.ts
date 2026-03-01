@@ -241,6 +241,13 @@ export async function getPlatform(): Promise<string> {
 
 // -- Terminal commands --
 
+export async function writeTempPrompt(
+  repoPath: string,
+  content: string
+): Promise<string> {
+  return invoke("write_temp_prompt", { repoPath, content });
+}
+
 export async function launchSession(
   repoPath: string,
   commandName: string,

@@ -4,6 +4,17 @@ use crate::AppState;
 use std::process::Command;
 use uuid::Uuid;
 
+/// Write a prompt string to a temp file under the repo's .claude/ directory.
+/// Returns the absolute path to the temp file so it can be piped to `claude -p`.
+#[tauri::command]
+pub fn write_temp_prompt(repo_path: String, content: String) -> Result<String, String> {
+    let dir = std::path::Path::new(&repo_path).join(".claude");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(".ai-prompt.tmp");
+    std::fs::write(&path, &content).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub fn launch_session(
     state: tauri::State<AppState>,

@@ -320,6 +320,8 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .page h2 {
@@ -347,7 +349,7 @@ body {
 }
 
 .panel-left {
-  width: 280px;
+  width: 320px;
   background: var(--bg-secondary);
   overflow-y: auto;
   flex-shrink: 0;
@@ -366,6 +368,8 @@ body {
   justify-content: space-between;
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .panel-header h3 {
@@ -883,8 +887,9 @@ select:disabled {
 }
 
 .btn-sm {
-  padding: 4px 10px;
+  padding: 6px 12px;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .btn-icon {
@@ -1236,7 +1241,8 @@ code {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* -- Command Templates -- */
@@ -1463,6 +1469,34 @@ code {
   font-size: 18px;
   font-weight: 700;
   margin-bottom: 8px;
+}
+
+/* -- AI Create Progress -- */
+.ai-create-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.ai-create-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ai-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* -- Worktree -- */

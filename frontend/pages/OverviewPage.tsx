@@ -1,9 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import type { Scope, RepoStatus, ClaudeDetection, CommandTemplate } from "@/types";
 import * as api from "@/lib/tauri";
 import { useSessions } from "@/hooks/useSessions";
-import { QuickSetup } from "@/components/QuickSetup";
 import { ConfigSummary } from "@/components/ConfigSummary";
 import { ScopeBanner } from "@/components/ScopeGuard";
 
@@ -12,7 +10,6 @@ interface Props {
 }
 
 export function OverviewPage({ scope }: Props) {
-  const navigate = useNavigate();
   const [status, setStatus] = useState<RepoStatus | null>(null);
   const [detection, setDetection] = useState<ClaudeDetection | null>(null);
   const [templates, setTemplates] = useState<CommandTemplate[]>([]);
@@ -125,15 +122,6 @@ export function OverviewPage({ scope }: Props) {
       <ScopeBanner scope={scope} />
 
       {scope && <ConfigSummary scope={scope} key={basePath} />}
-
-      {detection && basePath && !isGlobal && (
-        <QuickSetup
-          basePath={basePath}
-          detection={detection}
-          onApplied={reloadDetection}
-          onNavigate={(page) => navigate(page)}
-        />
-      )}
 
       <section className="overview-section">
         <h3>{isGlobal ? "Global Detection" : "Repo Status"}</h3>
