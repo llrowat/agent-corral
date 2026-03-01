@@ -12,6 +12,8 @@ import {
 } from "@/components/InlineValidation";
 import { DocsLink } from "@/components/DocsLink";
 import { CreateWithAiModal } from "@/components/CreateWithAiModal";
+import { SchemaForm } from "@/components/SchemaForm";
+import { useSchema } from "@/hooks/useSchema";
 
 interface Props {
   scope: Scope | null;
@@ -148,13 +150,7 @@ export function AgentsPage({ scope, homePath }: Props) {
     }
   };
 
-  const toggleTool = (tool: string) => {
-    if (!editing) return;
-    const tools = editing.tools.includes(tool)
-      ? editing.tools.filter((t) => t !== tool)
-      : [...editing.tools, tool];
-    setEditing({ ...editing, tools });
-  };
+  const { schema: agentSchema } = useSchema("agent");
 
   const currentAgent = editing ?? selected;
   const isNewAgent = editing !== null && !agents.some((a) => a.agentId === editing.agentId);
@@ -275,126 +271,32 @@ export function AgentsPage({ scope, homePath }: Props) {
           ) : editing ? (
             <div className="agent-editor">
               <h3>{isNewAgent ? "New Agent" : `Edit: ${editing.name}`}</h3>
-              <div className="form-group">
-                <label>Agent ID (slug)</label>
-                <input
-                  type="text"
-                  value={editing.agentId}
-                  onChange={(e) => {
-                    setEditing({ ...editing, agentId: e.target.value });
-                    setErrors({ ...errors, agentId: null });
+              {agentSchema ? (
+                <SchemaForm
+                  schema={agentSchema}
+                  values={editing as unknown as Record<string, unknown>}
+                  onChange={(vals) => {
+                    setEditing(vals as unknown as Agent);
+                    setErrors({});
                   }}
-                  placeholder="my-agent"
-                  disabled={!isNewAgent}
-                  className={errors.agentId ? "input-error" : ""}
+                  isEdit={!isNewAgent}
+                  knownTools={knownTools}
                 />
+              ) : (
+                <p className="text-muted">Loading schema...</p>
+              )}
+              {errors.agentId && (
                 <FieldError
-                  error={errors.agentId ?? null}
+                  error={errors.agentId}
                   onAutoFix={(val) => {
                     setEditing({ ...editing, agentId: val });
                     setErrors({ ...errors, agentId: null });
                   }}
                 />
-              </div>
-              <div className="form-group">
-                <label>Name</label>
-                <input
-                  type="text"
-                  value={editing.name}
-                  onChange={(e) => {
-                    setEditing({ ...editing, name: e.target.value });
-                    setErrors({ ...errors, name: null });
-                  }}
-                  placeholder="My Agent"
-                  className={errors.name ? "input-error" : ""}
-                />
-                <FieldError error={errors.name ?? null} />
-              </div>
-              <div className="form-group">
-                <label>Description</label>
-                <textarea
-                  rows={2}
-                  value={editing.description}
-                  onChange={(e) => {
-                    setEditing({ ...editing, description: e.target.value });
-                    setErrors({ ...errors, description: null });
-                  }}
-                  placeholder="Brief description of what this agent does"
-                  className={errors.description ? "input-error" : ""}
-                />
-                <FieldError error={errors.description ?? null} />
-              </div>
-              <div className="form-group">
-                <label>System Prompt</label>
-                <textarea
-                  rows={12}
-                  value={editing.systemPrompt}
-                  onChange={(e) => {
-                    setEditing({ ...editing, systemPrompt: e.target.value });
-                    setErrors({ ...errors, systemPrompt: null });
-                  }}
-                  placeholder="You are a helpful assistant that..."
-                  className={errors.systemPrompt ? "input-error" : ""}
-                />
-                <FieldError error={errors.systemPrompt ?? null} />
-              </div>
-
-              <div className="form-group">
-                <label>Allowed Tools</label>
-                <div className="tools-grid">
-                  {knownTools.map((tool) => (
-                    <label key={tool} className="tool-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={editing.tools.includes(tool)}
-                        onChange={() => toggleTool(tool)}
-                      />
-                      <span>{tool}</span>
-                    </label>
-                  ))}
-                </div>
-                {editing.tools.length === 0 && (
-                  <span className="config-field-hint">
-                    No tools selected — agent will have access to all tools
-                  </span>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label>Model Override (optional)</label>
-                <select
-                  value={editing.modelOverride ?? ""}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      modelOverride: e.target.value || null,
-                    })
-                  }
-                >
-                  <option value="">Default</option>
-                  <option value="opus">Opus</option>
-                  <option value="sonnet">Sonnet</option>
-                  <option value="haiku">Haiku</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Memory Scope (optional)</label>
-                <select
-                  value={editing.memory ?? ""}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      memory: e.target.value || null,
-                    })
-                  }
-                >
-                  <option value="">None</option>
-                  <option value="user">User</option>
-                  <option value="project">Project</option>
-                  <option value="local">Local</option>
-                </select>
-              </div>
+              )}
+              {errors.name && <FieldError error={errors.name} />}
+              {errors.description && <FieldError error={errors.description} />}
+              {errors.systemPrompt && <FieldError error={errors.systemPrompt} />}
 
               <div className="form-actions">
                 <button

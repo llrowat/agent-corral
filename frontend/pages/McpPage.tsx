@@ -11,6 +11,8 @@ import {
   FieldError,
   type ValidationError,
 } from "@/components/InlineValidation";
+import { SchemaForm } from "@/components/SchemaForm";
+import { useSchema } from "@/hooks/useSchema";
 
 interface Props {
   scope: Scope | null;
@@ -45,13 +47,7 @@ export function McpPage({ scope, homePath }: Props) {
     null
   );
 
-  // Env/headers editor state
-  const [envPairs, setEnvPairs] = useState<{ key: string; value: string }[]>(
-    []
-  );
-  const [headerPairs, setHeaderPairs] = useState<
-    { key: string; value: string }[]
-  >([]);
+  const { schema: mcpSchema } = useSchema("mcp-server");
 
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
   const isGlobal = scope?.type === "global";
@@ -101,8 +97,6 @@ export function McpPage({ scope, homePath }: Props) {
   const startEdit = (server: McpServer) => {
     setEditing({ ...server });
     setIsNew(false);
-    setEnvPairs(objToPairs(server.env));
-    setHeaderPairs(objToPairs(server.headers));
     setServerIdError(null);
     setView("edit");
   };
@@ -111,8 +105,6 @@ export function McpPage({ scope, homePath }: Props) {
     const s = newServer();
     setEditing(s);
     setIsNew(true);
-    setEnvPairs([]);
-    setHeaderPairs([]);
     setServerIdError(null);
     setView("edit");
   };
@@ -120,8 +112,6 @@ export function McpPage({ scope, homePath }: Props) {
   const handleSelectPreset = (preset: McpPreset) => {
     setEditing({ ...preset.server });
     setIsNew(true);
-    setEnvPairs(objToPairs(preset.server.env));
-    setHeaderPairs(objToPairs(preset.server.headers));
     setServerIdError(null);
     setView("edit");
   };
@@ -134,12 +124,7 @@ export function McpPage({ scope, homePath }: Props) {
 
     setSaving(true);
     try {
-      const server: McpServer = {
-        ...editing,
-        env: pairsToObj(envPairs),
-        headers: pairsToObj(headerPairs),
-      };
-      await api.writeMcpServer(basePath, server, isGlobal);
+      await api.writeMcpServer(basePath, editing, isGlobal);
       await loadServers();
       setView("list");
       setEditing(null);
@@ -176,19 +161,20 @@ export function McpPage({ scope, homePath }: Props) {
         </div>
 
         <div className="export-form">
-          <div className="form-group">
-            <label>Server ID</label>
-            <input
-              type="text"
-              value={editing.serverId}
-              onChange={(e) => {
-                setEditing({ ...editing, serverId: e.target.value });
+          {mcpSchema ? (
+            <SchemaForm
+              schema={mcpSchema}
+              values={editing as unknown as Record<string, unknown>}
+              onChange={(vals) => {
+                setEditing(vals as unknown as McpServer);
                 setServerIdError(null);
               }}
-              placeholder="my-server"
-              disabled={!isNew}
-              className={serverIdError ? "input-error" : ""}
+              isEdit={!isNew}
             />
+          ) : (
+            <p className="text-muted">Loading schema...</p>
+          )}
+          {serverIdError && (
             <FieldError
               error={serverIdError}
               onAutoFix={(val) => {
@@ -196,168 +182,6 @@ export function McpPage({ scope, homePath }: Props) {
                 setServerIdError(null);
               }}
             />
-          </div>
-
-          <div className="form-group">
-            <label>Type</label>
-            <select
-              value={editing.serverType}
-              onChange={(e) =>
-                setEditing({ ...editing, serverType: e.target.value })
-              }
-            >
-              <option value="stdio">stdio</option>
-              <option value="http">http</option>
-              <option value="sse">sse</option>
-            </select>
-          </div>
-
-          {editing.serverType === "stdio" && (
-            <>
-              <div className="form-group">
-                <label>Command</label>
-                <input
-                  type="text"
-                  value={editing.command ?? ""}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      command: e.target.value || null,
-                    })
-                  }
-                  placeholder="npx -y @modelcontextprotocol/server-name"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Arguments (one per line)</label>
-                <textarea
-                  rows={3}
-                  value={(editing.args ?? []).join("\n")}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      args: e.target.value
-                        ? e.target.value.split("\n")
-                        : [],
-                    })
-                  }
-                  placeholder="arg1&#10;arg2"
-                />
-              </div>
-            </>
-          )}
-
-          {(editing.serverType === "http" ||
-            editing.serverType === "sse") && (
-            <div className="form-group">
-              <label>URL</label>
-              <input
-                type="text"
-                value={editing.url ?? ""}
-                onChange={(e) =>
-                  setEditing({
-                    ...editing,
-                    url: e.target.value || null,
-                  })
-                }
-                placeholder="http://localhost:3000/mcp"
-              />
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>Environment Variables</label>
-            {envPairs.map((pair, i) => (
-              <div key={i} className="kv-row">
-                <input
-                  type="text"
-                  value={pair.key}
-                  onChange={(e) => {
-                    const updated = [...envPairs];
-                    updated[i] = { ...pair, key: e.target.value };
-                    setEnvPairs(updated);
-                  }}
-                  placeholder="KEY"
-                />
-                <input
-                  type="text"
-                  value={pair.value}
-                  onChange={(e) => {
-                    const updated = [...envPairs];
-                    updated[i] = { ...pair, value: e.target.value };
-                    setEnvPairs(updated);
-                  }}
-                  placeholder="value"
-                />
-                <button
-                  className="btn-icon"
-                  onClick={() =>
-                    setEnvPairs(envPairs.filter((_, j) => j !== i))
-                  }
-                >
-                  x
-                </button>
-              </div>
-            ))}
-            <button
-              className="btn btn-sm"
-              onClick={() =>
-                setEnvPairs([...envPairs, { key: "", value: "" }])
-              }
-            >
-              + Add Variable
-            </button>
-          </div>
-
-          {(editing.serverType === "http" ||
-            editing.serverType === "sse") && (
-            <div className="form-group">
-              <label>Headers</label>
-              {headerPairs.map((pair, i) => (
-                <div key={i} className="kv-row">
-                  <input
-                    type="text"
-                    value={pair.key}
-                    onChange={(e) => {
-                      const updated = [...headerPairs];
-                      updated[i] = { ...pair, key: e.target.value };
-                      setHeaderPairs(updated);
-                    }}
-                    placeholder="Header-Name"
-                  />
-                  <input
-                    type="text"
-                    value={pair.value}
-                    onChange={(e) => {
-                      const updated = [...headerPairs];
-                      updated[i] = { ...pair, value: e.target.value };
-                      setHeaderPairs(updated);
-                    }}
-                    placeholder="value"
-                  />
-                  <button
-                    className="btn-icon"
-                    onClick={() =>
-                      setHeaderPairs(headerPairs.filter((_, j) => j !== i))
-                    }
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
-              <button
-                className="btn btn-sm"
-                onClick={() =>
-                  setHeaderPairs([
-                    ...headerPairs,
-                    { key: "", value: "" },
-                  ])
-                }
-              >
-                + Add Header
-              </button>
-            </div>
           )}
 
           <div className="form-actions">
@@ -557,24 +381,3 @@ export function McpPage({ scope, homePath }: Props) {
   );
 }
 
-function objToPairs(
-  obj: Record<string, string> | null | undefined
-): { key: string; value: string }[] {
-  if (!obj || typeof obj !== "object") return [];
-  return Object.entries(obj).map(([key, value]) => ({
-    key,
-    value: String(value),
-  }));
-}
-
-function pairsToObj(
-  pairs: { key: string; value: string }[]
-): Record<string, string> | null {
-  const filtered = pairs.filter((p) => p.key.trim());
-  if (filtered.length === 0) return null;
-  const obj: Record<string, string> = {};
-  for (const { key, value } of filtered) {
-    obj[key.trim()] = value;
-  }
-  return obj;
-}

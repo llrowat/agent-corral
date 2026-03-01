@@ -12,6 +12,8 @@ import {
   type ValidationError,
 } from "@/components/InlineValidation";
 import { DocsLink } from "@/components/DocsLink";
+import { SchemaForm } from "@/components/SchemaForm";
+import { useSchema } from "@/hooks/useSchema";
 
 interface Props {
   scope: Scope | null;
@@ -46,6 +48,11 @@ const KNOWN_TOOLS = [
   "TodoWrite",
   "NotebookEdit",
   "Task",
+];
+
+const SKILL_FIELDS = [
+  "skillId", "name", "description", "userInvocable",
+  "allowedTools", "model", "argumentHint", "content",
 ];
 
 export function SkillsPage({ scope, homePath }: Props) {
@@ -145,13 +152,7 @@ export function SkillsPage({ scope, homePath }: Props) {
     }
   };
 
-  const toggleTool = (tool: string) => {
-    if (!editing) return;
-    const allowedTools = editing.allowedTools.includes(tool)
-      ? editing.allowedTools.filter((t) => t !== tool)
-      : [...editing.allowedTools, tool];
-    setEditing({ ...editing, allowedTools });
-  };
+  const { schema: skillSchema } = useSchema("skill");
 
   const currentSkill = editing ?? selected;
 
@@ -283,142 +284,31 @@ export function SkillsPage({ scope, homePath }: Props) {
           ) : editing ? (
             <div className="agent-editor">
               <h3>{isNewSkill ? "New Skill" : `Edit: ${editing.name}`}</h3>
-
-              <div className="form-group">
-                <label>Skill ID (slug)</label>
-                <input
-                  type="text"
-                  value={editing.skillId}
-                  onChange={(e) => {
-                    setEditing({ ...editing, skillId: e.target.value });
-                    setErrors({ ...errors, skillId: null });
+              {skillSchema ? (
+                <SchemaForm
+                  schema={skillSchema}
+                  values={editing as unknown as Record<string, unknown>}
+                  onChange={(vals) => {
+                    setEditing(vals as unknown as Skill);
+                    setErrors({});
                   }}
-                  placeholder="my-skill"
-                  disabled={!isNewSkill}
-                  className={errors.skillId ? "input-error" : ""}
+                  isEdit={!isNewSkill}
+                  knownTools={KNOWN_TOOLS}
+                  fields={SKILL_FIELDS}
                 />
+              ) : (
+                <p className="text-muted">Loading schema...</p>
+              )}
+              {errors.skillId && (
                 <FieldError
-                  error={errors.skillId ?? null}
+                  error={errors.skillId}
                   onAutoFix={(val) => {
                     setEditing({ ...editing, skillId: val });
                     setErrors({ ...errors, skillId: null });
                   }}
                 />
-              </div>
-
-              <div className="form-group">
-                <label>Name</label>
-                <input
-                  type="text"
-                  value={editing.name}
-                  onChange={(e) => {
-                    setEditing({ ...editing, name: e.target.value });
-                    setErrors({ ...errors, name: null });
-                  }}
-                  placeholder="My Skill"
-                  className={errors.name ? "input-error" : ""}
-                />
-                <FieldError error={errors.name ?? null} />
-              </div>
-
-              <div className="form-group">
-                <label>Description (optional)</label>
-                <input
-                  type="text"
-                  value={editing.description ?? ""}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      description: e.target.value || null,
-                    })
-                  }
-                  placeholder="What this skill does..."
-                />
-              </div>
-
-              <div className="form-group">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={editing.userInvocable ?? false}
-                    onChange={(e) =>
-                      setEditing({
-                        ...editing,
-                        userInvocable: e.target.checked,
-                      })
-                    }
-                  />{" "}
-                  User invocable (can be called with /skill-id)
-                </label>
-              </div>
-
-              <div className="form-group">
-                <label>Allowed Tools</label>
-                <div className="tools-grid">
-                  {KNOWN_TOOLS.map((tool) => (
-                    <label key={tool} className="tool-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={editing.allowedTools.includes(tool)}
-                        onChange={() => toggleTool(tool)}
-                      />
-                      <span>{tool}</span>
-                    </label>
-                  ))}
-                </div>
-                {editing.allowedTools.length === 0 && (
-                  <span className="config-field-hint">
-                    No tools selected — skill will have access to all tools
-                  </span>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label>Model Override (optional)</label>
-                <select
-                  value={editing.model ?? ""}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      model: e.target.value || null,
-                    })
-                  }
-                >
-                  <option value="">Default</option>
-                  <option value="claude-opus-4-6">Claude Opus 4.6</option>
-                  <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-                  <option value="claude-haiku-4-5-20251001">
-                    Claude Haiku 4.5
-                  </option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Argument Hint (optional)</label>
-                <input
-                  type="text"
-                  value={editing.argumentHint ?? ""}
-                  onChange={(e) =>
-                    setEditing({
-                      ...editing,
-                      argumentHint: e.target.value || null,
-                    })
-                  }
-                  placeholder="e.g. <file-path>"
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Content (markdown)</label>
-                <textarea
-                  rows={16}
-                  value={editing.content}
-                  onChange={(e) =>
-                    setEditing({ ...editing, content: e.target.value })
-                  }
-                  placeholder="Skill instructions and prompt template..."
-                />
-              </div>
+              )}
+              {errors.name && <FieldError error={errors.name} />}
 
               <div className="form-actions">
                 <button

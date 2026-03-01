@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agent.schema.json",
+  "description": "Claude Code agent definition (stored as .claude/agents/<agent-id>.md with YAML frontmatter)",
+  "type": "object",
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "title": "Agent ID",
+      "description": "Unique slug identifier for this agent (lowercase, hyphens, numbers only)",
+      "pattern": "^[a-z0-9-]+$",
+      "minLength": 1,
+      "examples": ["code-reviewer", "test-writer", "doc-writer"],
+      "x-field": { "placeholder": "my-agent", "disableOnEdit": true }
+    },
+    "name": {
+      "type": "string",
+      "title": "Name",
+      "description": "Human-readable display name for this agent",
+      "minLength": 1,
+      "examples": ["Code Reviewer", "Test Writer"],
+      "x-field": { "placeholder": "My Agent" }
+    },
+    "description": {
+      "type": "string",
+      "title": "Description",
+      "description": "Brief description of what this agent does",
+      "minLength": 1,
+      "x-field": { "widget": "textarea", "rows": 2, "placeholder": "Brief description of what this agent does" }
+    },
+    "systemPrompt": {
+      "type": "string",
+      "title": "System Prompt",
+      "description": "The system prompt that defines this agent's behavior and personality",
+      "minLength": 1,
+      "x-field": { "widget": "textarea", "rows": 12, "placeholder": "You are a helpful assistant that..." }
+    },
+    "tools": {
+      "type": "array",
+      "title": "Allowed Tools",
+      "description": "Tools this agent is allowed to use. Empty means all tools are available.",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "x-field": { "widget": "tool-checkboxes" }
+    },
+    "modelOverride": {
+      "type": ["string", "null"],
+      "title": "Model Override",
+      "description": "Override the default model for this agent",
+      "enum": [null, "opus", "sonnet", "haiku"],
+      "x-field": {
+        "widget": "select",
+        "options": [
+          { "value": "", "label": "Default" },
+          { "value": "opus", "label": "Opus" },
+          { "value": "sonnet", "label": "Sonnet" },
+          { "value": "haiku", "label": "Haiku" }
+        ],
+        "nullable": true
+      }
+    },
+    "memory": {
+      "type": ["string", "null"],
+      "title": "Memory Scope",
+      "description": "Optional memory scope binding for this agent",
+      "enum": [null, "user", "project", "local"],
+      "x-field": {
+        "widget": "select",
+        "options": [
+          { "value": "", "label": "None" },
+          { "value": "user", "label": "User" },
+          { "value": "project", "label": "Project" },
+          { "value": "local", "label": "Local" }
+        ],
+        "nullable": true
+      }
+    }
+  },
+  "required": ["agentId", "name", "description", "systemPrompt"]
+}
