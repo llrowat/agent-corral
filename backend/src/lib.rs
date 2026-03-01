@@ -103,6 +103,7 @@ pub fn run() {
             commands::claude::toggle_skill_enabled,
             commands::claude::list_disabled_agents,
             commands::claude::list_disabled_skills,
+            commands::claude::lint_config,
             // Preferences commands
             commands::preferences::get_preferences,
             commands::preferences::get_platform,

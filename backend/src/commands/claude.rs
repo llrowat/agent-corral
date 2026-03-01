@@ -1,6 +1,6 @@
 use crate::claude_adapter::{
     Agent, ClaudeDetection, ClaudeRepoAdapter, ConfigSnapshot, ConfigSnapshotSummary,
-    ImportBundleResult, MemoryEntry, MemoryStore, NormalizedConfig, ProjectScanResult,
+    ImportBundleResult, LintResult, MemoryEntry, MemoryStore, NormalizedConfig, ProjectScanResult,
 };
 
 #[tauri::command]
@@ -304,4 +304,9 @@ pub fn list_disabled_agents(repo_path: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 pub fn list_disabled_skills(repo_path: String) -> Result<Vec<String>, String> {
     ClaudeRepoAdapter::list_disabled_skills(&repo_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn lint_config(project_path: String, global_path: Option<String>) -> LintResult {
+    ClaudeRepoAdapter::lint_config(&project_path, global_path.as_deref())
 }

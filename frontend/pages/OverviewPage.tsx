@@ -4,7 +4,7 @@ import type { Scope, RepoStatus, ClaudeDetection, Agent, HookEvent, Skill, McpSe
 import * as api from "@/lib/tauri";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import { EffectiveConfig } from "@/components/EffectiveConfig";
-import { ConfigHealth } from "@/components/ConfigHealth";
+import { ConfigLinter } from "@/components/ConfigLinter";
 import { CrossRefs } from "@/components/CrossRefs";
 import { ImportWizard } from "@/components/ImportWizard";
 import { useToast } from "@/components/Toast";
@@ -336,8 +336,8 @@ export function OverviewPage({ scope, homePath }: Props) {
         </div>
       )}
 
-      {/* Config health check */}
-      <ConfigHealth scope={scope} />
+      {/* Config linter */}
+      <ConfigLinter scope={scope} homePath={homePath} />
 
       {/* Effective merged config view */}
       <EffectiveConfig scope={scope} homePath={homePath ?? null} />

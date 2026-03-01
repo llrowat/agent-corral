@@ -21,6 +21,7 @@ import type {
   PluginUpdateCheck,
   PluginSyncStatus,
   PluginImportRegistry,
+  LintResult,
 } from "@/types";
 
 // -- Repo commands --
@@ -601,6 +602,15 @@ export async function scanProjectConfig(
   projectPath: string
 ): Promise<ProjectScanResult> {
   return invoke("scan_project_config", { projectPath });
+}
+
+// -- Config lint commands --
+
+export async function lintConfig(
+  projectPath: string,
+  globalPath?: string | null
+): Promise<LintResult> {
+  return invoke("lint_config", { projectPath, globalPath: globalPath ?? null });
 }
 
 // -- Config bundle (backup/restore) commands --
