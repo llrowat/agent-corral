@@ -177,7 +177,7 @@ impl PluginManager {
         }
     }
 
-    /// Export a plugin from a repo into a plugin directory
+    /// Export a plugin from a repo (or global settings) into a plugin directory
     pub fn export_plugin(
         &self,
         repo_path: &str,
@@ -190,6 +190,7 @@ impl PluginManager {
         skill_ids: &[String],
         include_hooks: bool,
         include_mcp: bool,
+        is_global: bool,
     ) -> Result<String, PluginError> {
         let dir_name = name.to_lowercase().replace(' ', "-");
         let plugin_dir = self.plugins_dir.join(&dir_name);
@@ -327,7 +328,7 @@ impl PluginManager {
 
         // Export MCP
         if include_mcp {
-            let mcp_servers = ClaudeRepoAdapter::read_mcp_servers(repo_path, false)
+            let mcp_servers = ClaudeRepoAdapter::read_mcp_servers(repo_path, is_global)
                 .map_err(|e| PluginError::Adapter(e.to_string()))?;
             if !mcp_servers.is_empty() {
                 let mut servers_obj = serde_json::Map::new();
@@ -2117,6 +2118,85 @@ mod tests {
         let b = registry.imports.iter().find(|r| r.plugin_name == "plugin-b").unwrap();
         assert!(a.pinned);
         assert!(!b.pinned);
+    }
+
+    #[test]
+    fn export_plugin_from_project_scope() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let repo_path = repo.to_string_lossy().to_string();
+
+        // Create an agent in the repo
+        let agents_dir = repo.join(".claude/agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        let agent_content = "---\nname: Test Agent\ndescription: A test\n---\n\nYou are a test agent.\n";
+        fs::write(agents_dir.join("test-agent.md"), agent_content).unwrap();
+
+        // Create a project-level MCP file
+        let mcp_json = r#"{"mcpServers":{"my-server":{"type":"stdio","command":"node","args":["server.js"]}}}"#;
+        fs::write(repo.join(".mcp.json"), mcp_json).unwrap();
+
+        let result = mgr.export_plugin(
+            &repo_path,
+            "Project Export",
+            "Exported from project",
+            None,
+            None,
+            false,
+            &[],
+            &[],
+            false,
+            true,
+            false,
+        );
+        assert!(result.is_ok());
+        let plugin_dir = PathBuf::from(result.unwrap());
+        assert!(plugin_dir.join(".claude-plugin/plugin.json").exists());
+        assert!(plugin_dir.join("agents/test-agent.md").exists());
+        assert!(plugin_dir.join(".mcp.json").exists());
+    }
+
+    #[test]
+    fn export_plugin_from_global_scope_reads_global_mcp() {
+        let (tmp, mgr) = make_test_manager();
+        // Use a "home" directory as the global scope path
+        let home = tmp.path().join("home");
+        fs::create_dir_all(home.join(".claude/agents")).unwrap();
+        let home_path = home.to_string_lossy().to_string();
+
+        // Create a global agent
+        let agent_content = "---\nname: Global Agent\ndescription: Global\n---\n\nGlobal prompt.\n";
+        fs::write(home.join(".claude/agents/global-agent.md"), agent_content).unwrap();
+
+        // Create global MCP file (.claude.json instead of .mcp.json)
+        let mcp_json = r#"{"mcpServers":{"global-server":{"type":"stdio","command":"npx","args":["server"]}}}"#;
+        fs::write(home.join(".claude.json"), mcp_json).unwrap();
+
+        let result = mgr.export_plugin(
+            &home_path,
+            "Global Export",
+            "Exported from global",
+            Some("Author"),
+            Some("2.0.0"),
+            false,
+            &[],
+            &[],
+            false,
+            true,
+            true, // is_global = true
+        );
+        assert!(result.is_ok());
+        let plugin_dir = PathBuf::from(result.unwrap());
+        assert!(plugin_dir.join(".claude-plugin/plugin.json").exists());
+        assert!(plugin_dir.join("agents/global-agent.md").exists());
+        // MCP should be exported from .claude.json (global)
+        assert!(plugin_dir.join(".mcp.json").exists());
+
+        // Verify the MCP content includes the global server
+        let exported_mcp: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(plugin_dir.join(".mcp.json")).unwrap())
+                .unwrap();
+        assert!(exported_mcp["mcpServers"]["global-server"].is_object());
     }
 
     #[test]

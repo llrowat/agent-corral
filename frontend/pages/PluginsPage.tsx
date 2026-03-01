@@ -19,6 +19,13 @@ type View = "list" | "export" | "import-preview" | "git-install";
 
 export function PluginsPage({ scope }: Props) {
   const repo = scope?.type === "project" ? scope.repo : null;
+  const basePath =
+    scope?.type === "global"
+      ? scope.homePath
+      : scope?.type === "project"
+        ? scope.repo.path
+        : null;
+  const isGlobal = scope?.type === "global";
   const {
     syncStatuses,
     updatesAvailable: syncUpdatesAvailable,
@@ -93,14 +100,14 @@ export function PluginsPage({ scope }: Props) {
         : libraryPlugins;
 
   const startExport = async () => {
-    if (!repo) {
-      alert("Select a repository first");
+    if (!basePath) {
+      alert("Select a scope first");
       return;
     }
     try {
       const [agents, skills] = await Promise.all([
-        api.readAgents(repo.path),
-        api.readSkills(repo.path),
+        api.readAgents(basePath),
+        api.readSkills(basePath),
       ]);
       setExportAgents(agents);
       setExportSelectedAgentIds(agents.map((a) => a.agentId));
@@ -115,16 +122,16 @@ export function PluginsPage({ scope }: Props) {
       setExportIncludeMcp(true);
       setView("export");
     } catch (e) {
-      alert(`Failed to load repo data: ${e}`);
+      alert(`Failed to load data: ${e}`);
     }
   };
 
   const handleExport = async () => {
-    if (!repo || !exportName.trim()) return;
+    if (!basePath || !exportName.trim()) return;
     setExporting(true);
     try {
       const path = await api.exportPlugin(
-        repo.path,
+        basePath,
         exportName.trim(),
         exportDesc.trim(),
         exportAuthor.trim() || null,
@@ -134,6 +141,7 @@ export function PluginsPage({ scope }: Props) {
         exportSelectedSkillIds,
         exportIncludeHooks,
         exportIncludeMcp,
+        isGlobal,
       );
       alert(`Plugin exported to: ${path}`);
       setView("list");
@@ -457,7 +465,9 @@ export function PluginsPage({ scope }: Props) {
                 </label>
               ))}
               {exportAgents.length === 0 && (
-                <p className="text-muted">No agents in this repository.</p>
+                <p className="text-muted">
+                  {isGlobal ? "No global agents." : "No agents in this repository."}
+                </p>
               )}
             </div>
           </div>
@@ -481,7 +491,9 @@ export function PluginsPage({ scope }: Props) {
                 </label>
               ))}
               {exportSkills.length === 0 && (
-                <p className="text-muted">No skills in this repository.</p>
+                <p className="text-muted">
+                  {isGlobal ? "No global skills." : "No skills in this repository."}
+                </p>
               )}
             </div>
           </div>
@@ -823,10 +835,10 @@ export function PluginsPage({ scope }: Props) {
           </h3>
           <p>
             {activeTab === "my"
-              ? "Create a plugin by exporting agents, skills, hooks, and MCP servers from a repository."
+              ? "Create a plugin by exporting agents, skills, hooks, and MCP servers from your settings."
               : activeTab === "git"
                 ? "Install plugins from a git repository containing .claude-plugin directories."
-                : "Install plugins from git or export from a repository to see them here."}
+                : "Install plugins from git or export from your settings to see them here."}
           </p>
           {activeTab === "my" && (
             <button className="btn btn-primary" onClick={startExport}>

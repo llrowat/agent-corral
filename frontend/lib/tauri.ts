@@ -385,6 +385,7 @@ export async function exportPlugin(
   skillIds: string[],
   includeHooks: boolean,
   includeMcp: boolean,
+  isGlobal: boolean = false,
 ): Promise<string> {
   return invoke("export_plugin", {
     repoPath,
@@ -397,6 +398,7 @@ export async function exportPlugin(
     skillIds,
     includeHooks,
     includeMcp,
+    isGlobal,
   });
 }
 
