@@ -27,6 +27,7 @@ pub fn export_plugin(
     skill_ids: Vec<String>,
     include_hooks: bool,
     include_mcp: bool,
+    is_global: bool,
 ) -> Result<String, String> {
     state
         .plugin_manager
@@ -43,6 +44,7 @@ pub fn export_plugin(
             &skill_ids,
             include_hooks,
             include_mcp,
+            is_global,
         )
         .map_err(|e| e.to_string())
 }
