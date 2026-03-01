@@ -982,6 +982,33 @@ body {
   resize: vertical;
 }
 
+/* -- Feature toggle fields -- */
+
+.toggle-field {
+  margin-bottom: 12px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.toggle-default {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* -- Sticky save bar -- */
 
 .config-save-bar {
