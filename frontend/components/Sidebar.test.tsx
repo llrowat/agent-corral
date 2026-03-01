@@ -22,13 +22,13 @@ describe("Sidebar", () => {
     expect(screen.getByText("MCP Servers")).toBeInTheDocument();
   });
 
-  it("orders Claude Code items with Config first and MCP last", () => {
+  it("orders Claude Code items with CLAUDE.md first and MCP last", () => {
     const { container } = renderSidebar();
     const labelSpans = container.querySelectorAll(".sidebar-label");
     const labels = Array.from(labelSpans).map((el) => el.textContent);
-    const claudeCodeItems = ["Config", "Agents", "Hooks", "Memory", "Skills", "MCP Servers"];
+    const claudeCodeItems = ["CLAUDE.md", "Config", "Agents", "Hooks", "Memory", "Skills", "MCP Servers"];
     const claudeCodeLabels = labels.filter((l) => claudeCodeItems.includes(l ?? ""));
-    expect(claudeCodeLabels[0]).toBe("Config");
+    expect(claudeCodeLabels[0]).toBe("CLAUDE.md");
     expect(claudeCodeLabels[claudeCodeLabels.length - 1]).toBe("MCP Servers");
   });
 

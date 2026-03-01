@@ -15,15 +15,15 @@ interface NavGroup {
 
 const navGroups: NavGroup[] = [
   {
-    label: "Project",
+    label: "",
     items: [
       { path: "/overview", label: "Overview", icon: "grid" },
-      { path: "/claude-md", label: "CLAUDE.md", icon: "doc" },
     ],
   },
   {
     label: "Claude Code",
     items: [
+      { path: "/claude-md", label: "CLAUDE.md", icon: "doc" },
       { path: "/config", label: "Config", icon: "settings" },
       { path: "/agents", label: "Agents", icon: "bot" },
       { path: "/hooks", label: "Hooks", icon: "hook" },
