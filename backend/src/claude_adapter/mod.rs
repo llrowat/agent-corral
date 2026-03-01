@@ -212,6 +212,30 @@ pub struct ProjectScanResult {
     pub memory_store_count: usize,
 }
 
+// -- Config Lint types --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LintIssue {
+    pub severity: String,   // "error", "warning", "info"
+    pub category: String,   // "config", "agent", "hook", "skill", "mcp", "claudemd", "hierarchy"
+    pub rule: String,       // machine-readable rule ID
+    pub message: String,
+    pub fix: Option<String>,
+    pub entity_id: Option<String>,  // which agent/skill/server/etc is affected
+    pub scope: Option<String>,      // "global", "project", or null
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LintResult {
+    pub issues: Vec<LintIssue>,
+    pub score: u32,            // 0-100 health score
+    pub error_count: u32,
+    pub warning_count: u32,
+    pub info_count: u32,
+}
+
 pub struct ClaudeRepoAdapter;
 
 impl ClaudeRepoAdapter {
@@ -2008,6 +2032,660 @@ impl ClaudeRepoAdapter {
         atomic_write(&settings_path, &json)?;
         Ok(())
     }
+
+    /// Comprehensive config linter. Reads both project and global scopes,
+    /// detects conflicts, validates references, and flags common issues.
+    pub fn lint_config(
+        project_path: &str,
+        global_path: Option<&str>,
+    ) -> LintResult {
+        let mut issues = Vec::new();
+
+        // Load project-scope data
+        let project_config = Self::read_config(project_path).ok();
+        let project_agents = Self::read_agents(project_path).unwrap_or_default();
+        let project_hooks = Self::read_hooks(project_path).unwrap_or_default();
+        let project_skills = Self::read_skills(project_path).unwrap_or_default();
+        let project_mcp = Self::read_mcp_servers(project_path, false).unwrap_or_default();
+        let project_memory = Self::read_memory_stores(project_path).unwrap_or_default();
+        let project_detection = Self::detect(project_path);
+
+        // Load global-scope data (if available)
+        let global_config = global_path.and_then(|gp| Self::read_config(gp).ok());
+        let global_agents = global_path
+            .map(|gp| Self::read_agents(gp).unwrap_or_default())
+            .unwrap_or_default();
+        let global_hooks = global_path
+            .map(|gp| Self::read_hooks(gp).unwrap_or_default())
+            .unwrap_or_default();
+        let global_skills = global_path
+            .map(|gp| Self::read_skills(gp).unwrap_or_default())
+            .unwrap_or_default();
+        let global_mcp = global_path
+            .map(|gp| Self::read_mcp_servers(gp, true).unwrap_or_default())
+            .unwrap_or_default();
+        let global_detection = global_path.map(|gp| Self::detect(gp));
+
+        // =======================================================
+        // RULE: missing-claude-md
+        // =======================================================
+        if !project_detection.has_claude_md {
+            issues.push(LintIssue {
+                severity: "warning".into(),
+                category: "claudemd".into(),
+                rule: "missing-claude-md".into(),
+                message: "No CLAUDE.md found in project root".into(),
+                fix: Some("Create a CLAUDE.md file to give Claude project-specific instructions".into()),
+                entity_id: None,
+                scope: Some("project".into()),
+            });
+        }
+
+        // =======================================================
+        // RULE: no-model-configured
+        // =======================================================
+        let has_any_model = project_config
+            .as_ref()
+            .and_then(|c| c.model.as_ref())
+            .is_some()
+            || global_config
+                .as_ref()
+                .and_then(|c| c.model.as_ref())
+                .is_some();
+        if !has_any_model {
+            issues.push(LintIssue {
+                severity: "info".into(),
+                category: "config".into(),
+                rule: "no-model-configured".into(),
+                message: "No default model configured at any scope".into(),
+                fix: Some("Set a model in settings to avoid relying on the default".into()),
+                entity_id: None,
+                scope: None,
+            });
+        }
+
+        // =======================================================
+        // RULE: no-ignore-patterns
+        // =======================================================
+        let has_any_ignore = project_config
+            .as_ref()
+            .and_then(|c| c.ignore_patterns.as_ref())
+            .map_or(false, |p| !p.is_empty())
+            || global_config
+                .as_ref()
+                .and_then(|c| c.ignore_patterns.as_ref())
+                .map_or(false, |p| !p.is_empty());
+        if !has_any_ignore {
+            issues.push(LintIssue {
+                severity: "warning".into(),
+                category: "config".into(),
+                rule: "no-ignore-patterns".into(),
+                message: "No ignore patterns configured".into(),
+                fix: Some("Add ignore patterns (node_modules, dist, .env) to keep Claude focused on source code".into()),
+                entity_id: None,
+                scope: None,
+            });
+        }
+
+        // =======================================================
+        // RULE: agent-empty-description / agent-short-prompt
+        // =======================================================
+        for agent in &project_agents {
+            Self::lint_agent(&mut issues, agent, "project");
+        }
+        for agent in &global_agents {
+            Self::lint_agent(&mut issues, agent, "global");
+        }
+
+        // =======================================================
+        // RULE: hook-no-timeout
+        // =======================================================
+        for event in &project_hooks {
+            Self::lint_hook_event(&mut issues, event, "project");
+        }
+        for event in &global_hooks {
+            Self::lint_hook_event(&mut issues, event, "global");
+        }
+
+        // =======================================================
+        // RULE: mcp-placeholder-env / mcp-stdio-no-command / mcp-http-no-url
+        // =======================================================
+        for server in &project_mcp {
+            Self::lint_mcp_server(&mut issues, server, "project");
+        }
+        for server in &global_mcp {
+            Self::lint_mcp_server(&mut issues, server, "global");
+        }
+
+        // =======================================================
+        // RULE: skill-empty-content / skill-dangling-agent
+        // =======================================================
+        let all_agent_ids: std::collections::HashSet<&str> = project_agents
+            .iter()
+            .chain(global_agents.iter())
+            .map(|a| a.agent_id.as_str())
+            .collect();
+
+        for skill in &project_skills {
+            Self::lint_skill(&mut issues, skill, &all_agent_ids, "project");
+        }
+        for skill in &global_skills {
+            Self::lint_skill(&mut issues, skill, &all_agent_ids, "global");
+        }
+
+        // =======================================================
+        // RULE: agent-dangling-memory
+        // =======================================================
+        let all_memory_ids: std::collections::HashSet<&str> = project_memory
+            .iter()
+            .map(|m| m.store_id.as_str())
+            .collect();
+
+        for agent in &project_agents {
+            if let Some(ref mem_id) = agent.memory {
+                if !all_memory_ids.contains(mem_id.as_str()) {
+                    issues.push(LintIssue {
+                        severity: "error".into(),
+                        category: "agent".into(),
+                        rule: "agent-dangling-memory".into(),
+                        message: format!(
+                            "Agent \"{}\" references memory store \"{}\" which does not exist",
+                            agent.name, mem_id
+                        ),
+                        fix: Some(format!("Create memory store \"{}\" or remove the binding", mem_id)),
+                        entity_id: Some(agent.agent_id.clone()),
+                        scope: Some("project".into()),
+                    });
+                }
+            }
+        }
+
+        // =======================================================
+        // HIERARCHY LINT RULES (cross-scope conflicts)
+        // =======================================================
+        if global_path.is_some() {
+            // RULE: hierarchy-agent-shadow
+            for p_agent in &project_agents {
+                if global_agents.iter().any(|g| g.agent_id == p_agent.agent_id) {
+                    issues.push(LintIssue {
+                        severity: "info".into(),
+                        category: "hierarchy".into(),
+                        rule: "hierarchy-agent-shadow".into(),
+                        message: format!(
+                            "Project agent \"{}\" shadows a global agent with the same ID",
+                            p_agent.agent_id
+                        ),
+                        fix: Some("This is intentional if you want project-specific behavior; rename if unintended".into()),
+                        entity_id: Some(p_agent.agent_id.clone()),
+                        scope: Some("project".into()),
+                    });
+                }
+            }
+
+            // RULE: hierarchy-skill-shadow
+            for p_skill in &project_skills {
+                if global_skills
+                    .iter()
+                    .any(|g| g.skill_id == p_skill.skill_id)
+                {
+                    issues.push(LintIssue {
+                        severity: "info".into(),
+                        category: "hierarchy".into(),
+                        rule: "hierarchy-skill-shadow".into(),
+                        message: format!(
+                            "Project skill \"{}\" shadows a global skill with the same ID",
+                            p_skill.skill_id
+                        ),
+                        fix: Some("This is intentional if you want project-specific behavior; rename if unintended".into()),
+                        entity_id: Some(p_skill.skill_id.clone()),
+                        scope: Some("project".into()),
+                    });
+                }
+            }
+
+            // RULE: hierarchy-mcp-shadow
+            for p_mcp in &project_mcp {
+                if global_mcp
+                    .iter()
+                    .any(|g| g.server_id == p_mcp.server_id)
+                {
+                    issues.push(LintIssue {
+                        severity: "warning".into(),
+                        category: "hierarchy".into(),
+                        rule: "hierarchy-mcp-shadow".into(),
+                        message: format!(
+                            "Project MCP server \"{}\" shadows a global server with the same ID",
+                            p_mcp.server_id
+                        ),
+                        fix: Some("Project MCP overrides the global one. Rename the project server if you want both active".into()),
+                        entity_id: Some(p_mcp.server_id.clone()),
+                        scope: Some("project".into()),
+                    });
+                }
+            }
+
+            // RULE: hierarchy-model-conflict
+            let p_model = project_config.as_ref().and_then(|c| c.model.as_ref());
+            let g_model = global_config.as_ref().and_then(|c| c.model.as_ref());
+            if let (Some(pm), Some(gm)) = (p_model, g_model) {
+                if pm != gm {
+                    issues.push(LintIssue {
+                        severity: "info".into(),
+                        category: "hierarchy".into(),
+                        rule: "hierarchy-model-conflict".into(),
+                        message: format!(
+                            "Project model \"{}\" differs from global model \"{}\"",
+                            pm, gm
+                        ),
+                        fix: Some("Project model overrides the global one — this is expected if intentional".into()),
+                        entity_id: None,
+                        scope: Some("project".into()),
+                    });
+                }
+            }
+
+            // RULE: hierarchy-hook-duplicate-event
+            for p_event in &project_hooks {
+                if global_hooks.iter().any(|g| g.event == p_event.event) {
+                    issues.push(LintIssue {
+                        severity: "info".into(),
+                        category: "hierarchy".into(),
+                        rule: "hierarchy-hook-duplicate-event".into(),
+                        message: format!(
+                            "Both global and project define hooks for event \"{}\" — both will run",
+                            p_event.event
+                        ),
+                        fix: Some("Hooks from both scopes execute. Ensure they don't conflict or duplicate work".into()),
+                        entity_id: None,
+                        scope: Some("project".into()),
+                    });
+                }
+            }
+
+            // RULE: hierarchy-claudemd-conflict
+            let global_has_md = global_detection
+                .as_ref()
+                .map_or(false, |d| d.has_claude_md);
+            if project_detection.has_claude_md && global_has_md {
+                // Check for contradictory instructions
+                let p_md = Self::read_claude_md(project_path).unwrap_or_default();
+                let g_md = global_path
+                    .and_then(|gp| Self::read_claude_md(gp).ok())
+                    .unwrap_or_default();
+
+                if !p_md.is_empty() && !g_md.is_empty() {
+                    // Check for obvious contradictions:
+                    // e.g., project says "always X" and global says "never X"
+                    let p_lower = p_md.to_lowercase();
+                    let g_lower = g_md.to_lowercase();
+
+                    let contradictions = [
+                        ("always use typescript", "never use typescript"),
+                        ("always use javascript", "never use javascript"),
+                        ("use tabs", "use spaces"),
+                        ("use spaces", "use tabs"),
+                        ("never use semicolons", "always use semicolons"),
+                        ("always use semicolons", "never use semicolons"),
+                    ];
+
+                    for (pattern_a, pattern_b) in &contradictions {
+                        if (p_lower.contains(pattern_a) && g_lower.contains(pattern_b))
+                            || (p_lower.contains(pattern_b) && g_lower.contains(pattern_a))
+                        {
+                            issues.push(LintIssue {
+                                severity: "error".into(),
+                                category: "hierarchy".into(),
+                                rule: "hierarchy-claudemd-conflict".into(),
+                                message: format!(
+                                    "Contradictory instructions detected between project and global CLAUDE.md: \"{}\" vs \"{}\"",
+                                    pattern_a, pattern_b
+                                ),
+                                fix: Some("Align instructions — project CLAUDE.md takes precedence but contradictions cause confusion".into()),
+                                entity_id: None,
+                                scope: Some("project".into()),
+                            });
+                        }
+                    }
+
+                    // Always note the overlap exists even without detected contradictions
+                    issues.push(LintIssue {
+                        severity: "info".into(),
+                        category: "hierarchy".into(),
+                        rule: "hierarchy-claudemd-overlap".into(),
+                        message: "Both global and project have CLAUDE.md files — both will be read by Claude".into(),
+                        fix: Some("Project instructions take precedence. Ensure they complement rather than contradict global ones".into()),
+                        entity_id: None,
+                        scope: Some("project".into()),
+                    });
+                }
+            }
+
+            // RULE: hierarchy-permission-conflict
+            let p_perms = project_config.as_ref().and_then(|c| c.permissions.as_ref());
+            let g_perms = global_config.as_ref().and_then(|c| c.permissions.as_ref());
+            if let (Some(pp), Some(gp)) = (p_perms, g_perms) {
+                // Check if project allows a tool that global denies
+                let p_allow: Vec<&str> = pp
+                    .get("allow")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                    .unwrap_or_default();
+                let g_deny: Vec<&str> = gp
+                    .get("deny")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                    .unwrap_or_default();
+
+                for tool in &p_allow {
+                    if g_deny.contains(tool) {
+                        issues.push(LintIssue {
+                            severity: "error".into(),
+                            category: "hierarchy".into(),
+                            rule: "hierarchy-permission-conflict".into(),
+                            message: format!(
+                                "Project allows tool \"{}\" but global config denies it",
+                                tool
+                            ),
+                            fix: Some("Global deny takes precedence — remove from project allow list or update global config".into()),
+                            entity_id: None,
+                            scope: Some("project".into()),
+                        });
+                    }
+                }
+            }
+        }
+
+        // =======================================================
+        // RULE: settings-unknown-keys
+        // =======================================================
+        if let Some(ref config) = project_config {
+            Self::lint_settings_keys(&mut issues, &config.raw, "project");
+        }
+        if let Some(ref config) = global_config {
+            Self::lint_settings_keys(&mut issues, &config.raw, "global");
+        }
+
+        // Compute score
+        let error_count = issues.iter().filter(|i| i.severity == "error").count() as u32;
+        let warning_count = issues.iter().filter(|i| i.severity == "warning").count() as u32;
+        let info_count = issues.iter().filter(|i| i.severity == "info").count() as u32;
+
+        let score = 100u32
+            .saturating_sub(error_count * 20)
+            .saturating_sub(warning_count * 10)
+            .saturating_sub(info_count * 3);
+
+        LintResult {
+            issues,
+            score,
+            error_count,
+            warning_count,
+            info_count,
+        }
+    }
+
+    // -- Lint helper methods --
+
+    fn lint_agent(issues: &mut Vec<LintIssue>, agent: &Agent, scope: &str) {
+        if agent.description.trim().len() < 5 {
+            issues.push(LintIssue {
+                severity: "info".into(),
+                category: "agent".into(),
+                rule: "agent-empty-description".into(),
+                message: format!("Agent \"{}\" has no meaningful description", agent.name),
+                fix: Some("Add a description to help Claude understand when to use this agent".into()),
+                entity_id: Some(agent.agent_id.clone()),
+                scope: Some(scope.into()),
+            });
+        }
+        if agent.system_prompt.trim().len() < 20 {
+            issues.push(LintIssue {
+                severity: "warning".into(),
+                category: "agent".into(),
+                rule: "agent-short-prompt".into(),
+                message: format!("Agent \"{}\" has a very short system prompt", agent.name),
+                fix: Some("A more detailed system prompt will produce better results".into()),
+                entity_id: Some(agent.agent_id.clone()),
+                scope: Some(scope.into()),
+            });
+        }
+        if agent.tools.is_empty() {
+            issues.push(LintIssue {
+                severity: "info".into(),
+                category: "agent".into(),
+                rule: "agent-no-tools".into(),
+                message: format!("Agent \"{}\" has no tools configured", agent.name),
+                fix: Some("Agents without tools can only chat — add tools if file access or commands are needed".into()),
+                entity_id: Some(agent.agent_id.clone()),
+                scope: Some(scope.into()),
+            });
+        }
+        // Check for unknown tools
+        for tool in &agent.tools {
+            if !KNOWN_TOOLS.contains(&tool.as_str()) {
+                issues.push(LintIssue {
+                    severity: "warning".into(),
+                    category: "agent".into(),
+                    rule: "agent-unknown-tool".into(),
+                    message: format!(
+                        "Agent \"{}\" references unknown tool \"{}\"",
+                        agent.name, tool
+                    ),
+                    fix: Some(format!(
+                        "Valid tools: {}. Remove or correct this tool name",
+                        KNOWN_TOOLS.join(", ")
+                    )),
+                    entity_id: Some(agent.agent_id.clone()),
+                    scope: Some(scope.into()),
+                });
+            }
+        }
+    }
+
+    fn lint_hook_event(issues: &mut Vec<LintIssue>, event: &HookEvent, scope: &str) {
+        let valid_events = ["PreToolUse", "PostToolUse", "Notification", "Stop", "SubagentStop"];
+        if !valid_events.contains(&event.event.as_str()) {
+            issues.push(LintIssue {
+                severity: "error".into(),
+                category: "hook".into(),
+                rule: "hook-unknown-event".into(),
+                message: format!("Unknown hook event type \"{}\"", event.event),
+                fix: Some(format!("Valid events: {}", valid_events.join(", "))),
+                entity_id: None,
+                scope: Some(scope.into()),
+            });
+        }
+
+        for (gi, group) in event.groups.iter().enumerate() {
+            // Validate matcher regex
+            if let Some(ref matcher) = group.matcher {
+                if regex::Regex::new(matcher).is_err() {
+                    issues.push(LintIssue {
+                        severity: "error".into(),
+                        category: "hook".into(),
+                        rule: "hook-invalid-matcher".into(),
+                        message: format!(
+                            "Hook \"{}\" group {} has invalid matcher regex: \"{}\"",
+                            event.event, gi, matcher
+                        ),
+                        fix: Some("Fix the regex pattern or remove the matcher".into()),
+                        entity_id: None,
+                        scope: Some(scope.into()),
+                    });
+                }
+            }
+
+            for handler in &group.hooks {
+                if handler.hook_type == "command" {
+                    if handler.timeout.is_none() {
+                        issues.push(LintIssue {
+                            severity: "info".into(),
+                            category: "hook".into(),
+                            rule: "hook-no-timeout".into(),
+                            message: format!(
+                                "Hook \"{}\" command handler has no timeout",
+                                event.event
+                            ),
+                            fix: Some("Set a timeout to prevent hanging commands from blocking Claude".into()),
+                            entity_id: None,
+                            scope: Some(scope.into()),
+                        });
+                    }
+                    if handler.command.as_ref().map_or(true, |c| c.trim().is_empty()) {
+                        issues.push(LintIssue {
+                            severity: "error".into(),
+                            category: "hook".into(),
+                            rule: "hook-empty-command".into(),
+                            message: format!(
+                                "Hook \"{}\" has a command handler with no command",
+                                event.event
+                            ),
+                            fix: Some("Provide a shell command for the handler".into()),
+                            entity_id: None,
+                            scope: Some(scope.into()),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    fn lint_mcp_server(issues: &mut Vec<LintIssue>, server: &McpServer, scope: &str) {
+        // stdio servers need a command
+        if server.server_type == "stdio" {
+            if server.command.as_ref().map_or(true, |c| c.trim().is_empty()) {
+                issues.push(LintIssue {
+                    severity: "error".into(),
+                    category: "mcp".into(),
+                    rule: "mcp-stdio-no-command".into(),
+                    message: format!("MCP server \"{}\" (stdio) has no command", server.server_id),
+                    fix: Some("Provide the command to start the MCP server".into()),
+                    entity_id: Some(server.server_id.clone()),
+                    scope: Some(scope.into()),
+                });
+            }
+        }
+
+        // http/sse servers need a URL
+        if server.server_type == "http" || server.server_type == "sse" {
+            if server.url.as_ref().map_or(true, |u| u.trim().is_empty()) {
+                issues.push(LintIssue {
+                    severity: "error".into(),
+                    category: "mcp".into(),
+                    rule: "mcp-http-no-url".into(),
+                    message: format!(
+                        "MCP server \"{}\" ({}) has no URL",
+                        server.server_id, server.server_type
+                    ),
+                    fix: Some("Provide the URL for the MCP server endpoint".into()),
+                    entity_id: Some(server.server_id.clone()),
+                    scope: Some(scope.into()),
+                });
+            }
+        }
+
+        // Check for placeholder env values
+        if let Some(ref env) = server.env {
+            if let Some(obj) = env.as_object() {
+                for (key, value) in obj {
+                    if let Some(val_str) = value.as_str() {
+                        if val_str.contains("<your-")
+                            || val_str.contains("YOUR_")
+                            || val_str.is_empty()
+                        {
+                            issues.push(LintIssue {
+                                severity: "error".into(),
+                                category: "mcp".into(),
+                                rule: "mcp-placeholder-env".into(),
+                                message: format!(
+                                    "MCP \"{}\" has placeholder env var: {}",
+                                    server.server_id, key
+                                ),
+                                fix: Some(format!(
+                                    "Replace the placeholder value for {} with your actual credential",
+                                    key
+                                )),
+                                entity_id: Some(server.server_id.clone()),
+                                scope: Some(scope.into()),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn lint_skill(
+        issues: &mut Vec<LintIssue>,
+        skill: &Skill,
+        all_agent_ids: &std::collections::HashSet<&str>,
+        scope: &str,
+    ) {
+        if skill.content.trim().len() < 10 {
+            issues.push(LintIssue {
+                severity: "warning".into(),
+                category: "skill".into(),
+                rule: "skill-empty-content".into(),
+                message: format!("Skill \"{}\" has very little content", skill.name),
+                fix: Some("Add detailed instructions for better skill behavior".into()),
+                entity_id: Some(skill.skill_id.clone()),
+                scope: Some(scope.into()),
+            });
+        }
+
+        if let Some(ref agent_id) = skill.agent {
+            if !all_agent_ids.contains(agent_id.as_str()) {
+                issues.push(LintIssue {
+                    severity: "error".into(),
+                    category: "skill".into(),
+                    rule: "skill-dangling-agent".into(),
+                    message: format!(
+                        "Skill \"{}\" references agent \"{}\" which does not exist",
+                        skill.name, agent_id
+                    ),
+                    fix: Some(format!(
+                        "Create agent \"{}\" or remove the agent binding from this skill",
+                        agent_id
+                    )),
+                    entity_id: Some(skill.skill_id.clone()),
+                    scope: Some(scope.into()),
+                });
+            }
+        }
+    }
+
+    fn lint_settings_keys(issues: &mut Vec<LintIssue>, raw: &serde_json::Value, scope: &str) {
+        let known_keys = [
+            "model",
+            "permissions",
+            "ignorePatterns",
+            "hooks",
+            "allowedTools",
+            "deniedTools",
+            "contextServers",
+            "trustTools",
+            "systemPrompt",
+            "customApiKeyResponses",
+            "env",
+            "mcpServers",
+        ];
+
+        if let Some(obj) = raw.as_object() {
+            for key in obj.keys() {
+                if !known_keys.contains(&key.as_str()) {
+                    issues.push(LintIssue {
+                        severity: "warning".into(),
+                        category: "config".into(),
+                        rule: "settings-unknown-key".into(),
+                        message: format!("Unknown key \"{}\" in settings.json", key),
+                        fix: Some("This key may be ignored by Claude Code. Check the official schema for valid keys".into()),
+                        entity_id: None,
+                        scope: Some(scope.into()),
+                    });
+                }
+            }
+        }
+    }
 }
 
 /// Atomic file write: write to temp file, then rename
@@ -3658,5 +4336,460 @@ mod tests {
         let servers = ClaudeRepoAdapter::read_mcp_servers(path, false).unwrap();
         assert_eq!(servers.len(), 1);
         assert_eq!(servers[0].server_id, "my-mcp");
+    }
+
+    // -- lint_config tests --
+
+    #[test]
+    fn lint_empty_project_reports_missing_claudemd_and_no_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result.issues.iter().any(|i| i.rule == "missing-claude-md"));
+        assert!(result.issues.iter().any(|i| i.rule == "no-model-configured"));
+        assert!(result.issues.iter().any(|i| i.rule == "no-ignore-patterns"));
+    }
+
+    #[test]
+    fn lint_perfect_project_scores_high() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        // Create CLAUDE.md
+        std::fs::write(dir.path().join("CLAUDE.md"), "# Project\n\nBe helpful.").unwrap();
+
+        // Create settings with model and ignore patterns
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(
+            claude_dir.join("settings.json"),
+            r#"{"model":"claude-sonnet-4-6","ignorePatterns":["node_modules","dist"]}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        // No errors expected
+        assert_eq!(result.error_count, 0);
+        assert!(result.score >= 80);
+    }
+
+    #[test]
+    fn lint_agent_short_prompt_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        // Create a minimal agent with short prompt
+        let agents_dir = dir.path().join(".claude/agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        std::fs::write(
+            agents_dir.join("bad-agent.md"),
+            "---\nname: Bad Agent\ndescription: x\n---\nShort.",
+        )
+        .unwrap();
+        // Create CLAUDE.md to avoid that warning cluttering
+        std::fs::write(dir.path().join("CLAUDE.md"), "# Test").unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result.issues.iter().any(|i| i.rule == "agent-short-prompt"));
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "agent-empty-description"));
+    }
+
+    #[test]
+    fn lint_agent_unknown_tool_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let agents_dir = dir.path().join(".claude/agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        std::fs::write(
+            agents_dir.join("tool-agent.md"),
+            "---\nname: Tool Agent\ndescription: An agent with tools\ntools: Read, FakeTool, Bash\n---\nThis agent does things with tools and more description here.",
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        let unknown_tool_issues: Vec<_> = result
+            .issues
+            .iter()
+            .filter(|i| i.rule == "agent-unknown-tool")
+            .collect();
+        assert_eq!(unknown_tool_issues.len(), 1);
+        assert!(unknown_tool_issues[0].message.contains("FakeTool"));
+    }
+
+    #[test]
+    fn lint_mcp_placeholder_env_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        std::fs::write(
+            dir.path().join(".mcp.json"),
+            r#"{"mcpServers":{"test-server":{"type":"stdio","command":"npx","env":{"API_KEY":"<your-key-here>"}}}}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "mcp-placeholder-env"));
+    }
+
+    #[test]
+    fn lint_mcp_stdio_no_command_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        std::fs::write(
+            dir.path().join(".mcp.json"),
+            r#"{"mcpServers":{"broken":{"type":"stdio"}}}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "mcp-stdio-no-command"));
+    }
+
+    #[test]
+    fn lint_hierarchy_agent_shadow_detected() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        // Create the same agent ID in both scopes
+        let p_agents = project_dir.path().join(".claude/agents");
+        let g_agents = global_dir.path().join(".claude/agents");
+        std::fs::create_dir_all(&p_agents).unwrap();
+        std::fs::create_dir_all(&g_agents).unwrap();
+
+        let agent_content = "---\nname: Reviewer\ndescription: Reviews code for quality\n---\nYou are a code reviewer. Review all code for best practices and potential issues.";
+        std::fs::write(p_agents.join("reviewer.md"), agent_content).unwrap();
+        std::fs::write(g_agents.join("reviewer.md"), agent_content).unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "hierarchy-agent-shadow"));
+    }
+
+    #[test]
+    fn lint_hierarchy_mcp_shadow_detected() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        std::fs::write(
+            project_dir.path().join(".mcp.json"),
+            r#"{"mcpServers":{"shared-server":{"type":"stdio","command":"npx","args":["project-server"]}}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            global_dir.path().join(".claude.json"),
+            r#"{"mcpServers":{"shared-server":{"type":"stdio","command":"npx","args":["global-server"]}}}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "hierarchy-mcp-shadow"));
+    }
+
+    #[test]
+    fn lint_hierarchy_model_conflict_detected() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        let p_claude = project_dir.path().join(".claude");
+        let g_claude = global_dir.path().join(".claude");
+        std::fs::create_dir_all(&p_claude).unwrap();
+        std::fs::create_dir_all(&g_claude).unwrap();
+
+        std::fs::write(
+            p_claude.join("settings.json"),
+            r#"{"model":"claude-opus-4-6"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            g_claude.join("settings.json"),
+            r#"{"model":"claude-sonnet-4-6"}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "hierarchy-model-conflict"));
+    }
+
+    #[test]
+    fn lint_hierarchy_claudemd_overlap_detected() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        std::fs::write(
+            project_dir.path().join("CLAUDE.md"),
+            "# Project\nAlways use tabs for indentation.",
+        )
+        .unwrap();
+        std::fs::write(
+            global_dir.path().join("CLAUDE.md"),
+            "# Global\nUse spaces for indentation.",
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "hierarchy-claudemd-overlap"));
+    }
+
+    #[test]
+    fn lint_hierarchy_claudemd_contradiction_detected() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        std::fs::write(
+            project_dir.path().join("CLAUDE.md"),
+            "# Project\nAlways use tabs for indentation.",
+        )
+        .unwrap();
+        std::fs::write(
+            global_dir.path().join("CLAUDE.md"),
+            "# Global\nAlways use spaces for indentation.",
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "hierarchy-claudemd-conflict"));
+    }
+
+    #[test]
+    fn lint_hierarchy_permission_conflict_detected() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        let p_claude = project_dir.path().join(".claude");
+        let g_claude = global_dir.path().join(".claude");
+        std::fs::create_dir_all(&p_claude).unwrap();
+        std::fs::create_dir_all(&g_claude).unwrap();
+
+        std::fs::write(
+            p_claude.join("settings.json"),
+            r#"{"permissions":{"allow":["Bash"]}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            g_claude.join("settings.json"),
+            r#"{"permissions":{"deny":["Bash"]}}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "hierarchy-permission-conflict"));
+    }
+
+    #[test]
+    fn lint_settings_unknown_key_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(
+            claude_dir.join("settings.json"),
+            r#"{"model":"claude-sonnet-4-6","bogusKey":"value"}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "settings-unknown-key"
+                && i.message.contains("bogusKey")));
+    }
+
+    #[test]
+    fn lint_hook_no_timeout_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(
+            claude_dir.join("settings.json"),
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"echo hi"}]}]}}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result.issues.iter().any(|i| i.rule == "hook-no-timeout"));
+    }
+
+    #[test]
+    fn lint_hook_empty_command_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(
+            claude_dir.join("settings.json"),
+            r#"{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":""}]}]}}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result.issues.iter().any(|i| i.rule == "hook-empty-command"));
+    }
+
+    #[test]
+    fn lint_hook_invalid_matcher_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(
+            claude_dir.join("settings.json"),
+            r#"{"hooks":{"PreToolUse":[{"matcher":"[invalid","hooks":[{"type":"command","command":"echo","timeout":5000}]}]}}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "hook-invalid-matcher"));
+    }
+
+    #[test]
+    fn lint_skill_dangling_agent_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let skills_dir = dir.path().join(".claude/skills/my-skill");
+        std::fs::create_dir_all(&skills_dir).unwrap();
+        std::fs::write(
+            skills_dir.join("SKILL.md"),
+            "---\nname: My Skill\ndescription: Test\nagent: nonexistent-agent\n---\nThis skill does something with detailed instructions here.",
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "skill-dangling-agent"));
+    }
+
+    #[test]
+    fn lint_agent_dangling_memory_flagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        let agents_dir = dir.path().join(".claude/agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+
+        // Create agent with .meta.json that has memory binding
+        std::fs::write(
+            agents_dir.join("mem-agent.md"),
+            "---\nname: Mem Agent\ndescription: Uses memory for context\nmemory: nonexistent-store\n---\nYou are an agent that uses memory stores for persistent context across sessions.",
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "agent-dangling-memory"));
+    }
+
+    #[test]
+    fn lint_score_decreases_with_issues() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        // Lots of issues: no CLAUDE.md, no model, no ignore, MCP placeholder
+        std::fs::write(
+            dir.path().join(".mcp.json"),
+            r#"{"mcpServers":{"broken":{"type":"stdio","env":{"KEY":"<your-key>"}}}}"#,
+        )
+        .unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(result.score < 80);
+        assert!(result.error_count > 0);
+    }
+
+    #[test]
+    fn lint_hierarchy_hook_duplicate_event_detected() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        let p_claude = project_dir.path().join(".claude");
+        let g_claude = global_dir.path().join(".claude");
+        std::fs::create_dir_all(&p_claude).unwrap();
+        std::fs::create_dir_all(&g_claude).unwrap();
+
+        let hook_json = r#"{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"echo test","timeout":5000}]}]}}"#;
+        std::fs::write(p_claude.join("settings.json"), hook_json).unwrap();
+        std::fs::write(g_claude.join("settings.json"), hook_json).unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(result
+            .issues
+            .iter()
+            .any(|i| i.rule == "hierarchy-hook-duplicate-event"));
     }
 }

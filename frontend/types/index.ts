@@ -257,6 +257,26 @@ export interface PluginSyncStatus {
   pinned: boolean;
 }
 
+// -- Config Lint --
+
+export interface LintIssue {
+  severity: "error" | "warning" | "info";
+  category: string;
+  rule: string;
+  message: string;
+  fix?: string | null;
+  entityId?: string | null;
+  scope?: string | null;
+}
+
+export interface LintResult {
+  issues: LintIssue[];
+  score: number;
+  errorCount: number;
+  warningCount: number;
+  infoCount: number;
+}
+
 // -- Scope --
 
 export type Scope =
