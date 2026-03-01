@@ -40,6 +40,7 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 - **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. Snapshot configuration at any point and restore from history.
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
 - **Plugin System** — Bundle agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, install from git, and auto-sync when the source changes.
+- **Config Linter** — Comprehensive linting of your Claude Code configuration with 20+ rules. Detects hierarchy conflicts (CLAUDE.md contradictions, agent/skill/MCP shadowing, permission clashes, model overrides), validates references (dangling memory stores, nonexistent agents in skills), flags incomplete config (placeholder env vars, missing commands, empty prompts), and checks settings.json for unknown keys. Filterable by severity and groupable by category, severity, or scope.
 - **Config Backup & Restore** — Export/import full configuration as a JSON bundle with merge or overwrite modes.
 - **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal.
 

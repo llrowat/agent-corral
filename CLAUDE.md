@@ -37,6 +37,7 @@ agent-corral/
 │   │   ├── PresetPicker       # Generic preset selection modal
 │   │   ├── QuickSetup         # First-run setup wizard with starter presets
 │   │   ├── CreateWithAiModal  # AI-powered entity creation (launches terminal)
+│   │   ├── ConfigLinter       # Config linting with hierarchy conflict detection
 │   │   └── SchemaForm         # Generic JSON Schema → form renderer
 │   ├── pages/          # Page components
 │   │   ├── OverviewPage       # Dashboard with config summary
