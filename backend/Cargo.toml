@@ -1,0 +1,45 @@
+[package]
+name = "agent-corral"
+version = "0.1.0"
+edition = "2021"
+description = "Claude Code Configuration Management Studio"
+license = "MIT"
+repository = "https://github.com/llrowat/agent-corral"
+
+[features]
+default = ["tauri-app"]
+tauri-app = [
+    "dep:tauri",
+    "dep:tauri-plugin-shell",
+    "dep:tauri-plugin-dialog",
+    "dep:tauri-plugin-fs",
+    "dep:tauri-build",
+]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [], optional = true }
+
+[dependencies]
+tauri = { version = "2", features = [], optional = true }
+tauri-plugin-shell = { version = "2", optional = true }
+tauri-plugin-dialog = { version = "2", optional = true }
+tauri-plugin-fs = { version = "2", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+thiserror = "1"
+serde_yaml = "0.9"
+regex = "1"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["processthreadsapi", "winnt", "handleapi"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+name = "agent_corral_lib"
+crate-type = ["rlib"]
