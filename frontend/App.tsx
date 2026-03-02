@@ -20,13 +20,10 @@ import { useRepos } from "./hooks/useRepos";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { getClaudeHome } from "./lib/tauri";
 import type { Scope } from "./types";
-import { useTheme } from "./components/ThemeToggle";
-import appIconLight from "./assets/agent_corral_icon.png";
-import appIconDark from "./assets/agent_corral_icon_black.png";
+import appIconSvg from "./assets/agent_corral_icon.svg";
 
 function App() {
   const { repos, addRepo, removeRepo } = useRepos();
-  const { theme } = useTheme();
   useKeyboardShortcuts();
   const [scope, setScope] = useState<Scope | null>(null);
   const [homePath, setHomePath] = useState<string | null>(null);
@@ -39,7 +36,12 @@ function App() {
     <div className="app-layout">
       <header className="app-header">
         <div className="app-brand">
-          <img src={theme === "dark" ? appIconLight : appIconDark} alt="" className="app-icon" />
+          <div
+            className="app-icon"
+            role="img"
+            aria-label="AgentCorral"
+            style={{ maskImage: `url(${appIconSvg})`, WebkitMaskImage: `url(${appIconSvg})` }}
+          />
           <h1>AgentCorral</h1>
           <span className="app-subtitle">Claude Code Configuration Management Studio</span>
         </div>
