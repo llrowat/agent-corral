@@ -201,7 +201,7 @@ export function EffectiveConfig({ scope, homePath }: Props) {
             <span className="effective-value">
               {effectiveModel
                 ? MODEL_LABELS[effectiveModel] || effectiveModel
-                : "Default (Sonnet)"}
+                : "Default (Opus)"}
             </span>
             {isProject && modelSource !== "default" && (
               <SourceBadge source={modelSource} />
