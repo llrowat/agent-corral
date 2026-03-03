@@ -3249,7 +3249,7 @@ textarea.input-error {
   --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
-  --grid-color: rgba(61, 138, 156, 0.05);
+  --grid-color: rgba(61, 138, 156, 0.10);
 }
 
 [data-theme="light"] .toast {
