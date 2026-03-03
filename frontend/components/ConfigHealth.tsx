@@ -55,9 +55,9 @@ export function ConfigHealth({ scope }: Props) {
       if (!config?.model) {
         found.push({
           severity: "info",
-          category: "Config",
+          category: "Settings",
           message: "No default model configured",
-          fix: "Set a model in Config Studio to avoid using the default",
+          fix: "Set a model in Settings Studio to avoid using the default",
         });
       }
 
@@ -65,7 +65,7 @@ export function ConfigHealth({ scope }: Props) {
       if (!config?.ignorePatterns || config.ignorePatterns.length === 0) {
         found.push({
           severity: "warning",
-          category: "Config",
+          category: "Settings",
           message: "No ignore patterns configured",
           fix: "Add ignore patterns (node_modules, dist, .env) to keep Claude focused on source code",
         });

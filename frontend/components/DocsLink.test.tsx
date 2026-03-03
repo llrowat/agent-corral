@@ -34,8 +34,8 @@ describe("DocsLink", () => {
     );
   });
 
-  it("links to the correct docs URL for config", () => {
-    render(<DocsLink page="config" />);
+  it("links to the correct docs URL for settings", () => {
+    render(<DocsLink page="settings" />);
     const link = screen.getByText("Docs") as HTMLAnchorElement;
     expect(link.href).toBe(
       "https://docs.anthropic.com/en/docs/claude-code/settings"

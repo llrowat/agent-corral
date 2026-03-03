@@ -3,7 +3,7 @@ const DOCS_URLS: Record<string, string> = {
   hooks: "https://docs.anthropic.com/en/docs/claude-code/hooks",
   skills: "https://docs.anthropic.com/en/docs/claude-code/slash-commands",
   mcp: "https://docs.anthropic.com/en/docs/claude-code/mcp",
-  config: "https://docs.anthropic.com/en/docs/claude-code/settings",
+  settings: "https://docs.anthropic.com/en/docs/claude-code/settings",
   memory: "https://docs.anthropic.com/en/docs/claude-code/memory",
 };
 

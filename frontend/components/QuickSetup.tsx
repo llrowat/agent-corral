@@ -172,7 +172,7 @@ export function QuickSetup({
 
   // Partial setup: show remaining steps
   const remaining: { done: boolean; label: string; page: string }[] = [
-    { done: detection.hasSettingsJson, label: "Config", page: "/config" },
+    { done: detection.hasSettingsJson, label: "Settings", page: "/settings" },
     { done: detection.hasAgentsDir, label: "Agents", page: "/agents" },
     { done: detection.hookCount > 0, label: "Hooks", page: "/hooks" },
     { done: detection.hasMcpJson, label: "MCP Servers", page: "/mcp" },

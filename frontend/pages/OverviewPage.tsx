@@ -162,10 +162,10 @@ export function OverviewPage({ scope, homePath }: Props) {
 
   const configCards = [
     {
-      key: "config",
-      label: "Config",
+      key: "settings",
+      label: "Settings",
       icon: "\u2638",
-      path: "/config",
+      path: "/settings",
       count: counts?.hasConfig ? 1 : 0,
       countLabel: counts?.hasConfig
         ? `Model: ${counts.model ? (MODEL_LABELS[counts.model] ?? counts.model) : "default"}`

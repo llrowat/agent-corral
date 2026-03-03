@@ -66,7 +66,7 @@ export function GlobalSearch({ scope }: Props) {
 
     // Static navigation items
     items.push(
-      { type: "config", label: "Config Studio", description: "Model, permissions, ignore patterns", path: "/config" },
+      { type: "config", label: "Settings Studio", description: "Model, permissions, ignore patterns", path: "/settings" },
       { type: "claudemd", label: "CLAUDE.md", description: "Project instructions", path: "/claude-md" },
     );
 

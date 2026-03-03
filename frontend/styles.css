@@ -1060,6 +1060,63 @@ body {
   opacity: 0.6;
 }
 
+/* -- Key-Value Editor -- */
+
+.kv-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kv-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.kv-key {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.kv-sep {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.kv-value {
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.kv-add-key {
+  flex: 0 1 200px;
+}
+
+.kv-add-value {
+  flex: 1;
+}
+
 /* -- Advanced JSON editor -- */
 
 .advanced-json-editor {

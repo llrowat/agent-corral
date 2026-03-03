@@ -17,7 +17,7 @@ const SEVERITY_ICON: Record<string, string> = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  config: "Config",
+  config: "Settings",
   agent: "Agents",
   hook: "Hooks",
   skill: "Skills",

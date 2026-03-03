@@ -100,7 +100,7 @@ function App() {
               element={<McpPage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route
-              path="/config"
+              path="/settings"
               element={<ConfigPage key={scopeKey} scope={scope} />}
             />
             <Route
@@ -113,7 +113,7 @@ function App() {
             />
             <Route path="/packs" element={<PacksPage key={scopeKey} scope={scope} />} />
             <Route path="/plugins" element={<PluginsPage key={scopeKey} scope={scope} />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/preferences" element={<SettingsPage />} />
           </Routes>
           </ErrorBoundary>
         </main>
