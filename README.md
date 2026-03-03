@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="assets/agent_corral_icon_black.png" alt="AgentCorral" width="200" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/agent_corral_icon_white.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="assets/agent_corral_icon_black.svg" />
+    <img src="assets/agent_corral_icon_black.svg" alt="AgentCorral" width="200" />
+  </picture>
 </p>
 
 <h1 align="center">AgentCorral</h1>
