@@ -31,6 +31,8 @@ No more digging through dotfiles. No more wondering which repo has that hook you
 
 Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
+**[Download installers for Windows, macOS, and Linux from the latest release.](https://github.com/llrowat/agent-corral/releases/latest)**
+
 <p align="center">
   <img src="assets/screenshot_overview.png" alt="Overview dashboard with config linter, effective configuration, and feature cards" width="700" />
 </p>
