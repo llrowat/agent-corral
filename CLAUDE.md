@@ -146,7 +146,7 @@ npm run test:watch
 
 ## Build Phases
 
-- Phase 1: Repo Registry, Config Studio
+- Phase 1: Repo Registry, Settings Studio
 - Phase 2: Agent Studio with full CRUD
 - Phase 3: Memory Studio
 - Phase 4: Pack system (legacy, kept for migration)

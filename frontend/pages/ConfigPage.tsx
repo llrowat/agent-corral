@@ -1,9 +1,12 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import type { Scope, NormalizedConfig } from "@/types";
 import * as api from "@/lib/tauri";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import { DocsLink } from "@/components/DocsLink";
 import { useToast } from "@/components/Toast";
+import { Section } from "@/components/Section";
+import { TagInput } from "@/components/TagInput";
+import { KeyValueEditor } from "@/components/KeyValueEditor";
 
 interface Props {
   scope: Scope | null;
@@ -65,75 +68,17 @@ interface FeatureToggleDef {
 }
 
 const FEATURE_TOGGLES: FeatureToggleDef[] = [
-  {
-    key: "enableTeams",
-    label: "Agent Teams (Experimental)",
-    description: "Enable multi-agent team coordination.",
-    settingsPath: "env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
-  },
-  {
-    key: "fastMode",
-    label: "Fast Mode",
-    description: "2.5x faster Opus output at higher per-token cost.",
-    settingsPath: "fastMode",
-  },
-  {
-    key: "alwaysThinkingEnabled",
-    label: "Extended Thinking",
-    description: "Enable extended thinking by default for all sessions.",
-    settingsPath: "alwaysThinkingEnabled",
-  },
-  {
-    key: "enableAllProjectMcpServers",
-    label: "Auto-approve Project MCP Servers",
-    description: "Automatically approve all MCP servers defined in the project.",
-    settingsPath: "enableAllProjectMcpServers",
-  },
-  {
-    key: "respectGitignore",
-    label: "Respect .gitignore",
-    description: "Exclude .gitignore patterns from @ file picker suggestions.",
-    settingsPath: "respectGitignore",
-    defaultValue: true,
-  },
-  {
-    key: "disableAllHooks",
-    label: "Disable All Hooks",
-    description: "Disable all hooks and statusLine execution globally.",
-    settingsPath: "disableAllHooks",
-  },
-  {
-    key: "showTurnDuration",
-    label: "Show Turn Duration",
-    description: "Display how long each turn takes in messages.",
-    settingsPath: "showTurnDuration",
-  },
-  {
-    key: "terminalProgressBarEnabled",
-    label: "Terminal Progress Bar",
-    description: "Show a progress bar in the terminal during operations.",
-    settingsPath: "terminalProgressBarEnabled",
-    defaultValue: true,
-  },
-  {
-    key: "spinnerTipsEnabled",
-    label: "Spinner Tips",
-    description: "Show tips in the spinner while Claude is working.",
-    settingsPath: "spinnerTipsEnabled",
-    defaultValue: true,
-  },
-  {
-    key: "prefersReducedMotion",
-    label: "Reduced Motion",
-    description: "Reduce UI animations for accessibility.",
-    settingsPath: "prefersReducedMotion",
-  },
-  {
-    key: "fastModePerSessionOptIn",
-    label: "Fast Mode Per-Session Opt-In",
-    description: "Require fast mode to be opted into each session.",
-    settingsPath: "fastModePerSessionOptIn",
-  },
+  { key: "enableTeams", label: "Agent Teams (Experimental)", description: "Enable multi-agent team coordination.", settingsPath: "env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" },
+  { key: "fastMode", label: "Fast Mode", description: "2.5x faster Opus output at higher per-token cost.", settingsPath: "fastMode" },
+  { key: "alwaysThinkingEnabled", label: "Extended Thinking", description: "Enable extended thinking by default for all sessions.", settingsPath: "alwaysThinkingEnabled" },
+  { key: "enableAllProjectMcpServers", label: "Auto-approve Project MCP Servers", description: "Automatically approve all MCP servers defined in the project.", settingsPath: "enableAllProjectMcpServers" },
+  { key: "respectGitignore", label: "Respect .gitignore", description: "Exclude .gitignore patterns from @ file picker suggestions.", settingsPath: "respectGitignore", defaultValue: true },
+  { key: "disableAllHooks", label: "Disable All Hooks", description: "Disable all hooks and statusLine execution globally.", settingsPath: "disableAllHooks" },
+  { key: "showTurnDuration", label: "Show Turn Duration", description: "Display how long each turn takes in messages.", settingsPath: "showTurnDuration" },
+  { key: "terminalProgressBarEnabled", label: "Terminal Progress Bar", description: "Show a progress bar in the terminal during operations.", settingsPath: "terminalProgressBarEnabled", defaultValue: true },
+  { key: "spinnerTipsEnabled", label: "Spinner Tips", description: "Show tips in the spinner while Claude is working.", settingsPath: "spinnerTipsEnabled", defaultValue: true },
+  { key: "prefersReducedMotion", label: "Reduced Motion", description: "Reduce UI animations for accessibility.", settingsPath: "prefersReducedMotion" },
+  { key: "fastModePerSessionOptIn", label: "Fast Mode Per-Session Opt-In", description: "Require fast mode to be opted into each session.", settingsPath: "fastModePerSessionOptIn" },
 ];
 
 // -- Toggle Helpers --
@@ -209,25 +154,14 @@ function buildPermissions(p: ParsedPermissions): Record<string, unknown> | null 
 }
 
 function readString(raw: Record<string, unknown>, key: string): string {
-  const val = raw[key];
-  return typeof val === "string" ? val : "";
+  const val = raw[key]; return typeof val === "string" ? val : "";
 }
-
 function readNumber(raw: Record<string, unknown>, key: string): number | null {
-  const val = raw[key];
-  return typeof val === "number" ? val : null;
+  const val = raw[key]; return typeof val === "number" ? val : null;
 }
-
 function readStringArray(raw: Record<string, unknown>, key: string): string[] {
-  const val = raw[key];
-  return Array.isArray(val) ? val.filter((s): s is string => typeof s === "string") : [];
+  const val = raw[key]; return Array.isArray(val) ? val.filter((s): s is string => typeof s === "string") : [];
 }
-
-function readBool(raw: Record<string, unknown>, key: string): boolean | null {
-  if (!(key in raw)) return null;
-  return !!raw[key];
-}
-
 function readAttribution(raw: Record<string, unknown>): { commit: string; pr: string } {
   const attr = raw.attribution;
   if (!attr || typeof attr !== "object") return { commit: "", pr: "" };
@@ -239,16 +173,14 @@ interface StatusLineState { command: string }
 function readStatusLine(raw: Record<string, unknown>): StatusLineState {
   const sl = raw.statusLine;
   if (!sl || typeof sl !== "object") return { command: "" };
-  const s = sl as Record<string, unknown>;
-  return { command: typeof s.command === "string" ? s.command : "" };
+  return { command: typeof (sl as Record<string, unknown>).command === "string" ? (sl as Record<string, unknown>).command as string : "" };
 }
 
 interface FileSuggestionState { command: string }
 function readFileSuggestion(raw: Record<string, unknown>): FileSuggestionState {
   const fs = raw.fileSuggestion;
   if (!fs || typeof fs !== "object") return { command: "" };
-  const f = fs as Record<string, unknown>;
-  return { command: typeof f.command === "string" ? f.command : "" };
+  return { command: typeof (fs as Record<string, unknown>).command === "string" ? (fs as Record<string, unknown>).command as string : "" };
 }
 
 interface SpinnerVerbsState { mode: string; verbs: string[] }
@@ -256,10 +188,7 @@ function readSpinnerVerbs(raw: Record<string, unknown>): SpinnerVerbsState {
   const sv = raw.spinnerVerbs;
   if (!sv || typeof sv !== "object") return { mode: "append", verbs: [] };
   const s = sv as Record<string, unknown>;
-  return {
-    mode: typeof s.mode === "string" ? s.mode : "append",
-    verbs: Array.isArray(s.verbs) ? s.verbs.filter((v): v is string => typeof v === "string") : [],
-  };
+  return { mode: typeof s.mode === "string" ? s.mode : "append", verbs: Array.isArray(s.verbs) ? s.verbs.filter((v): v is string => typeof v === "string") : [] };
 }
 
 interface SpinnerTipsState { excludeDefault: boolean; tips: string[] }
@@ -267,33 +196,19 @@ function readSpinnerTips(raw: Record<string, unknown>): SpinnerTipsState {
   const st = raw.spinnerTipsOverride;
   if (!st || typeof st !== "object") return { excludeDefault: false, tips: [] };
   const s = st as Record<string, unknown>;
-  return {
-    excludeDefault: !!s.excludeDefault,
-    tips: Array.isArray(s.tips) ? s.tips.filter((t): t is string => typeof t === "string") : [],
-  };
+  return { excludeDefault: !!s.excludeDefault, tips: Array.isArray(s.tips) ? s.tips.filter((t): t is string => typeof t === "string") : [] };
 }
 
 interface SandboxState {
-  enabled: boolean | null;
-  autoAllow: boolean | null;
-  excludedCommands: string[];
-  allowUnsandboxed: boolean | null;
-  enableWeakerNested: boolean | null;
-  fsAllowWrite: string[];
-  fsDenyWrite: string[];
-  fsDenyRead: string[];
-  netAllowUnixSockets: string[];
-  netAllowAllUnixSockets: boolean | null;
-  netAllowLocalBinding: boolean | null;
-  netAllowedDomains: string[];
+  enabled: boolean | null; autoAllow: boolean | null; excludedCommands: string[];
+  allowUnsandboxed: boolean | null; enableWeakerNested: boolean | null;
+  fsAllowWrite: string[]; fsDenyWrite: string[]; fsDenyRead: string[];
+  netAllowUnixSockets: string[]; netAllowAllUnixSockets: boolean | null;
+  netAllowLocalBinding: boolean | null; netAllowedDomains: string[];
 }
 function readSandbox(raw: Record<string, unknown>): SandboxState {
+  const empty: SandboxState = { enabled: null, autoAllow: null, excludedCommands: [], allowUnsandboxed: null, enableWeakerNested: null, fsAllowWrite: [], fsDenyWrite: [], fsDenyRead: [], netAllowUnixSockets: [], netAllowAllUnixSockets: null, netAllowLocalBinding: null, netAllowedDomains: [] };
   const sb = raw.sandbox;
-  const empty: SandboxState = {
-    enabled: null, autoAllow: null, excludedCommands: [], allowUnsandboxed: null, enableWeakerNested: null,
-    fsAllowWrite: [], fsDenyWrite: [], fsDenyRead: [],
-    netAllowUnixSockets: [], netAllowAllUnixSockets: null, netAllowLocalBinding: null, netAllowedDomains: [],
-  };
   if (!sb || typeof sb !== "object") return empty;
   const s = sb as Record<string, unknown>;
   const fs = (s.filesystem && typeof s.filesystem === "object" ? s.filesystem : {}) as Record<string, unknown>;
@@ -304,9 +219,7 @@ function readSandbox(raw: Record<string, unknown>): SandboxState {
     excludedCommands: readStringArray(s, "excludedCommands"),
     allowUnsandboxed: "allowUnsandboxedCommands" in s ? !!s.allowUnsandboxedCommands : null,
     enableWeakerNested: "enableWeakerNestedSandbox" in s ? !!s.enableWeakerNestedSandbox : null,
-    fsAllowWrite: readStringArray(fs, "allowWrite"),
-    fsDenyWrite: readStringArray(fs, "denyWrite"),
-    fsDenyRead: readStringArray(fs, "denyRead"),
+    fsAllowWrite: readStringArray(fs, "allowWrite"), fsDenyWrite: readStringArray(fs, "denyWrite"), fsDenyRead: readStringArray(fs, "denyRead"),
     netAllowUnixSockets: readStringArray(net, "allowUnixSockets"),
     netAllowAllUnixSockets: "allowAllUnixSockets" in net ? !!net.allowAllUnixSockets : null,
     netAllowLocalBinding: "allowLocalBinding" in net ? !!net.allowLocalBinding : null,
@@ -331,8 +244,7 @@ function buildSandbox(s: SandboxState): Record<string, unknown> | null {
   if (s.netAllowLocalBinding !== null) net.allowLocalBinding = s.netAllowLocalBinding;
   if (s.netAllowedDomains.length > 0) net.allowedDomains = s.netAllowedDomains;
   if (Object.keys(net).length > 0) result.network = net;
-  if (Object.keys(result).length === 0) return null;
-  return result;
+  return Object.keys(result).length === 0 ? null : result;
 }
 
 function readEnvVars(raw: Record<string, unknown>, managedKeys: Set<string>): Record<string, string> {
@@ -375,35 +287,25 @@ function modelLabel(modelId: string | null): string | null {
   return MODEL_OPTIONS.find((o) => o.value === modelId)?.label ?? modelId;
 }
 
-// -- Sub-components --
+// -- Search-matching metadata for each section --
+// Maps section titles to keywords that help the filter match fields inside them.
 
-function Section({
-  title,
-  hint,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="config-section" data-section={title}>
-      <button
-        className="config-section-toggle"
-        onClick={() => setOpen(!open)}
-        type="button"
-      >
-        <span className={`toggle-arrow ${open ? "open" : ""}`}>&#9654;</span>
-        <h3>{title}</h3>
-        {hint && <span className="config-section-hint">{hint}</span>}
-      </button>
-      {open && <div className="config-section-body">{children}</div>}
-    </div>
-  );
-}
+const SECTION_KEYWORDS: Record<string, string[]> = {
+  "General": ["model", "language", "output style", "available models"],
+  "Feature Toggles": FEATURE_TOGGLES.map((t) => t.label.toLowerCase()),
+  "Permissions": ["allow", "deny", "ask", "default mode", "bypass", "additional directories", "tools"],
+  "File Patterns": ["ignore", "gitignore", "patterns"],
+  "UI Customization": ["status line", "statusline", "file suggestion", "autocomplete", "spinner", "verbs", "tips"],
+  "Attribution": ["commit", "pull request", "pr", "co-authored"],
+  "MCP Server Approval": ["mcp", "enabled", "disabled", "server"],
+  "Environment Variables": ["env", "environment", "variable"],
+  "Session & Login": ["cleanup", "auto-update", "plans", "teammate", "login", "org", "announcements", "enterprise"],
+  "Scripts & Hooks": ["api key", "otel", "aws", "credential", "http hook", "url", "script"],
+  "Sandbox": ["sandbox", "filesystem", "network", "domain", "unix socket", "write", "read"],
+  "Advanced (JSON)": ["json", "raw", "advanced"],
+};
+
+// -- Sub-components --
 
 function SourceBadge({ source, globalHint }: { source: "global" | "project" | "default"; globalHint?: string | null }) {
   if (source === "global") {
@@ -416,73 +318,6 @@ function SourceBadge({ source, globalHint }: { source: "global" | "project" | "d
   }
   if (source === "project") return <span className="source-badge source-override">Project override</span>;
   return null;
-}
-
-function TagInput({ tags, onAdd, onRemove, placeholder, emptyLabel }: {
-  tags: string[]; onAdd: (value: string) => void; onRemove: (tag: string) => void; placeholder: string; emptyLabel?: string;
-}) {
-  const [inputValue, setInputValue] = useState("");
-  const handleAdd = () => {
-    const trimmed = inputValue.trim();
-    if (trimmed && !tags.includes(trimmed)) { onAdd(trimmed); setInputValue(""); }
-  };
-  return (
-    <div className="tag-input-container">
-      {tags.length > 0 ? (
-        <div className="tag-list">
-          {tags.map((tag) => (
-            <span key={tag} className="tag">
-              {tag}
-              <button className="tag-remove" onClick={() => onRemove(tag)} aria-label={`Remove ${tag}`}>&times;</button>
-            </span>
-          ))}
-        </div>
-      ) : emptyLabel && <span className="tag-empty">{emptyLabel}</span>}
-      <div className="tag-add-row">
-        <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAdd(); } }}
-          placeholder={placeholder} />
-        <button className="btn btn-sm" onClick={handleAdd} disabled={!inputValue.trim()}>Add</button>
-      </div>
-    </div>
-  );
-}
-
-function KeyValueEditor({ entries, onUpdate, keyPlaceholder, valuePlaceholder }: {
-  entries: Record<string, string>; onUpdate: (entries: Record<string, string>) => void; keyPlaceholder?: string; valuePlaceholder?: string;
-}) {
-  const [newKey, setNewKey] = useState("");
-  const [newValue, setNewValue] = useState("");
-  const handleAdd = () => {
-    const k = newKey.trim();
-    if (k) { onUpdate({ ...entries, [k]: newValue.trim() }); setNewKey(""); setNewValue(""); }
-  };
-  const handleRemove = (key: string) => { const updated = { ...entries }; delete updated[key]; onUpdate(updated); };
-  const entryList = Object.entries(entries);
-  return (
-    <div className="kv-editor">
-      {entryList.length > 0 ? (
-        <div className="kv-list">
-          {entryList.map(([k, v]) => (
-            <div key={k} className="kv-entry">
-              <code className="kv-key">{k}</code><span className="kv-sep">=</span><code className="kv-value">{v}</code>
-              <button className="tag-remove" onClick={() => handleRemove(k)} aria-label={`Remove ${k}`}>&times;</button>
-            </div>
-          ))}
-        </div>
-      ) : <span className="tag-empty">No environment variables set</span>}
-      <div className="kv-add-row">
-        <input type="text" value={newKey} onChange={(e) => setNewKey(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAdd(); } }}
-          placeholder={keyPlaceholder ?? "KEY"} className="kv-add-key" />
-        <span className="kv-sep">=</span>
-        <input type="text" value={newValue} onChange={(e) => setNewValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAdd(); } }}
-          placeholder={valuePlaceholder ?? "value"} className="kv-add-value" />
-        <button className="btn btn-sm" onClick={handleAdd} disabled={!newKey.trim()}>Add</button>
-      </div>
-    </div>
-  );
 }
 
 function SandboxToggle({ label, value, onChange }: { label: string; value: boolean | null; onChange: (v: boolean) => void }) {
@@ -501,49 +336,36 @@ export function ConfigPage({ scope }: Props) {
   const [savedConfig, setSavedConfig] = useState<NormalizedConfig>(EMPTY_CONFIG);
   const [globalConfig, setGlobalConfig] = useState<NormalizedConfig>(EMPTY_CONFIG);
 
-  // -- Form State --
+  // Form state
   const [model, setModel] = useState("");
   const [ignorePatterns, setIgnorePatterns] = useState<string[]>([]);
   const [perms, setPerms] = useState<ParsedPermissions>({ allow: [], deny: [], ask: [], defaultMode: "", additionalDirectories: [], disableBypassPermissionsMode: "" });
   const [toggles, setToggles] = useState<Record<string, boolean | null>>({});
   const [advancedJson, setAdvancedJson] = useState("{}");
   const [jsonError, setJsonError] = useState<string | null>(null);
-
-  // General
   const [language, setLanguage] = useState("");
   const [outputStyle, setOutputStyle] = useState("");
   const [availableModels, setAvailableModels] = useState<string[]>([]);
-  // Attribution
   const [attrCommit, setAttrCommit] = useState("");
   const [attrPr, setAttrPr] = useState("");
-  // MCP approval
   const [enabledMcpServers, setEnabledMcpServers] = useState<string[]>([]);
   const [disabledMcpServers, setDisabledMcpServers] = useState<string[]>([]);
-  // Env
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
-  // Session & Updates
   const [cleanupPeriodDays, setCleanupPeriodDays] = useState<string>("");
   const [autoUpdatesChannel, setAutoUpdatesChannel] = useState("");
   const [plansDirectory, setPlansDirectory] = useState("");
   const [teammateMode, setTeammateMode] = useState("");
-  // Custom Scripts
   const [apiKeyHelper, setApiKeyHelper] = useState("");
   const [otelHeadersHelper, setOtelHeadersHelper] = useState("");
   const [awsAuthRefresh, setAwsAuthRefresh] = useState("");
   const [awsCredentialExport, setAwsCredentialExport] = useState("");
-  // Hook Controls
   const [allowedHttpHookUrls, setAllowedHttpHookUrls] = useState<string[]>([]);
   const [httpHookAllowedEnvVars, setHttpHookAllowedEnvVars] = useState<string[]>([]);
-  // Status Line
   const [statusLine, setStatusLine] = useState<StatusLineState>({ command: "" });
-  // File Suggestion
   const [fileSuggestion, setFileSuggestion] = useState<FileSuggestionState>({ command: "" });
-  // Spinner
   const [spinnerVerbs, setSpinnerVerbs] = useState<SpinnerVerbsState>({ mode: "append", verbs: [] });
   const [spinnerTips, setSpinnerTips] = useState<SpinnerTipsState>({ excludeDefault: false, tips: [] });
-  // Sandbox
   const [sandbox, setSandbox] = useState<SandboxState>(readSandbox({}));
-  // Login & Enterprise
   const [forceLoginMethod, setForceLoginMethod] = useState("");
   const [forceLoginOrgUUID, setForceLoginOrgUUID] = useState("");
   const [companyAnnouncements, setCompanyAnnouncements] = useState<string[]>([]);
@@ -551,6 +373,7 @@ export function ConfigPage({ scope }: Props) {
   // UI state
   const [saving, setSaving] = useState(false);
   const [homePath, setHomePath] = useState<string | null>(null);
+  const [searchFilter, setSearchFilter] = useState("");
 
   const isProject = scope?.type === "project";
   const basePath = scope?.type === "global" ? scope.homePath : scope?.type === "project" ? scope.repo.path : null;
@@ -569,8 +392,7 @@ export function ConfigPage({ scope }: Props) {
     setOutputStyle(readString(raw, "outputStyle"));
     setAvailableModels(readStringArray(raw, "availableModels"));
     const attr = readAttribution(raw);
-    setAttrCommit(attr.commit);
-    setAttrPr(attr.pr);
+    setAttrCommit(attr.commit); setAttrPr(attr.pr);
     setEnabledMcpServers(readStringArray(raw, "enabledMcpjsonServers"));
     setDisabledMcpServers(readStringArray(raw, "disabledMcpjsonServers"));
     setEnvVars(readEnvVars(raw, MANAGED_ENV_KEYS));
@@ -605,26 +427,20 @@ export function ConfigPage({ scope }: Props) {
       try {
         const config = await api.readClaudeConfig(basePath);
         if (cancelled) return;
-        setSavedConfig(config);
-        populateForm(config);
+        setSavedConfig(config); populateForm(config);
       } catch {
         if (cancelled) return;
-        setSavedConfig(EMPTY_CONFIG);
-        populateForm(EMPTY_CONFIG);
+        setSavedConfig(EMPTY_CONFIG); populateForm(EMPTY_CONFIG);
       }
       if (isProject && homePath && homePath !== basePath) {
-        try {
-          const gc = await api.readClaudeConfig(homePath);
-          if (!cancelled) setGlobalConfig(gc);
-        } catch {
-          if (!cancelled) setGlobalConfig(EMPTY_CONFIG);
-        }
+        try { const gc = await api.readClaudeConfig(homePath); if (!cancelled) setGlobalConfig(gc); }
+        catch { if (!cancelled) setGlobalConfig(EMPTY_CONFIG); }
       }
     })();
     return () => { cancelled = true; };
   }, [basePath, isProject, homePath, populateForm]);
 
-  // -- Build raw for save --
+  // -- Build raw --
 
   function buildRaw(): Record<string, unknown> {
     let rawObj: Record<string, unknown> = {};
@@ -672,8 +488,7 @@ export function ConfigPage({ scope }: Props) {
   const isDirty = (() => {
     if ((model || null) !== (savedConfig.model ?? null)) return true;
     if (JSON.stringify(ignorePatterns.length > 0 ? ignorePatterns : null) !== JSON.stringify(savedConfig.ignorePatterns ?? null)) return true;
-    const savedPerms = parsePermissions(savedConfig.permissions);
-    if (JSON.stringify(perms) !== JSON.stringify(savedPerms)) return true;
+    if (JSON.stringify(perms) !== JSON.stringify(parsePermissions(savedConfig.permissions))) return true;
     const savedRaw = (savedConfig.raw ?? {}) as Record<string, unknown>;
     for (const toggle of FEATURE_TOGGLES) { if (toggles[toggle.key] !== readToggle(savedRaw, toggle.settingsPath)) return true; }
     if (language !== readString(savedRaw, "language")) return true;
@@ -703,8 +518,7 @@ export function ConfigPage({ scope }: Props) {
     if (forceLoginMethod !== readString(savedRaw, "forceLoginMethod")) return true;
     if (forceLoginOrgUUID !== readString(savedRaw, "forceLoginOrgUUID")) return true;
     if (JSON.stringify(companyAnnouncements) !== JSON.stringify(readStringArray(savedRaw, "companyAnnouncements"))) return true;
-    const savedExtra = getExtraRawFields(savedRaw);
-    try { if (JSON.stringify(JSON.parse(advancedJson)) !== JSON.stringify(savedExtra)) return true; } catch { return true; }
+    try { if (JSON.stringify(JSON.parse(advancedJson)) !== JSON.stringify(getExtraRawFields(savedRaw))) return true; } catch { return true; }
     return false;
   })();
 
@@ -714,25 +528,42 @@ export function ConfigPage({ scope }: Props) {
     if (!basePath) return;
     setSaving(true);
     try {
-      const rawObj = buildRaw();
       const config: NormalizedConfig = {
         model: model || null,
         permissions: buildPermissions(perms),
         ignorePatterns: ignorePatterns.length > 0 ? ignorePatterns : null,
-        raw: rawObj,
+        raw: buildRaw(),
       };
       await api.writeClaudeConfig(basePath, config);
       const reloaded = await api.readClaudeConfig(basePath);
-      setSavedConfig(reloaded);
-      populateForm(reloaded);
+      setSavedConfig(reloaded); populateForm(reloaded);
     } catch (e) {
       toast.error("Failed to save config", String(e));
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const handleDiscard = () => { populateForm(savedConfig); };
+
+  // -- Search filter --
+
+  const filterLower = searchFilter.toLowerCase().trim();
+
+  const sectionMatch = useMemo(() => {
+    if (!filterLower) return null; // null = no filter active
+    const matches: Record<string, boolean> = {};
+    for (const [title, keywords] of Object.entries(SECTION_KEYWORDS)) {
+      matches[title] = title.toLowerCase().includes(filterLower) || keywords.some((kw) => kw.includes(filterLower));
+    }
+    return matches;
+  }, [filterLower]);
+
+  function sectionVisible(title: string): boolean {
+    return sectionMatch === null || sectionMatch[title] === true;
+  }
+
+  function sectionForceOpen(title: string): boolean | undefined {
+    return sectionMatch !== null && sectionMatch[title] ? true : undefined;
+  }
 
   // -- Hierarchy helpers --
 
@@ -763,11 +594,7 @@ export function ConfigPage({ scope }: Props) {
   // -- Render --
 
   if (!scope) {
-    return (
-      <div className="page page-empty">
-        <p>Select a scope to manage settings.</p>
-      </div>
-    );
+    return <div className="page page-empty"><p>Select a scope to manage settings.</p></div>;
   }
 
   return (
@@ -781,21 +608,32 @@ export function ConfigPage({ scope }: Props) {
         model, permission rules, and file ignore patterns.
       </p>
 
+      {/* Search filter */}
+      <div className="settings-search">
+        <input
+          type="text"
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+          placeholder="Filter settings..."
+          className="settings-search-input"
+          aria-label="Filter settings"
+        />
+        {searchFilter && (
+          <button className="settings-search-clear" onClick={() => setSearchFilter("")} aria-label="Clear filter">&times;</button>
+        )}
+      </div>
+
       {/* ── General ── */}
-      <Section title="General" defaultOpen>
+      <Section title="General" defaultOpen hidden={!sectionVisible("General")} forceOpen={sectionForceOpen("General")}>
         <div className="config-field">
           <div className="config-field-header">
             <label>Default Model</label>
-            {isProject && fieldSource("model") !== "default" && (
-              <SourceBadge source={fieldSource("model")} globalHint={globalHint("model")} />
-            )}
+            {isProject && fieldSource("model") !== "default" && <SourceBadge source={fieldSource("model")} globalHint={globalHint("model")} />}
           </div>
           <select value={model} onChange={(e) => setModel(e.target.value)}>
             {MODEL_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
-          {isProject && !model && globalConfig.model && (
-            <p className="config-field-hint">Using global setting: {modelLabel(globalConfig.model)}</p>
-          )}
+          {isProject && !model && globalConfig.model && <p className="config-field-hint">Using global setting: {modelLabel(globalConfig.model)}</p>}
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Language</label>
@@ -810,14 +648,12 @@ export function ConfigPage({ scope }: Props) {
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Available Models</label>
           <p className="config-field-hint">Restrict which models are available for selection.</p>
-          <TagInput tags={availableModels} onAdd={(v) => setAvailableModels([...availableModels, v])}
-            onRemove={(t) => setAvailableModels(availableModels.filter((x) => x !== t))}
-            placeholder="Add model name..." emptyLabel="All models available" />
+          <TagInput tags={availableModels} onAdd={(v) => setAvailableModels([...availableModels, v])} onRemove={(t) => setAvailableModels(availableModels.filter((x) => x !== t))} placeholder="Add model name..." emptyLabel="All models available" />
         </div>
       </Section>
 
       {/* ── Feature Toggles ── */}
-      <Section title="Feature Toggles" defaultOpen>
+      <Section title="Feature Toggles" defaultOpen hidden={!sectionVisible("Feature Toggles")} forceOpen={sectionForceOpen("Feature Toggles")}>
         {FEATURE_TOGGLES.map((toggle) => {
           const current = toggles[toggle.key];
           const isOn = current === true;
@@ -832,12 +668,8 @@ export function ConfigPage({ scope }: Props) {
                   onChange={(e) => setToggles((prev) => ({ ...prev, [toggle.key]: e.target.checked }))}
                   className={inheritedFromGlobal ? "inherited-toggle" : ""} />
                 <span>{toggle.label}</span>
-                {inheritedFromGlobal && (
-                  <span className="source-badge source-inherited">Inherited from global ({globalVal ? "on" : "off"})</span>
-                )}
-                {toggle.defaultValue !== undefined && !isExplicit && !inheritedFromGlobal && (
-                  <span className="toggle-default">(default: {toggle.defaultValue ? "on" : "off"})</span>
-                )}
+                {inheritedFromGlobal && <span className="source-badge source-inherited">Inherited from global ({globalVal ? "on" : "off"})</span>}
+                {toggle.defaultValue !== undefined && !isExplicit && !inheritedFromGlobal && <span className="toggle-default">(default: {toggle.defaultValue ? "on" : "off"})</span>}
               </label>
               <p className="config-field-hint">{toggle.description}</p>
             </div>
@@ -846,7 +678,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Permissions ── */}
-      <Section title="Permissions" hint={isProject && (globalPerms.allow.length > 0 || globalPerms.deny.length > 0) ? "Arrays merge across scopes" : undefined}>
+      <Section title="Permissions" hint={isProject && (globalPerms.allow.length > 0 || globalPerms.deny.length > 0) ? "Arrays merge across scopes" : undefined} hidden={!sectionVisible("Permissions")} forceOpen={sectionForceOpen("Permissions")}>
         <div className="config-field">
           <label>Default Permission Mode</label>
           <p className="config-field-hint">Default permission mode when Claude Code starts.</p>
@@ -857,9 +689,7 @@ export function ConfigPage({ scope }: Props) {
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Disable Bypass Permissions Mode</label>
           <p className="config-field-hint">Set to &quot;disable&quot; to prevent users from using bypass permissions mode.</p>
-          <input type="text" value={perms.disableBypassPermissionsMode}
-            onChange={(e) => setPerms({ ...perms, disableBypassPermissionsMode: e.target.value })}
-            placeholder="Not set" />
+          <input type="text" value={perms.disableBypassPermissionsMode} onChange={(e) => setPerms({ ...perms, disableBypassPermissionsMode: e.target.value })} placeholder="Not set" />
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Allowed Tools</label>
@@ -869,91 +699,74 @@ export function ConfigPage({ scope }: Props) {
               <div className="tag-list">{globalPerms.allow.map((tag) => <span key={tag} className="tag tag-inherited">{tag}</span>)}</div>
             </div>
           )}
-          <TagInput tags={perms.allow} onAdd={(v) => setPerms({ ...perms, allow: [...perms.allow, v] })}
-            onRemove={(t) => setPerms({ ...perms, allow: perms.allow.filter((x) => x !== t) })}
-            placeholder="Add tool pattern..." />
+          <TagInput tags={perms.allow} onAdd={(v) => setPerms({ ...perms, allow: [...perms.allow, v] })} onRemove={(t) => setPerms({ ...perms, allow: perms.allow.filter((x) => x !== t) })} placeholder="Add tool pattern..." />
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Ask Tools</label>
           <p className="config-field-hint">Tool patterns that require confirmation before use.</p>
-          {isProject && globalPerms.ask.length > 0 && (
-            <div className="inherited-tags"><span className="inherited-tags-label">From global (merged):</span>
-              <div className="tag-list">{globalPerms.ask.map((tag) => <span key={tag} className="tag tag-inherited">{tag}</span>)}</div>
-            </div>
-          )}
-          <TagInput tags={perms.ask} onAdd={(v) => setPerms({ ...perms, ask: [...perms.ask, v] })}
-            onRemove={(t) => setPerms({ ...perms, ask: perms.ask.filter((x) => x !== t) })}
-            placeholder="Add ask pattern..." />
+          <TagInput tags={perms.ask} onAdd={(v) => setPerms({ ...perms, ask: [...perms.ask, v] })} onRemove={(t) => setPerms({ ...perms, ask: perms.ask.filter((x) => x !== t) })} placeholder="Add ask pattern..." />
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Denied Tools</label>
           <p className="config-field-hint">Tool patterns Claude should never use.</p>
-          {isProject && globalPerms.deny.length > 0 && (
-            <div className="inherited-tags"><span className="inherited-tags-label">From global (merged):</span>
-              <div className="tag-list">{globalPerms.deny.map((tag) => <span key={tag} className="tag tag-inherited">{tag}</span>)}</div>
-            </div>
-          )}
-          <TagInput tags={perms.deny} onAdd={(v) => setPerms({ ...perms, deny: [...perms.deny, v] })}
-            onRemove={(t) => setPerms({ ...perms, deny: perms.deny.filter((x) => x !== t) })}
-            placeholder="Add denied pattern..." />
+          <TagInput tags={perms.deny} onAdd={(v) => setPerms({ ...perms, deny: [...perms.deny, v] })} onRemove={(t) => setPerms({ ...perms, deny: perms.deny.filter((x) => x !== t) })} placeholder="Add denied pattern..." />
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Additional Directories</label>
           <p className="config-field-hint">Extra directories Claude can access beyond the project root.</p>
-          <TagInput tags={perms.additionalDirectories}
-            onAdd={(v) => setPerms({ ...perms, additionalDirectories: [...perms.additionalDirectories, v] })}
-            onRemove={(t) => setPerms({ ...perms, additionalDirectories: perms.additionalDirectories.filter((x) => x !== t) })}
-            placeholder="Add directory path..." />
+          <TagInput tags={perms.additionalDirectories} onAdd={(v) => setPerms({ ...perms, additionalDirectories: [...perms.additionalDirectories, v] })} onRemove={(t) => setPerms({ ...perms, additionalDirectories: perms.additionalDirectories.filter((x) => x !== t) })} placeholder="Add directory path..." />
         </div>
       </Section>
 
       {/* ── File Patterns ── */}
-      <Section title="File Patterns" hint={isProject && globalConfig.ignorePatterns && globalConfig.ignorePatterns.length > 0 ? "Arrays merge across scopes" : undefined}>
+      <Section title="File Patterns" hint={isProject && globalConfig.ignorePatterns && globalConfig.ignorePatterns.length > 0 ? "Arrays merge across scopes" : undefined} hidden={!sectionVisible("File Patterns")} forceOpen={sectionForceOpen("File Patterns")}>
         <div className="config-field">
           <label>Ignore Patterns</label>
           <p className="config-field-hint">Files and directories Claude should ignore during operations.</p>
-          {isProject && globalConfig.ignorePatterns && globalConfig.ignorePatterns.length > 0 && (
-            <div className="inherited-tags"><span className="inherited-tags-label">From global (merged):</span>
-              <div className="tag-list">{globalConfig.ignorePatterns.map((tag) => <span key={tag} className="tag tag-inherited">{tag}</span>)}</div>
-            </div>
-          )}
-          <TagInput tags={ignorePatterns} onAdd={(v) => setIgnorePatterns([...ignorePatterns, v])}
-            onRemove={(t) => setIgnorePatterns(ignorePatterns.filter((x) => x !== t))}
-            placeholder="Add pattern..." />
+          <TagInput tags={ignorePatterns} onAdd={(v) => setIgnorePatterns([...ignorePatterns, v])} onRemove={(t) => setIgnorePatterns(ignorePatterns.filter((x) => x !== t))} placeholder="Add pattern..." />
         </div>
       </Section>
 
-      {/* ── Status Line ── */}
-      <Section title="Status Line">
+      {/* ── UI Customization (merged: Status Line + File Suggestion + Spinner) ── */}
+      <Section title="UI Customization" hidden={!sectionVisible("UI Customization")} forceOpen={sectionForceOpen("UI Customization")}>
         <div className="config-field">
-          <label>Command</label>
-          <p className="config-field-hint">
-            Path to a script that generates your terminal status line. Receives session data as JSON on stdin.
-          </p>
-          <input type="text" value={statusLine.command}
-            onChange={(e) => setStatusLine({ command: e.target.value })}
-            placeholder="~/.claude/statusline.sh" />
+          <label>Status Line Command</label>
+          <p className="config-field-hint">Path to a script that generates your terminal status line. Receives session data as JSON on stdin.</p>
+          <input type="text" value={statusLine.command} onChange={(e) => setStatusLine({ command: e.target.value })} placeholder="~/.claude/statusline.sh" />
         </div>
-      </Section>
-
-      {/* ── File Suggestion ── */}
-      <Section title="File Suggestion">
-        <div className="config-field">
-          <label>Command</label>
+        <div className="config-field" style={{ marginTop: 16 }}>
+          <label>File Suggestion Command</label>
           <p className="config-field-hint">Path to a script that provides custom file autocomplete suggestions for the @ picker.</p>
-          <input type="text" value={fileSuggestion.command}
-            onChange={(e) => setFileSuggestion({ command: e.target.value })}
-            placeholder="~/.claude/file-suggestion.sh" />
+          <input type="text" value={fileSuggestion.command} onChange={(e) => setFileSuggestion({ command: e.target.value })} placeholder="~/.claude/file-suggestion.sh" />
+        </div>
+        <div className="config-field" style={{ marginTop: 16 }}>
+          <label>Custom Spinner Verbs</label>
+          <p className="config-field-hint">Customize the action verbs shown in the spinner while Claude is working.</p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <label style={{ fontSize: 13 }}>Mode:</label>
+            <select value={spinnerVerbs.mode} onChange={(e) => setSpinnerVerbs({ ...spinnerVerbs, mode: e.target.value })} style={{ maxWidth: 200 }}>
+              {SPINNER_VERBS_MODE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
+          </div>
+          <TagInput tags={spinnerVerbs.verbs} onAdd={(v) => setSpinnerVerbs({ ...spinnerVerbs, verbs: [...spinnerVerbs.verbs, v] })} onRemove={(t) => setSpinnerVerbs({ ...spinnerVerbs, verbs: spinnerVerbs.verbs.filter((x) => x !== t) })} placeholder="Add verb (e.g. Pondering)..." emptyLabel="Using default verbs" />
+        </div>
+        <div className="config-field" style={{ marginTop: 16 }}>
+          <label>Custom Spinner Tips</label>
+          <p className="config-field-hint">Override or extend the tips shown in the spinner.</p>
+          <label className="toggle-label" style={{ marginBottom: 8 }}>
+            <input type="checkbox" checked={spinnerTips.excludeDefault} onChange={(e) => setSpinnerTips({ ...spinnerTips, excludeDefault: e.target.checked })} />
+            <span>Exclude default tips (show only custom tips)</span>
+          </label>
+          <TagInput tags={spinnerTips.tips} onAdd={(v) => setSpinnerTips({ ...spinnerTips, tips: [...spinnerTips.tips, v] })} onRemove={(t) => setSpinnerTips({ ...spinnerTips, tips: spinnerTips.tips.filter((x) => x !== t) })} placeholder="Add tip text..." emptyLabel="Using default tips" />
         </div>
       </Section>
 
       {/* ── Attribution ── */}
-      <Section title="Attribution">
+      <Section title="Attribution" hidden={!sectionVisible("Attribution")} forceOpen={sectionForceOpen("Attribution")}>
         <div className="config-field">
           <label>Commit Attribution</label>
           <p className="config-field-hint">Text appended to git commits made by Claude (e.g. Co-Authored-By header).</p>
-          <textarea rows={3} value={attrCommit} onChange={(e) => setAttrCommit(e.target.value)}
-            placeholder="e.g. Generated with AI&#10;&#10;Co-Authored-By: AI <ai@example.com>" />
+          <textarea rows={3} value={attrCommit} onChange={(e) => setAttrCommit(e.target.value)} placeholder="e.g. Generated with AI&#10;&#10;Co-Authored-By: AI <ai@example.com>" />
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>PR Attribution</label>
@@ -963,33 +776,29 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── MCP Server Approval ── */}
-      <Section title="MCP Server Approval">
+      <Section title="MCP Server Approval" hidden={!sectionVisible("MCP Server Approval")} forceOpen={sectionForceOpen("MCP Server Approval")}>
         <div className="config-field">
           <label>Enabled MCP Servers</label>
           <p className="config-field-hint">Specific MCP servers to automatically approve by name.</p>
-          <TagInput tags={enabledMcpServers} onAdd={(v) => setEnabledMcpServers([...enabledMcpServers, v])}
-            onRemove={(t) => setEnabledMcpServers(enabledMcpServers.filter((x) => x !== t))}
-            placeholder="Add server name..." emptyLabel="No servers explicitly enabled" />
+          <TagInput tags={enabledMcpServers} onAdd={(v) => setEnabledMcpServers([...enabledMcpServers, v])} onRemove={(t) => setEnabledMcpServers(enabledMcpServers.filter((x) => x !== t))} placeholder="Add server name..." emptyLabel="No servers explicitly enabled" />
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Disabled MCP Servers</label>
           <p className="config-field-hint">Specific MCP servers to automatically reject by name.</p>
-          <TagInput tags={disabledMcpServers} onAdd={(v) => setDisabledMcpServers([...disabledMcpServers, v])}
-            onRemove={(t) => setDisabledMcpServers(disabledMcpServers.filter((x) => x !== t))}
-            placeholder="Add server name..." emptyLabel="No servers explicitly disabled" />
+          <TagInput tags={disabledMcpServers} onAdd={(v) => setDisabledMcpServers([...disabledMcpServers, v])} onRemove={(t) => setDisabledMcpServers(disabledMcpServers.filter((x) => x !== t))} placeholder="Add server name..." emptyLabel="No servers explicitly disabled" />
         </div>
       </Section>
 
       {/* ── Environment Variables ── */}
-      <Section title="Environment Variables">
+      <Section title="Environment Variables" hidden={!sectionVisible("Environment Variables")} forceOpen={sectionForceOpen("Environment Variables")}>
         <div className="config-field">
           <p className="config-field-hint">Environment variables set for Claude Code sessions.</p>
-          <KeyValueEditor entries={envVars} onUpdate={setEnvVars} keyPlaceholder="VARIABLE_NAME" valuePlaceholder="value" />
+          <KeyValueEditor entries={envVars} onUpdate={setEnvVars} keyPlaceholder="VARIABLE_NAME" valuePlaceholder="value" emptyLabel="No environment variables set" />
         </div>
       </Section>
 
-      {/* ── Session & Updates ── */}
-      <Section title="Session &amp; Updates">
+      {/* ── Session & Login (merged: Session & Updates + Login & Enterprise) ── */}
+      <Section title="Session &amp; Login" hidden={!sectionVisible("Session & Login")} forceOpen={sectionForceOpen("Session & Login")}>
         <div className="config-field">
           <label>Cleanup Period (days)</label>
           <p className="config-field-hint">Days before inactive sessions are deleted. Default is 30, set to 0 to disable.</p>
@@ -1014,41 +823,27 @@ export function ConfigPage({ scope }: Props) {
             {TEAMMATE_MODE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
         </div>
-      </Section>
-
-      {/* ── Spinner Customization ── */}
-      <Section title="Spinner Customization">
-        <div className="config-field">
-          <label>Custom Spinner Verbs</label>
-          <p className="config-field-hint">Customize the action verbs shown in the spinner while Claude is working.</p>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <label style={{ fontSize: 13 }}>Mode:</label>
-            <select value={spinnerVerbs.mode} onChange={(e) => setSpinnerVerbs({ ...spinnerVerbs, mode: e.target.value })} style={{ maxWidth: 200 }}>
-              {SPINNER_VERBS_MODE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-            </select>
-          </div>
-          <TagInput tags={spinnerVerbs.verbs}
-            onAdd={(v) => setSpinnerVerbs({ ...spinnerVerbs, verbs: [...spinnerVerbs.verbs, v] })}
-            onRemove={(t) => setSpinnerVerbs({ ...spinnerVerbs, verbs: spinnerVerbs.verbs.filter((x) => x !== t) })}
-            placeholder="Add verb (e.g. Pondering)..." emptyLabel="Using default verbs" />
+        <div className="config-field" style={{ marginTop: 16 }}>
+          <label>Force Login Method</label>
+          <p className="config-field-hint">Restrict login to a specific method.</p>
+          <select value={forceLoginMethod} onChange={(e) => setForceLoginMethod(e.target.value)}>
+            {FORCE_LOGIN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
-          <label>Custom Spinner Tips</label>
-          <p className="config-field-hint">Override or extend the tips shown in the spinner.</p>
-          <label className="toggle-label" style={{ marginBottom: 8 }}>
-            <input type="checkbox" checked={spinnerTips.excludeDefault}
-              onChange={(e) => setSpinnerTips({ ...spinnerTips, excludeDefault: e.target.checked })} />
-            <span>Exclude default tips (show only custom tips)</span>
-          </label>
-          <TagInput tags={spinnerTips.tips}
-            onAdd={(v) => setSpinnerTips({ ...spinnerTips, tips: [...spinnerTips.tips, v] })}
-            onRemove={(t) => setSpinnerTips({ ...spinnerTips, tips: spinnerTips.tips.filter((x) => x !== t) })}
-            placeholder="Add tip text..." emptyLabel="Using default tips" />
+          <label>Force Login Org UUID</label>
+          <p className="config-field-hint">Auto-select this organization UUID on login.</p>
+          <input type="text" value={forceLoginOrgUUID} onChange={(e) => setForceLoginOrgUUID(e.target.value)} placeholder="Not set" />
+        </div>
+        <div className="config-field" style={{ marginTop: 16 }}>
+          <label>Company Announcements</label>
+          <p className="config-field-hint">Messages displayed to users at startup.</p>
+          <TagInput tags={companyAnnouncements} onAdd={(v) => setCompanyAnnouncements([...companyAnnouncements, v])} onRemove={(t) => setCompanyAnnouncements(companyAnnouncements.filter((x) => x !== t))} placeholder="Add announcement..." emptyLabel="No announcements" />
         </div>
       </Section>
 
-      {/* ── Custom Scripts ── */}
-      <Section title="Custom Scripts">
+      {/* ── Scripts & Hooks (merged: Custom Scripts + Hook Controls) ── */}
+      <Section title="Scripts &amp; Hooks" hidden={!sectionVisible("Scripts & Hooks")} forceOpen={sectionForceOpen("Scripts & Hooks")}>
         <div className="config-field">
           <label>API Key Helper</label>
           <p className="config-field-hint">Script to generate authentication values dynamically.</p>
@@ -1069,28 +864,20 @@ export function ConfigPage({ scope }: Props) {
           <p className="config-field-hint">Script that outputs AWS credentials JSON for Bedrock access.</p>
           <input type="text" value={awsCredentialExport} onChange={(e) => setAwsCredentialExport(e.target.value)} placeholder="/path/to/generate_aws_grant.sh" />
         </div>
-      </Section>
-
-      {/* ── Hook Controls ── */}
-      <Section title="Hook Controls">
-        <div className="config-field">
+        <div className="config-field" style={{ marginTop: 16 }}>
           <label>Allowed HTTP Hook URLs</label>
           <p className="config-field-hint">URL patterns allowed for HTTP hooks.</p>
-          <TagInput tags={allowedHttpHookUrls} onAdd={(v) => setAllowedHttpHookUrls([...allowedHttpHookUrls, v])}
-            onRemove={(t) => setAllowedHttpHookUrls(allowedHttpHookUrls.filter((x) => x !== t))}
-            placeholder="Add URL pattern..." emptyLabel="No HTTP hook URLs allowed" />
+          <TagInput tags={allowedHttpHookUrls} onAdd={(v) => setAllowedHttpHookUrls([...allowedHttpHookUrls, v])} onRemove={(t) => setAllowedHttpHookUrls(allowedHttpHookUrls.filter((x) => x !== t))} placeholder="Add URL pattern..." emptyLabel="No HTTP hook URLs allowed" />
         </div>
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>HTTP Hook Allowed Env Vars</label>
           <p className="config-field-hint">Environment variable names that HTTP hooks can access.</p>
-          <TagInput tags={httpHookAllowedEnvVars} onAdd={(v) => setHttpHookAllowedEnvVars([...httpHookAllowedEnvVars, v])}
-            onRemove={(t) => setHttpHookAllowedEnvVars(httpHookAllowedEnvVars.filter((x) => x !== t))}
-            placeholder="Add env var name..." emptyLabel="No env vars exposed to HTTP hooks" />
+          <TagInput tags={httpHookAllowedEnvVars} onAdd={(v) => setHttpHookAllowedEnvVars([...httpHookAllowedEnvVars, v])} onRemove={(t) => setHttpHookAllowedEnvVars(httpHookAllowedEnvVars.filter((x) => x !== t))} placeholder="Add env var name..." emptyLabel="No env vars exposed to HTTP hooks" />
         </div>
       </Section>
 
       {/* ── Sandbox ── */}
-      <Section title="Sandbox">
+      <Section title="Sandbox" hidden={!sectionVisible("Sandbox")} forceOpen={sectionForceOpen("Sandbox")}>
         <p className="config-field-hint" style={{ marginBottom: 12 }}>
           Advanced sandboxing configuration. Isolates bash commands using OS-level primitives (Seatbelt on macOS, bubblewrap on Linux).
         </p>
@@ -1113,103 +900,57 @@ export function ConfigPage({ scope }: Props) {
         <div className="config-field" style={{ marginTop: 16 }}>
           <label>Excluded Commands</label>
           <p className="config-field-hint">Commands that run outside the sandbox.</p>
-          <TagInput tags={sandbox.excludedCommands}
-            onAdd={(v) => setSandbox({ ...sandbox, excludedCommands: [...sandbox.excludedCommands, v] })}
-            onRemove={(t) => setSandbox({ ...sandbox, excludedCommands: sandbox.excludedCommands.filter((x) => x !== t) })}
-            placeholder="Add command..." />
+          <TagInput tags={sandbox.excludedCommands} onAdd={(v) => setSandbox({ ...sandbox, excludedCommands: [...sandbox.excludedCommands, v] })} onRemove={(t) => setSandbox({ ...sandbox, excludedCommands: sandbox.excludedCommands.filter((x) => x !== t) })} placeholder="Add command..." />
         </div>
-
         <h4 style={{ marginTop: 20, marginBottom: 8, fontSize: 14, color: "var(--text-secondary)" }}>Filesystem</h4>
         <div className="config-field">
           <label>Allow Write</label>
           <p className="config-field-hint">Paths where sandboxed commands can write. Prefix: // (root), ~/ (home), / (settings dir).</p>
-          <TagInput tags={sandbox.fsAllowWrite}
-            onAdd={(v) => setSandbox({ ...sandbox, fsAllowWrite: [...sandbox.fsAllowWrite, v] })}
-            onRemove={(t) => setSandbox({ ...sandbox, fsAllowWrite: sandbox.fsAllowWrite.filter((x) => x !== t) })}
-            placeholder="Add path..." />
+          <TagInput tags={sandbox.fsAllowWrite} onAdd={(v) => setSandbox({ ...sandbox, fsAllowWrite: [...sandbox.fsAllowWrite, v] })} onRemove={(t) => setSandbox({ ...sandbox, fsAllowWrite: sandbox.fsAllowWrite.filter((x) => x !== t) })} placeholder="Add path..." />
         </div>
         <div className="config-field" style={{ marginTop: 12 }}>
           <label>Deny Write</label>
-          <p className="config-field-hint">Paths where sandboxed commands cannot write.</p>
-          <TagInput tags={sandbox.fsDenyWrite}
-            onAdd={(v) => setSandbox({ ...sandbox, fsDenyWrite: [...sandbox.fsDenyWrite, v] })}
-            onRemove={(t) => setSandbox({ ...sandbox, fsDenyWrite: sandbox.fsDenyWrite.filter((x) => x !== t) })}
-            placeholder="Add path..." />
+          <TagInput tags={sandbox.fsDenyWrite} onAdd={(v) => setSandbox({ ...sandbox, fsDenyWrite: [...sandbox.fsDenyWrite, v] })} onRemove={(t) => setSandbox({ ...sandbox, fsDenyWrite: sandbox.fsDenyWrite.filter((x) => x !== t) })} placeholder="Add path..." />
         </div>
         <div className="config-field" style={{ marginTop: 12 }}>
           <label>Deny Read</label>
-          <p className="config-field-hint">Paths where sandboxed commands cannot read.</p>
-          <TagInput tags={sandbox.fsDenyRead}
-            onAdd={(v) => setSandbox({ ...sandbox, fsDenyRead: [...sandbox.fsDenyRead, v] })}
-            onRemove={(t) => setSandbox({ ...sandbox, fsDenyRead: sandbox.fsDenyRead.filter((x) => x !== t) })}
-            placeholder="Add path..." />
+          <TagInput tags={sandbox.fsDenyRead} onAdd={(v) => setSandbox({ ...sandbox, fsDenyRead: [...sandbox.fsDenyRead, v] })} onRemove={(t) => setSandbox({ ...sandbox, fsDenyRead: sandbox.fsDenyRead.filter((x) => x !== t) })} placeholder="Add path..." />
         </div>
-
         <h4 style={{ marginTop: 20, marginBottom: 8, fontSize: 14, color: "var(--text-secondary)" }}>Network</h4>
         <div className="config-field">
           <label>Allowed Domains</label>
           <p className="config-field-hint">Domains allowed for outbound traffic (supports wildcards like *.example.com).</p>
-          <TagInput tags={sandbox.netAllowedDomains}
-            onAdd={(v) => setSandbox({ ...sandbox, netAllowedDomains: [...sandbox.netAllowedDomains, v] })}
-            onRemove={(t) => setSandbox({ ...sandbox, netAllowedDomains: sandbox.netAllowedDomains.filter((x) => x !== t) })}
-            placeholder="Add domain..." />
+          <TagInput tags={sandbox.netAllowedDomains} onAdd={(v) => setSandbox({ ...sandbox, netAllowedDomains: [...sandbox.netAllowedDomains, v] })} onRemove={(t) => setSandbox({ ...sandbox, netAllowedDomains: sandbox.netAllowedDomains.filter((x) => x !== t) })} placeholder="Add domain..." />
         </div>
         <div className="config-field" style={{ marginTop: 12 }}>
-          <SandboxToggle label="Allow All Unix Sockets" value={sandbox.netAllowAllUnixSockets}
-            onChange={(v) => setSandbox({ ...sandbox, netAllowAllUnixSockets: v })} />
+          <SandboxToggle label="Allow All Unix Sockets" value={sandbox.netAllowAllUnixSockets} onChange={(v) => setSandbox({ ...sandbox, netAllowAllUnixSockets: v })} />
         </div>
         <div className="config-field" style={{ marginTop: 8 }}>
-          <SandboxToggle label="Allow Local Port Binding (macOS only)" value={sandbox.netAllowLocalBinding}
-            onChange={(v) => setSandbox({ ...sandbox, netAllowLocalBinding: v })} />
+          <SandboxToggle label="Allow Local Port Binding (macOS only)" value={sandbox.netAllowLocalBinding} onChange={(v) => setSandbox({ ...sandbox, netAllowLocalBinding: v })} />
         </div>
         <div className="config-field" style={{ marginTop: 12 }}>
           <label>Allow Unix Sockets</label>
           <p className="config-field-hint">Specific Unix socket paths accessible in sandbox.</p>
-          <TagInput tags={sandbox.netAllowUnixSockets}
-            onAdd={(v) => setSandbox({ ...sandbox, netAllowUnixSockets: [...sandbox.netAllowUnixSockets, v] })}
-            onRemove={(t) => setSandbox({ ...sandbox, netAllowUnixSockets: sandbox.netAllowUnixSockets.filter((x) => x !== t) })}
-            placeholder="Add socket path..." />
-        </div>
-      </Section>
-
-      {/* ── Login & Enterprise ── */}
-      <Section title="Login &amp; Enterprise">
-        <div className="config-field">
-          <label>Force Login Method</label>
-          <p className="config-field-hint">Restrict login to a specific method.</p>
-          <select value={forceLoginMethod} onChange={(e) => setForceLoginMethod(e.target.value)}>
-            {FORCE_LOGIN_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-          </select>
-        </div>
-        <div className="config-field" style={{ marginTop: 16 }}>
-          <label>Force Login Org UUID</label>
-          <p className="config-field-hint">Auto-select this organization UUID on login.</p>
-          <input type="text" value={forceLoginOrgUUID} onChange={(e) => setForceLoginOrgUUID(e.target.value)} placeholder="Not set" />
-        </div>
-        <div className="config-field" style={{ marginTop: 16 }}>
-          <label>Company Announcements</label>
-          <p className="config-field-hint">Messages displayed to users at startup.</p>
-          <TagInput tags={companyAnnouncements}
-            onAdd={(v) => setCompanyAnnouncements([...companyAnnouncements, v])}
-            onRemove={(t) => setCompanyAnnouncements(companyAnnouncements.filter((x) => x !== t))}
-            placeholder="Add announcement..." emptyLabel="No announcements" />
+          <TagInput tags={sandbox.netAllowUnixSockets} onAdd={(v) => setSandbox({ ...sandbox, netAllowUnixSockets: [...sandbox.netAllowUnixSockets, v] })} onRemove={(t) => setSandbox({ ...sandbox, netAllowUnixSockets: sandbox.netAllowUnixSockets.filter((x) => x !== t) })} placeholder="Add socket path..." />
         </div>
       </Section>
 
       {/* ── Advanced (JSON) ── */}
-      <Section title="Advanced (JSON)" hint="Custom fields not managed by the form above">
+      <Section title="Advanced (JSON)" hint="Custom fields not managed by the form above" hidden={!sectionVisible("Advanced (JSON)")} forceOpen={sectionForceOpen("Advanced (JSON)")}>
         <p className="config-field-hint" style={{ marginBottom: 8 }}>
           Edit raw JSON for additional settings not covered above. Form fields take precedence over matching keys here.
         </p>
-        <textarea
-          className={`advanced-json-editor ${jsonError ? "input-error" : ""}`}
-          rows={8} value={advancedJson}
-          onChange={(e) => {
-            setAdvancedJson(e.target.value);
-            try { JSON.parse(e.target.value); setJsonError(null); } catch (err) { setJsonError(String(err)); }
-          }} />
+        <textarea className={`advanced-json-editor ${jsonError ? "input-error" : ""}`} rows={8} value={advancedJson}
+          onChange={(e) => { setAdvancedJson(e.target.value); try { JSON.parse(e.target.value); setJsonError(null); } catch (err) { setJsonError(String(err)); } }} />
         {jsonError && <div className="field-error"><span className="field-error-message">{jsonError}</span></div>}
       </Section>
+
+      {/* No results */}
+      {sectionMatch && !Object.values(sectionMatch).some(Boolean) && (
+        <div className="settings-no-results">
+          No settings match &quot;{searchFilter}&quot;
+        </div>
+      )}
 
       {/* ── Save bar ── */}
       {isDirty && (

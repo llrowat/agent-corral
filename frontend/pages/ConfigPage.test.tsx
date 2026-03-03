@@ -363,14 +363,12 @@ describe("ConfigPage", () => {
     expect(screen.getByText("Feature Toggles")).toBeInTheDocument();
     expect(screen.getByText("Permissions")).toBeInTheDocument();
     expect(screen.getByText("File Patterns")).toBeInTheDocument();
-    expect(screen.getByText("Status Line")).toBeInTheDocument();
-    expect(screen.getByText("File Suggestion")).toBeInTheDocument();
+    expect(screen.getByText("UI Customization")).toBeInTheDocument();
     expect(screen.getByText("Attribution")).toBeInTheDocument();
     expect(screen.getByText("MCP Server Approval")).toBeInTheDocument();
     expect(screen.getByText("Environment Variables")).toBeInTheDocument();
-    expect(screen.getByText("Spinner Customization")).toBeInTheDocument();
-    expect(screen.getByText("Custom Scripts")).toBeInTheDocument();
-    expect(screen.getByText("Hook Controls")).toBeInTheDocument();
+    expect(screen.getByText("Session & Login")).toBeInTheDocument();
+    expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument();
     expect(screen.getByText("Sandbox")).toBeInTheDocument();
     expect(screen.getByText("Advanced (JSON)")).toBeInTheDocument();
   });
@@ -476,26 +474,26 @@ describe("ConfigPage", () => {
     expect(screen.getByText("MY_TOKEN")).toBeInTheDocument();
   });
 
-  it("renders Session & Updates section after expanding", async () => {
+  it("renders Session & Login section after expanding", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Session & Updates")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Session & Login")).toBeInTheDocument(); });
   });
 
   it("populates cleanupPeriodDays from config", async () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { cleanupPeriodDays: 15 } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Session & Updates")).toBeInTheDocument(); });
-    openSection("Session & Updates");
+    await waitFor(() => { expect(screen.getByText("Session & Login")).toBeInTheDocument(); });
+    openSection("Session & Login");
     expect(screen.getByDisplayValue("15")).toBeInTheDocument();
   });
 
-  it("renders Custom Scripts section after expanding", async () => {
+  it("renders Scripts & Hooks section after expanding", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Custom Scripts")).toBeInTheDocument(); });
-    openSection("Custom Scripts");
+    await waitFor(() => { expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument(); });
+    openSection("Scripts & Hooks");
     expect(screen.getByText("API Key Helper")).toBeInTheDocument();
     expect(screen.getByText("OTEL Headers Helper")).toBeInTheDocument();
     expect(screen.getByText("AWS Auth Refresh")).toBeInTheDocument();
@@ -506,17 +504,17 @@ describe("ConfigPage", () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { apiKeyHelper: "/bin/gen_key.sh", awsAuthRefresh: "aws sso login" } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Custom Scripts")).toBeInTheDocument(); });
-    openSection("Custom Scripts");
+    await waitFor(() => { expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument(); });
+    openSection("Scripts & Hooks");
     expect(screen.getByDisplayValue("/bin/gen_key.sh")).toBeInTheDocument();
     expect(screen.getByDisplayValue("aws sso login")).toBeInTheDocument();
   });
 
-  it("renders Hook Controls section after expanding", async () => {
+  it("renders hook control fields in Scripts & Hooks section", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Hook Controls")).toBeInTheDocument(); });
-    openSection("Hook Controls");
+    await waitFor(() => { expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument(); });
+    openSection("Scripts & Hooks");
     expect(screen.getByText("Allowed HTTP Hook URLs")).toBeInTheDocument();
     expect(screen.getByText("HTTP Hook Allowed Env Vars")).toBeInTheDocument();
   });
@@ -525,8 +523,8 @@ describe("ConfigPage", () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { allowedHttpHookUrls: ["https://hooks.example.com/*"], httpHookAllowedEnvVars: ["MY_TOKEN"] } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Hook Controls")).toBeInTheDocument(); });
-    openSection("Hook Controls");
+    await waitFor(() => { expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument(); });
+    openSection("Scripts & Hooks");
     expect(screen.getByText("https://hooks.example.com/*")).toBeInTheDocument();
     expect(screen.getByText("MY_TOKEN")).toBeInTheDocument();
   });
@@ -565,8 +563,8 @@ describe("ConfigPage", () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { teammateMode: "tmux" } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Session & Updates")).toBeInTheDocument(); });
-    openSection("Session & Updates");
+    await waitFor(() => { expect(screen.getByText("Session & Login")).toBeInTheDocument(); });
+    openSection("Session & Login");
     expect(screen.getByDisplayValue("tmux")).toBeInTheDocument();
   });
 
@@ -596,22 +594,22 @@ describe("ConfigPage", () => {
     });
   });
 
-  // -- Status Line --
+  // -- UI Customization (merged: Status Line + File Suggestion + Spinner) --
 
-  it("renders Status Line section with command field", async () => {
+  it("renders Status Line command field in UI Customization", async () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { statusLine: { type: "command", command: "~/.claude/statusline.sh" } } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Status Line")).toBeInTheDocument(); });
-    openSection("Status Line");
+    await waitFor(() => { expect(screen.getByText("UI Customization")).toBeInTheDocument(); });
+    openSection("UI Customization");
     expect(screen.getByDisplayValue("~/.claude/statusline.sh")).toBeInTheDocument();
   });
 
   it("saves statusLine command to raw config", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Status Line")).toBeInTheDocument(); });
-    openSection("Status Line");
+    await waitFor(() => { expect(screen.getByText("UI Customization")).toBeInTheDocument(); });
+    openSection("UI Customization");
     const input = screen.getByPlaceholderText("~/.claude/statusline.sh");
     fireEvent.change(input, { target: { value: "/opt/statusline" } });
     const updatedConfig: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { statusLine: { type: "command", command: "/opt/statusline" } } };
@@ -623,25 +621,21 @@ describe("ConfigPage", () => {
     });
   });
 
-  // -- File Suggestion --
-
-  it("renders File Suggestion section with command field", async () => {
+  it("renders File Suggestion command field in UI Customization", async () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { fileSuggestion: { type: "command", command: "~/.claude/file-suggestion.sh" } } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("File Suggestion")).toBeInTheDocument(); });
-    openSection("File Suggestion");
+    await waitFor(() => { expect(screen.getByText("UI Customization")).toBeInTheDocument(); });
+    openSection("UI Customization");
     expect(screen.getByDisplayValue("~/.claude/file-suggestion.sh")).toBeInTheDocument();
   });
 
-  // -- Spinner Customization --
-
-  it("renders Spinner Customization section with verbs and tips", async () => {
+  it("renders spinner verbs and tips in UI Customization", async () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { spinnerVerbs: { mode: "append", verbs: ["Pondering", "Crafting"] }, spinnerTipsOverride: { excludeDefault: true, tips: ["Use X"] } } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Spinner Customization")).toBeInTheDocument(); });
-    openSection("Spinner Customization");
+    await waitFor(() => { expect(screen.getByText("UI Customization")).toBeInTheDocument(); });
+    openSection("UI Customization");
     expect(screen.getByText("Pondering")).toBeInTheDocument();
     expect(screen.getByText("Crafting")).toBeInTheDocument();
     expect(screen.getByText("Use X")).toBeInTheDocument();
@@ -664,13 +658,13 @@ describe("ConfigPage", () => {
     expect(screen.getByText("*.example.com")).toBeInTheDocument();
   });
 
-  // -- Login & Enterprise --
+  // -- Login fields (inside Session & Login) --
 
-  it("renders Login & Enterprise section after expanding", async () => {
+  it("renders login fields in Session & Login section", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Login & Enterprise")).toBeInTheDocument(); });
-    openSection("Login & Enterprise");
+    await waitFor(() => { expect(screen.getByText("Session & Login")).toBeInTheDocument(); });
+    openSection("Session & Login");
     expect(screen.getByText("Force Login Method")).toBeInTheDocument();
     expect(screen.getByText("Force Login Org UUID")).toBeInTheDocument();
     expect(screen.getByText("Company Announcements")).toBeInTheDocument();
@@ -680,10 +674,50 @@ describe("ConfigPage", () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { forceLoginMethod: "claudeai", forceLoginOrgUUID: "org-123", companyAnnouncements: ["Welcome!"] } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Login & Enterprise")).toBeInTheDocument(); });
-    openSection("Login & Enterprise");
+    await waitFor(() => { expect(screen.getByText("Session & Login")).toBeInTheDocument(); });
+    openSection("Session & Login");
     expect(screen.getByDisplayValue("Claude.ai")).toBeInTheDocument();
     expect(screen.getByDisplayValue("org-123")).toBeInTheDocument();
     expect(screen.getByText("Welcome!")).toBeInTheDocument();
+  });
+
+  // -- Search filter --
+
+  it("renders the search filter input", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    expect(screen.getByPlaceholderText("Filter settings...")).toBeInTheDocument();
+  });
+
+  it("hides non-matching sections when filtering", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    const searchInput = screen.getByPlaceholderText("Filter settings...");
+    fireEvent.change(searchInput, { target: { value: "sandbox" } });
+    expect(screen.getByText("Sandbox")).toBeInTheDocument();
+    expect(screen.queryByText("General")).not.toBeInTheDocument();
+    expect(screen.queryByText("Attribution")).not.toBeInTheDocument();
+  });
+
+  it("shows no-results message when filter matches nothing", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    const searchInput = screen.getByPlaceholderText("Filter settings...");
+    fireEvent.change(searchInput, { target: { value: "xyznonexistent" } });
+    expect(screen.getByText(/No settings match/)).toBeInTheDocument();
+  });
+
+  it("clears filter when clear button is clicked", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    const searchInput = screen.getByPlaceholderText("Filter settings...");
+    fireEvent.change(searchInput, { target: { value: "sandbox" } });
+    expect(screen.queryByText("General")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Clear filter"));
+    expect(screen.getByText("General")).toBeInTheDocument();
   });
 });
