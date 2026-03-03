@@ -31,6 +31,10 @@ No more digging through dotfiles. No more wondering which repo has that hook you
 
 Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
+<p align="center">
+  <img src="assets/screenshot_overview.png" alt="Overview dashboard with config linter, effective configuration, and feature cards" width="500" />
+</p>
+
 ---
 
 ## Features
@@ -38,10 +42,17 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 - **Global + Project Scope** — Manage configuration at the global (`~/.claude/`) or project (`.claude/`) level. A scope toggle in the header switches between them, and an effective config view shows the merged result with source annotations.
 - **Repo Registry** — Add and switch between repositories. The overview dashboard shows which repos have agents, hooks, skills, MCP servers, and memory configured.
 - **Agent Studio** — Create, edit, and delete agents with a visual editor. Configure tools, model overrides, and memory bindings. Built-in presets for common roles (code reviewer, test writer, doc writer, refactorer). Launch agents directly from the app with `claude --agent <id>`.
+
+  <img src="assets/screenshot_agents.png" alt="Agent Studio showing a Code Reviewer agent with system prompt, tools, and CLI launch" width="500" />
+
 - **Hooks Editor** — Manage hooks (PreToolUse, PostToolUse, Notification, Stop, SubagentStop) with built-in presets and drag & drop reordering for execution priority.
 - **Skills Editor** — Create and manage skills with YAML frontmatter and markdown content.
+
+  <img src="assets/screenshot_skills.png" alt="Skills editor with schema-driven form for creating a new skill" width="500" />
 - **MCP Servers** — Configure Model Context Protocol servers with health checks to verify availability.
 - **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. Snapshot configuration at any point and restore from history.
+
+  <img src="assets/screenshot_config.png" alt="Config Studio with model selection and feature toggles" width="500" />
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
 - **Plugin System** — Bundle agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, install from git, and auto-sync when the source changes.
 - **Config Linter** — Comprehensive linting of your Claude Code configuration with 20+ rules. Detects hierarchy conflicts (CLAUDE.md contradictions, agent/skill/MCP shadowing, permission clashes, model overrides), validates references (dangling memory stores, nonexistent agents in skills), flags incomplete config (placeholder env vars, missing commands, empty prompts), and checks settings.json for unknown keys. Filterable by severity and groupable by category, severity, or scope.
