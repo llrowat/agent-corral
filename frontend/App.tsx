@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { ScopeSwitcher } from "./components/ScopeSwitcher";
 import { GlobalSearch } from "./components/GlobalSearch";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AgentsPage } from "./pages/AgentsPage";
@@ -32,6 +33,14 @@ function App() {
     getClaudeHome().then(setHomePath).catch(() => {});
   }, []);
 
+  // Key pages on scope identity so they fully remount on scope change,
+  // preventing stale async state from causing blank renders.
+  const scopeKey = scope?.type === "global"
+    ? `global:${scope.homePath}`
+    : scope?.type === "project"
+      ? `project:${scope.repo.repo_id}`
+      : "none";
+
   return (
     <div className="app-layout">
       <header className="app-header">
@@ -60,6 +69,7 @@ function App() {
       <div className="app-body">
         <Sidebar scope={scope} />
         <main className="app-main">
+          <ErrorBoundary key={scopeKey}>
           <Routes>
             <Route
               path="/"
@@ -67,44 +77,45 @@ function App() {
             />
             <Route
               path="/overview"
-              element={<OverviewPage scope={scope} homePath={homePath} />}
+              element={<OverviewPage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route
               path="/claude-md"
-              element={<ClaudeMdPage scope={scope} homePath={homePath} />}
+              element={<ClaudeMdPage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route
               path="/agents"
-              element={<AgentsPage scope={scope} homePath={homePath} />}
+              element={<AgentsPage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route
               path="/hooks"
-              element={<HooksPage scope={scope} homePath={homePath} />}
+              element={<HooksPage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route
               path="/skills"
-              element={<SkillsPage scope={scope} homePath={homePath} />}
+              element={<SkillsPage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route
               path="/mcp"
-              element={<McpPage scope={scope} homePath={homePath} />}
+              element={<McpPage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route
               path="/config"
-              element={<ConfigPage scope={scope} />}
+              element={<ConfigPage key={scopeKey} scope={scope} />}
             />
             <Route
               path="/memory"
-              element={<MemoryPage scope={scope} homePath={homePath} />}
+              element={<MemoryPage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route
               path="/history"
-              element={<HistoryPage scope={scope} />}
+              element={<HistoryPage key={scopeKey} scope={scope} />}
             />
-            <Route path="/packs" element={<PacksPage scope={scope} />} />
-            <Route path="/plugins" element={<PluginsPage scope={scope} />} />
+            <Route path="/packs" element={<PacksPage key={scopeKey} scope={scope} />} />
+            <Route path="/plugins" element={<PluginsPage key={scopeKey} scope={scope} />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
+          </ErrorBoundary>
         </main>
       </div>
       <GlobalSearch scope={scope} />
