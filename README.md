@@ -1,6 +1,6 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/agent_corral_icon_white.png" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/agent_corral_icon.png" />
     <source media="(prefers-color-scheme: light)" srcset="assets/agent_corral_icon_black.png" />
     <img src="assets/agent_corral_icon_black.png" alt="AgentCorral" width="200" />
   </picture>
