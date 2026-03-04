@@ -11,7 +11,7 @@ const toolCheckboxSchema = {
       description: "Tools this agent is allowed to use.",
       items: { type: "string" as const },
       uniqueItems: true,
-      "x-field": { widget: "tool-checkboxes" },
+      "x-field": { widget: "tool-checkboxes" as const },
     },
   },
 };
