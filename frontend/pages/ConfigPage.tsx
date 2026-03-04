@@ -565,6 +565,33 @@ export function ConfigPage({ scope }: Props) {
     return sectionMatch !== null && sectionMatch[title] ? true : undefined;
   }
 
+  // -- Section "has values" indicators --
+
+  const sectionValues = useMemo(() => {
+    const raw = (savedConfig.raw ?? {}) as Record<string, unknown>;
+    const hasGeneral = !!(savedConfig.model || readString(raw, "language") || readString(raw, "outputStyle") || readStringArray(raw, "availableModels").length > 0);
+    const hasToggles = FEATURE_TOGGLES.some((t) => readToggle(raw, t.settingsPath) !== null);
+    const pp = parsePermissions(savedConfig.permissions);
+    const hasPerms = !!(pp.allow.length || pp.deny.length || pp.ask.length || pp.defaultMode || pp.additionalDirectories.length || pp.disableBypassPermissionsMode);
+    const hasFilePatterns = !!(savedConfig.ignorePatterns && savedConfig.ignorePatterns.length > 0);
+    const sl = readStatusLine(raw); const fs = readFileSuggestion(raw); const sv = readSpinnerVerbs(raw); const st = readSpinnerTips(raw);
+    const hasUi = !!(sl.command || fs.command || sv.verbs.length > 0 || st.tips.length > 0);
+    const attr = readAttribution(raw);
+    const hasAttr = !!(attr.commit || attr.pr);
+    const hasMcp = !!(readStringArray(raw, "enabledMcpjsonServers").length > 0 || readStringArray(raw, "disabledMcpjsonServers").length > 0);
+    const hasEnv = Object.keys(readEnvVars(raw, MANAGED_ENV_KEYS)).length > 0;
+    const hasSession = !!(readNumber(raw, "cleanupPeriodDays") !== null || readString(raw, "autoUpdatesChannel") || readString(raw, "plansDirectory") || readString(raw, "teammateMode") || readString(raw, "forceLoginMethod") || readString(raw, "forceLoginOrgUUID") || readStringArray(raw, "companyAnnouncements").length > 0);
+    const hasScripts = !!(readString(raw, "apiKeyHelper") || readString(raw, "otelHeadersHelper") || readString(raw, "awsAuthRefresh") || readString(raw, "awsCredentialExport") || readStringArray(raw, "allowedHttpHookUrls").length > 0 || readStringArray(raw, "httpHookAllowedEnvVars").length > 0);
+    const hasSandbox = buildSandbox(readSandbox(raw)) !== null;
+    const hasAdvanced = Object.keys(getExtraRawFields(raw)).length > 0;
+    return {
+      "General": hasGeneral, "Feature Toggles": hasToggles, "Permissions": hasPerms,
+      "File Patterns": hasFilePatterns, "UI Customization": hasUi, "Attribution": hasAttr,
+      "MCP Server Approval": hasMcp, "Environment Variables": hasEnv, "Session & Login": hasSession,
+      "Scripts & Hooks": hasScripts, "Sandbox": hasSandbox, "Advanced (JSON)": hasAdvanced,
+    };
+  }, [savedConfig]);
+
   // -- Hierarchy helpers --
 
   const globalPerms = parsePermissions(globalConfig.permissions);
@@ -624,7 +651,7 @@ export function ConfigPage({ scope }: Props) {
       </div>
 
       {/* ── General ── */}
-      <Section title="General" defaultOpen hidden={!sectionVisible("General")} forceOpen={sectionForceOpen("General")}>
+      <Section title="General" defaultOpen hidden={!sectionVisible("General")} forceOpen={sectionForceOpen("General")} hasValues={sectionValues["General"]}>
         <div className="config-field">
           <div className="config-field-header">
             <label>Default Model</label>
@@ -653,7 +680,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Feature Toggles ── */}
-      <Section title="Feature Toggles" defaultOpen hidden={!sectionVisible("Feature Toggles")} forceOpen={sectionForceOpen("Feature Toggles")}>
+      <Section title="Feature Toggles" defaultOpen hidden={!sectionVisible("Feature Toggles")} forceOpen={sectionForceOpen("Feature Toggles")} hasValues={sectionValues["Feature Toggles"]}>
         {FEATURE_TOGGLES.map((toggle) => {
           const current = toggles[toggle.key];
           const isOn = current === true;
@@ -678,7 +705,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Permissions ── */}
-      <Section title="Permissions" hint={isProject && (globalPerms.allow.length > 0 || globalPerms.deny.length > 0) ? "Arrays merge across scopes" : undefined} hidden={!sectionVisible("Permissions")} forceOpen={sectionForceOpen("Permissions")}>
+      <Section title="Permissions" hint={isProject && (globalPerms.allow.length > 0 || globalPerms.deny.length > 0) ? "Arrays merge across scopes" : undefined} hidden={!sectionVisible("Permissions")} forceOpen={sectionForceOpen("Permissions")} hasValues={sectionValues["Permissions"]}>
         <div className="config-field">
           <label>Default Permission Mode</label>
           <p className="config-field-hint">Default permission mode when Claude Code starts.</p>
@@ -719,7 +746,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── File Patterns ── */}
-      <Section title="File Patterns" hint={isProject && globalConfig.ignorePatterns && globalConfig.ignorePatterns.length > 0 ? "Arrays merge across scopes" : undefined} hidden={!sectionVisible("File Patterns")} forceOpen={sectionForceOpen("File Patterns")}>
+      <Section title="File Patterns" hint={isProject && globalConfig.ignorePatterns && globalConfig.ignorePatterns.length > 0 ? "Arrays merge across scopes" : undefined} hidden={!sectionVisible("File Patterns")} forceOpen={sectionForceOpen("File Patterns")} hasValues={sectionValues["File Patterns"]}>
         <div className="config-field">
           <label>Ignore Patterns</label>
           <p className="config-field-hint">Files and directories Claude should ignore during operations.</p>
@@ -728,7 +755,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── UI Customization (merged: Status Line + File Suggestion + Spinner) ── */}
-      <Section title="UI Customization" hidden={!sectionVisible("UI Customization")} forceOpen={sectionForceOpen("UI Customization")}>
+      <Section title="UI Customization" hidden={!sectionVisible("UI Customization")} forceOpen={sectionForceOpen("UI Customization")} hasValues={sectionValues["UI Customization"]}>
         <div className="config-field">
           <label>Status Line Command</label>
           <p className="config-field-hint">Path to a script that generates your terminal status line. Receives session data as JSON on stdin.</p>
@@ -762,7 +789,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Attribution ── */}
-      <Section title="Attribution" hidden={!sectionVisible("Attribution")} forceOpen={sectionForceOpen("Attribution")}>
+      <Section title="Attribution" hidden={!sectionVisible("Attribution")} forceOpen={sectionForceOpen("Attribution")} hasValues={sectionValues["Attribution"]}>
         <div className="config-field">
           <label>Commit Attribution</label>
           <p className="config-field-hint">Text appended to git commits made by Claude (e.g. Co-Authored-By header).</p>
@@ -776,7 +803,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── MCP Server Approval ── */}
-      <Section title="MCP Server Approval" hidden={!sectionVisible("MCP Server Approval")} forceOpen={sectionForceOpen("MCP Server Approval")}>
+      <Section title="MCP Server Approval" hidden={!sectionVisible("MCP Server Approval")} forceOpen={sectionForceOpen("MCP Server Approval")} hasValues={sectionValues["MCP Server Approval"]}>
         <div className="config-field">
           <label>Enabled MCP Servers</label>
           <p className="config-field-hint">Specific MCP servers to automatically approve by name.</p>
@@ -790,7 +817,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Environment Variables ── */}
-      <Section title="Environment Variables" hidden={!sectionVisible("Environment Variables")} forceOpen={sectionForceOpen("Environment Variables")}>
+      <Section title="Environment Variables" hidden={!sectionVisible("Environment Variables")} forceOpen={sectionForceOpen("Environment Variables")} hasValues={sectionValues["Environment Variables"]}>
         <div className="config-field">
           <p className="config-field-hint">Environment variables set for Claude Code sessions.</p>
           <KeyValueEditor entries={envVars} onUpdate={setEnvVars} keyPlaceholder="VARIABLE_NAME" valuePlaceholder="value" emptyLabel="No environment variables set" />
@@ -798,7 +825,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Session & Login (merged: Session & Updates + Login & Enterprise) ── */}
-      <Section title="Session &amp; Login" hidden={!sectionVisible("Session & Login")} forceOpen={sectionForceOpen("Session & Login")}>
+      <Section title="Session &amp; Login" hidden={!sectionVisible("Session & Login")} forceOpen={sectionForceOpen("Session & Login")} hasValues={sectionValues["Session & Login"]}>
         <div className="config-field">
           <label>Cleanup Period (days)</label>
           <p className="config-field-hint">Days before inactive sessions are deleted. Default is 30, set to 0 to disable.</p>
@@ -843,7 +870,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Scripts & Hooks (merged: Custom Scripts + Hook Controls) ── */}
-      <Section title="Scripts &amp; Hooks" hidden={!sectionVisible("Scripts & Hooks")} forceOpen={sectionForceOpen("Scripts & Hooks")}>
+      <Section title="Scripts &amp; Hooks" hidden={!sectionVisible("Scripts & Hooks")} forceOpen={sectionForceOpen("Scripts & Hooks")} hasValues={sectionValues["Scripts & Hooks"]}>
         <div className="config-field">
           <label>API Key Helper</label>
           <p className="config-field-hint">Script to generate authentication values dynamically.</p>
@@ -877,7 +904,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Sandbox ── */}
-      <Section title="Sandbox" hidden={!sectionVisible("Sandbox")} forceOpen={sectionForceOpen("Sandbox")}>
+      <Section title="Sandbox" hidden={!sectionVisible("Sandbox")} forceOpen={sectionForceOpen("Sandbox")} hasValues={sectionValues["Sandbox"]}>
         <p className="config-field-hint" style={{ marginBottom: 12 }}>
           Advanced sandboxing configuration. Isolates bash commands using OS-level primitives (Seatbelt on macOS, bubblewrap on Linux).
         </p>
@@ -936,7 +963,7 @@ export function ConfigPage({ scope }: Props) {
       </Section>
 
       {/* ── Advanced (JSON) ── */}
-      <Section title="Advanced (JSON)" hint="Custom fields not managed by the form above" hidden={!sectionVisible("Advanced (JSON)")} forceOpen={sectionForceOpen("Advanced (JSON)")}>
+      <Section title="Advanced (JSON)" hint="Custom fields not managed by the form above" hidden={!sectionVisible("Advanced (JSON)")} forceOpen={sectionForceOpen("Advanced (JSON)")} hasValues={sectionValues["Advanced (JSON)"]}>
         <p className="config-field-hint" style={{ marginBottom: 8 }}>
           Edit raw JSON for additional settings not covered above. Form fields take precedence over matching keys here.
         </p>

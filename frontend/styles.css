@@ -940,6 +940,15 @@ body {
   font-style: italic;
 }
 
+.section-has-values {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
 .config-section-body {
   padding: 16px;
 }

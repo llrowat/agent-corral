@@ -720,4 +720,40 @@ describe("ConfigPage", () => {
     fireEvent.click(screen.getByLabelText("Clear filter"));
     expect(screen.getByText("General")).toBeInTheDocument();
   });
+
+  // -- Section has-values indicator --
+
+  it("shows indicator dot on sections that have configured values", async () => {
+    mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
+    // SAMPLE_CONFIG has model, permissions, and ignorePatterns — those sections should have dots
+    const generalSection = screen.getByText("General").closest("[data-section]")!;
+    expect(generalSection.querySelector(".section-has-values")).toBeTruthy();
+    const permsSection = screen.getByText("Permissions").closest("[data-section]")!;
+    expect(permsSection.querySelector(".section-has-values")).toBeTruthy();
+    const patternsSection = screen.getByText("File Patterns").closest("[data-section]")!;
+    expect(patternsSection.querySelector(".section-has-values")).toBeTruthy();
+  });
+
+  it("does not show indicator dot on sections without configured values", async () => {
+    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
+    const generalSection = screen.getByText("General").closest("[data-section]")!;
+    expect(generalSection.querySelector(".section-has-values")).toBeNull();
+    const permsSection = screen.getByText("Permissions").closest("[data-section]")!;
+    expect(permsSection.querySelector(".section-has-values")).toBeNull();
+    const sandboxSection = screen.getByText("Sandbox").closest("[data-section]")!;
+    expect(sandboxSection.querySelector(".section-has-values")).toBeNull();
+  });
+
+  it("shows indicator dot on sandbox section when sandbox is configured", async () => {
+    const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { sandbox: { enabled: true } } };
+    mockReadClaudeConfig.mockResolvedValue(config);
+    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
+    const sandboxSection = screen.getByText("Sandbox").closest("[data-section]")!;
+    expect(sandboxSection.querySelector(".section-has-values")).toBeTruthy();
+  });
 });

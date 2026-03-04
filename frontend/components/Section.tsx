@@ -8,6 +8,8 @@ interface SectionProps {
   forceOpen?: boolean;
   /** When true, hide this section entirely. */
   hidden?: boolean;
+  /** When true, show an indicator dot that this section has configured values. */
+  hasValues?: boolean;
   children: React.ReactNode;
 }
 
@@ -17,6 +19,7 @@ export function Section({
   defaultOpen = false,
   forceOpen,
   hidden,
+  hasValues,
   children,
 }: SectionProps) {
   const [userOpen, setUserOpen] = useState(defaultOpen);
@@ -33,6 +36,7 @@ export function Section({
       >
         <span className={`toggle-arrow ${open ? "open" : ""}`}>&#9654;</span>
         <h3>{title}</h3>
+        {hasValues && <span className="section-has-values" title="Has configured values" />}
         {hint && <span className="config-section-hint">{hint}</span>}
       </button>
       {open && <div className="config-section-body">{children}</div>}
