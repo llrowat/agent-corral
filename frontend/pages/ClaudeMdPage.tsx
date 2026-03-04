@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Scope } from "@/types";
 import * as api from "@/lib/tauri";
+import type { MarkdownReference } from "@/lib/tauri";
 import { useToast } from "@/components/Toast";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import { DocsLink } from "@/components/DocsLink";
@@ -26,6 +27,8 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
   const [content, setContent] = useState("");
   const [globalContent, setGlobalContent] = useState("");
   const [nestedFiles, setNestedFiles] = useState<string[]>([]);
+  const [mdRefs, setMdRefs] = useState<MarkdownReference[]>([]);
+  const [expandedRef, setExpandedRef] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const basePath =
@@ -40,12 +43,14 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
     if (!basePath) return;
     setLoading(true);
     try {
-      const [md, nested] = await Promise.all([
+      const [md, nested, refs] = await Promise.all([
         api.readClaudeMd(basePath),
         api.listClaudeMdFiles(basePath).catch(() => [] as string[]),
+        api.listMarkdownReferences(basePath).catch(() => [] as MarkdownReference[]),
       ]);
       setContent(md);
       setNestedFiles(nested);
+      setMdRefs(refs);
     } catch {
       setContent("");
     } finally {
@@ -136,6 +141,60 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
               <div className="claude-md-preview">
                 <MarkdownPreview content={content} />
               </div>
+            </div>
+          )}
+
+          {/* Markdown references (@file.md) */}
+          {mdRefs.length > 0 && (
+            <div className="claude-md-references" style={{ marginTop: 24 }}>
+              <h3>Referenced Files</h3>
+              <p className="text-muted">
+                Files included via <code>@file.md</code> references in CLAUDE.md:
+              </p>
+              <ul className="nested-file-list">
+                {mdRefs.map((ref_) => (
+                  <li key={ref_.filePath}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        cursor: ref_.exists ? "pointer" : "default",
+                      }}
+                      onClick={() =>
+                        ref_.exists &&
+                        setExpandedRef(
+                          expandedRef === ref_.filePath ? null : ref_.filePath
+                        )
+                      }
+                    >
+                      <code>{ref_.reference}</code>
+                      {ref_.exists ? (
+                        <span
+                          className="badge badge-success"
+                          style={{ fontSize: 11 }}
+                        >
+                          found
+                        </span>
+                      ) : (
+                        <span
+                          className="badge badge-warning"
+                          style={{ fontSize: 11 }}
+                        >
+                          missing
+                        </span>
+                      )}
+                    </div>
+                    {ref_.exists &&
+                      ref_.content &&
+                      expandedRef === ref_.filePath && (
+                        <div style={{ marginTop: 8 }}>
+                          <MarkdownPreview content={ref_.content} />
+                        </div>
+                      )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

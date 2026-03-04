@@ -200,6 +200,11 @@ pub fn list_claude_md_files(repo_path: String) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+pub fn list_markdown_references(repo_path: String) -> Result<Vec<crate::claude_adapter::MarkdownReference>, String> {
+    ClaudeRepoAdapter::list_markdown_references(&repo_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn save_config_snapshot(repo_path: String, label: String) -> Result<ConfigSnapshot, String> {
     ClaudeRepoAdapter::save_config_snapshot(&repo_path, &label).map_err(|e| e.to_string())
 }

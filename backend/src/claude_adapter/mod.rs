@@ -219,6 +219,17 @@ pub struct ProjectScanResult {
     pub memory_store_count: usize,
 }
 
+// -- Markdown reference types --
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkdownReference {
+    pub reference: String,   // the raw "@filename.md" text
+    pub file_path: String,   // resolved relative path
+    pub exists: bool,        // whether the file exists on disk
+    pub content: Option<String>, // file content if it exists
+}
+
 // -- Config Lint types --
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1819,6 +1830,45 @@ impl ClaudeRepoAdapter {
         Ok(files)
     }
 
+    /// Parse @file.md references from CLAUDE.md content.
+    /// Returns references found on lines starting with @ (e.g., "@agents.md", "@coding-standards.md").
+    pub fn parse_markdown_references(content: &str) -> Vec<String> {
+        let re = regex::Regex::new(r"(?m)^@(\S+\.md)\s*$").unwrap();
+        re.captures_iter(content)
+            .map(|cap| cap[1].to_string())
+            .collect()
+    }
+
+    /// List @file.md references from a repo's CLAUDE.md with resolution status.
+    pub fn list_markdown_references(repo_path: &str) -> Result<Vec<MarkdownReference>, ClaudeAdapterError> {
+        let content = Self::read_claude_md(repo_path)?;
+        if content.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let base = Path::new(repo_path);
+        let refs = Self::parse_markdown_references(&content);
+
+        Ok(refs
+            .into_iter()
+            .map(|reference| {
+                let resolved = base.join(&reference);
+                let exists = resolved.is_file();
+                let file_content = if exists {
+                    fs::read_to_string(&resolved).ok()
+                } else {
+                    None
+                };
+                MarkdownReference {
+                    reference: format!("@{}", reference),
+                    file_path: reference,
+                    exists,
+                    content: file_content,
+                }
+            })
+            .collect())
+    }
+
     /// Save a snapshot of the current config state with a label
     pub fn save_config_snapshot(repo_path: &str, label: &str) -> Result<ConfigSnapshot, ClaudeAdapterError> {
         let claude_dir = Path::new(repo_path).join(".claude");
@@ -2155,6 +2205,31 @@ impl ClaudeRepoAdapter {
                 entity_id: None,
                 scope: Some("project".into()),
             });
+        }
+
+        // =======================================================
+        // RULE: claudemd-broken-reference
+        // =======================================================
+        if let Ok(md_refs) = Self::list_markdown_references(project_path) {
+            for md_ref in &md_refs {
+                if !md_ref.exists {
+                    issues.push(LintIssue {
+                        severity: "warning".into(),
+                        category: "claudemd".into(),
+                        rule: "claudemd-broken-reference".into(),
+                        message: format!(
+                            "CLAUDE.md references \"{}\" but the file does not exist",
+                            md_ref.reference
+                        ),
+                        fix: Some(format!(
+                            "Create the file \"{}\" or remove the reference from CLAUDE.md",
+                            md_ref.file_path
+                        )),
+                        entity_id: None,
+                        scope: Some("project".into()),
+                    });
+                }
+            }
         }
 
         // =======================================================
@@ -3807,6 +3882,56 @@ mod tests {
         assert_eq!(files, vec!["frontend/CLAUDE.md"]);
     }
 
+    // -- markdown reference tests --
+
+    #[test]
+    fn parse_markdown_references_extracts_refs() {
+        let content = "# Project\n\n@agents.md\n@coding-standards.md\n\nSome other text\n";
+        let refs = ClaudeRepoAdapter::parse_markdown_references(content);
+        assert_eq!(refs, vec!["agents.md", "coding-standards.md"]);
+    }
+
+    #[test]
+    fn parse_markdown_references_ignores_inline() {
+        let content = "Use @agents.md in your workflow\n";
+        let refs = ClaudeRepoAdapter::parse_markdown_references(content);
+        assert!(refs.is_empty(), "inline @ references should not be matched");
+    }
+
+    #[test]
+    fn parse_markdown_references_empty_content() {
+        let refs = ClaudeRepoAdapter::parse_markdown_references("");
+        assert!(refs.is_empty());
+    }
+
+    #[test]
+    fn list_markdown_references_resolves_existing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+        std::fs::write(dir.path().join("CLAUDE.md"), "# Project\n@agents.md\n@missing.md\n").unwrap();
+        std::fs::write(dir.path().join("agents.md"), "# Agents\nAgent instructions").unwrap();
+
+        let refs = ClaudeRepoAdapter::list_markdown_references(path).unwrap();
+        assert_eq!(refs.len(), 2);
+
+        assert_eq!(refs[0].reference, "@agents.md");
+        assert_eq!(refs[0].file_path, "agents.md");
+        assert!(refs[0].exists);
+        assert_eq!(refs[0].content.as_deref(), Some("# Agents\nAgent instructions"));
+
+        assert_eq!(refs[1].reference, "@missing.md");
+        assert_eq!(refs[1].file_path, "missing.md");
+        assert!(!refs[1].exists);
+        assert!(refs[1].content.is_none());
+    }
+
+    #[test]
+    fn list_markdown_references_empty_when_no_claude_md() {
+        let dir = tempfile::tempdir().unwrap();
+        let refs = ClaudeRepoAdapter::list_markdown_references(dir.path().to_str().unwrap()).unwrap();
+        assert!(refs.is_empty());
+    }
+
     // -- config snapshot tests --
 
     #[test]
@@ -5067,5 +5192,50 @@ mod tests {
             .issues
             .iter()
             .any(|i| i.rule == "hierarchy-hook-duplicate-event"));
+    }
+
+    #[test]
+    fn lint_claudemd_broken_reference_detected() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        // Create CLAUDE.md with a broken reference
+        std::fs::write(
+            dir.path().join("CLAUDE.md"),
+            "# Project\n@agents.md\n@missing.md\n",
+        )
+        .unwrap();
+        // Create agents.md so only missing.md is broken
+        std::fs::write(dir.path().join("agents.md"), "# Agents").unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        let broken_refs: Vec<_> = result
+            .issues
+            .iter()
+            .filter(|i| i.rule == "claudemd-broken-reference")
+            .collect();
+        assert_eq!(broken_refs.len(), 1);
+        assert!(broken_refs[0].message.contains("@missing.md"));
+    }
+
+    #[test]
+    fn lint_claudemd_no_broken_reference_when_all_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        std::fs::write(
+            dir.path().join("CLAUDE.md"),
+            "# Project\n@agents.md\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("agents.md"), "# Agents").unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(!result
+            .issues
+            .iter()
+            .any(|i| i.rule == "claudemd-broken-reference"));
     }
 }
