@@ -74,7 +74,7 @@ describe("ConfigPage", () => {
   it("renders ignore patterns as tags after expanding File Patterns", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     openSection("File Patterns");
     expect(screen.getByText("node_modules")).toBeInTheDocument();
     expect(screen.getByText(".git")).toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("ConfigPage", () => {
   it("renders permission allow/deny tools as tags after expanding Permissions", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     openSection("Permissions");
     expect(screen.getByLabelText("Remove Bash(npm test)")).toBeInTheDocument();
     expect(screen.getByLabelText("Remove Bash(rm -rf *)")).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("ConfigPage", () => {
   it("can add and remove ignore pattern tags", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     openSection("File Patterns");
     expect(screen.getByText("node_modules")).toBeInTheDocument();
     const patternInput = screen.getByPlaceholderText("Add pattern...");
@@ -141,7 +141,7 @@ describe("ConfigPage", () => {
   it("can add allowed tool via Enter key", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     openSection("Permissions");
     const allowInput = screen.getByPlaceholderText("Add tool pattern...");
     fireEvent.change(allowInput, { target: { value: "MyTool" } });
@@ -218,7 +218,7 @@ describe("ConfigPage", () => {
   it("does not show source badges in global scope", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     expect(screen.queryByText("Inherited from global")).not.toBeInTheDocument();
     expect(screen.queryByText("Project override")).not.toBeInTheDocument();
   });
@@ -243,7 +243,7 @@ describe("ConfigPage", () => {
   it("prevents adding duplicate ignore patterns", async () => {
     mockReadClaudeConfig.mockResolvedValue(SAMPLE_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     openSection("File Patterns");
     const input = screen.getByPlaceholderText("Add pattern...");
     fireEvent.change(input, { target: { value: "node_modules" } });
@@ -357,7 +357,7 @@ describe("ConfigPage", () => {
   it("renders all section headers even when collapsed", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     // All section titles should always be visible as toggle buttons
     expect(screen.getByText("General")).toBeInTheDocument();
     expect(screen.getByText("Feature Toggles")).toBeInTheDocument();
@@ -376,7 +376,7 @@ describe("ConfigPage", () => {
   it("General and Feature Toggles are open by default", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     // General is open — model dropdown should be visible
     expect(screen.getByDisplayValue("Not set (defaults to Opus)")).toBeInTheDocument();
     // Feature Toggles is open — toggles visible
@@ -386,7 +386,7 @@ describe("ConfigPage", () => {
   it("collapsed sections expand on click", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     // Sandbox is collapsed
     expect(screen.queryByText("Enable Sandbox")).not.toBeInTheDocument();
     openSection("Sandbox");
@@ -571,7 +571,7 @@ describe("ConfigPage", () => {
   it("shows save bar when language is changed", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     expect(screen.queryByTestId("save-bar")).not.toBeInTheDocument();
     const langInput = screen.getByPlaceholderText("Not set (defaults to English)");
     fireEvent.change(langInput, { target: { value: "spanish" } });
@@ -686,14 +686,14 @@ describe("ConfigPage", () => {
   it("renders the search filter input", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     expect(screen.getByPlaceholderText("Filter settings...")).toBeInTheDocument();
   });
 
   it("hides non-matching sections when filtering", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     const searchInput = screen.getByPlaceholderText("Filter settings...");
     fireEvent.change(searchInput, { target: { value: "sandbox" } });
     expect(screen.getByText("Sandbox")).toBeInTheDocument();
@@ -704,7 +704,7 @@ describe("ConfigPage", () => {
   it("shows no-results message when filter matches nothing", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     const searchInput = screen.getByPlaceholderText("Filter settings...");
     fireEvent.change(searchInput, { target: { value: "xyznonexistent" } });
     expect(screen.getByText(/No settings match/)).toBeInTheDocument();
@@ -713,7 +713,7 @@ describe("ConfigPage", () => {
   it("clears filter when clear button is clicked", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Settings Studio")).toBeInTheDocument(); });
+    await waitFor(() => { expect(screen.getByText("Settings")).toBeInTheDocument(); });
     const searchInput = screen.getByPlaceholderText("Filter settings...");
     fireEvent.change(searchInput, { target: { value: "sandbox" } });
     expect(screen.queryByText("General")).not.toBeInTheDocument();

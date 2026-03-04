@@ -601,7 +601,7 @@ export function ConfigPage({ scope }: Props) {
     <div className="page config-page">
       {scope && <ScopeBanner scope={scope} />}
       <div className="page-header">
-        <h2>Settings Studio <DocsLink page="settings" /></h2>
+        <h2>Settings <DocsLink page="settings" /></h2>
       </div>
       <p className="page-description">
         Project and global settings for Claude Code, including the default

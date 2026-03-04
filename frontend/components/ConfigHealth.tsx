@@ -57,7 +57,7 @@ export function ConfigHealth({ scope }: Props) {
           severity: "info",
           category: "Settings",
           message: "No default model configured",
-          fix: "Set a model in Settings Studio to avoid using the default",
+          fix: "Set a model in Settings to avoid using the default",
         });
       }
 

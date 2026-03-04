@@ -32,7 +32,7 @@ export function SettingsPage() {
 
   return (
     <div className="page">
-      <h2>Settings</h2>
+      <h2>Preferences</h2>
       <p className="text-muted" style={{ marginBottom: 24 }}>
         App-wide preferences for AgentCorral.
       </p>

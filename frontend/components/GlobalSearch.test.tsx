@@ -83,11 +83,11 @@ describe("GlobalSearch", () => {
     openSearch();
     await waitFor(() => {
       expect(screen.getByText("Overview")).toBeInTheDocument();
-      expect(screen.getByText("Config Studio")).toBeInTheDocument();
+      expect(screen.getByText("Settings")).toBeInTheDocument();
       expect(screen.getByText("CLAUDE.md")).toBeInTheDocument();
       expect(screen.getByText("Plugins")).toBeInTheDocument();
       expect(screen.getByText("History")).toBeInTheDocument();
-      expect(screen.getByText("Settings")).toBeInTheDocument();
+      expect(screen.getByText("Preferences")).toBeInTheDocument();
     });
   });
 
@@ -315,7 +315,7 @@ describe("GlobalSearch", () => {
       expect(screen.getByText("Code Reviewer")).toBeInTheDocument();
       expect(screen.getByText("Review Pack")).toBeInTheDocument();
       expect(screen.queryByText("Overview")).not.toBeInTheDocument();
-      expect(screen.queryByText("Settings")).not.toBeInTheDocument();
+      expect(screen.queryByText("Preferences")).not.toBeInTheDocument();
     });
   });
 

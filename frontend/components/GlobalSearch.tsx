@@ -149,11 +149,11 @@ export function GlobalSearch({ scope, homePath }: Props) {
 
     const staticItems: SearchResult[] = [
       { type: "overview", label: "Overview", description: "Dashboard with configuration summary", path: "/overview" },
-      { type: "config", label: "Settings Studio", description: "Model, permissions, ignore patterns", path: "/config" },
+      { type: "config", label: "Settings", description: "Model, permissions, ignore patterns", path: "/settings" },
       { type: "claudemd", label: "CLAUDE.md", description: "Project instructions", path: "/claude-md" },
       { type: "plugin", label: "Plugins", description: "Plugin management and import", path: "/plugins" },
       { type: "history", label: "History", description: "Configuration snapshots and history", path: "/history" },
-      { type: "settings", label: "Settings", description: "App preferences", path: "/settings" },
+      { type: "settings", label: "Preferences", description: "App preferences", path: "/preferences" },
     ];
 
     const loadAll = async () => {
