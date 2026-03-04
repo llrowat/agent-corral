@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { ScopeSwitcher } from "./components/ScopeSwitcher";
 import { GlobalSearch } from "./components/GlobalSearch";
+import { KeyboardShortcuts } from "./components/KeyboardShortcuts";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -118,7 +119,8 @@ function App() {
           </ErrorBoundary>
         </main>
       </div>
-      <GlobalSearch scope={scope} />
+      <GlobalSearch scope={scope} homePath={homePath} />
+      <KeyboardShortcuts />
     </div>
   );
 }

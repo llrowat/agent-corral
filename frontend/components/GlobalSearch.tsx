@@ -1,35 +1,114 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Scope, Agent, HookEvent, Skill, McpServer, MemoryStore } from "@/types";
+import type { Scope, Agent, HookEvent, Skill, McpServer, MemoryStore, PluginSummary } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
+  homePath: string | null;
 }
 
 interface SearchResult {
-  type: "agent" | "hook" | "skill" | "mcp" | "memory" | "config" | "claudemd";
+  type: "agent" | "hook" | "skill" | "mcp" | "memory" | "config" | "claudemd" | "plugin" | "history" | "overview" | "settings";
   label: string;
   description: string;
   path: string;
+  scope?: "project" | "global";
 }
 
-export function GlobalSearch({ scope }: Props) {
+/** Load entities from a single base path and tag them with scope */
+async function loadScopeItems(
+  basePath: string,
+  isGlobal: boolean,
+  scopeLabel: "project" | "global",
+): Promise<SearchResult[]> {
+  const items: SearchResult[] = [];
+
+  const [agents, hooks, skills, mcpServers, memoryStores, snapshots] = await Promise.all([
+    api.readAgents(basePath).catch(() => [] as Agent[]),
+    api.readHooks(basePath).catch(() => [] as HookEvent[]),
+    api.readSkills(basePath).catch(() => [] as Skill[]),
+    api.readMcpServers(basePath, isGlobal).catch(() => [] as McpServer[]),
+    api.readMemoryStores(basePath).catch(() => [] as MemoryStore[]),
+    api.listConfigSnapshots(basePath).catch(() => [] as api.ConfigSnapshotSummary[]),
+  ]);
+
+  for (const agent of agents) {
+    items.push({
+      type: "agent",
+      label: agent.name,
+      description: `Agent: ${agent.agentId} — ${agent.description}`,
+      path: "/agents",
+      scope: scopeLabel,
+    });
+  }
+
+  for (const hook of hooks) {
+    const handlerCount = (hook.groups || []).reduce((s: number, g: { hooks: unknown[] }) => s + g.hooks.length, 0);
+    items.push({
+      type: "hook",
+      label: hook.event,
+      description: `Hook: ${handlerCount} handler(s)`,
+      path: "/hooks",
+      scope: scopeLabel,
+    });
+  }
+
+  for (const skill of skills) {
+    items.push({
+      type: "skill",
+      label: skill.name,
+      description: `Skill: ${skill.skillId}${skill.userInvocable ? " (invocable)" : ""}`,
+      path: "/skills",
+      scope: scopeLabel,
+    });
+  }
+
+  for (const server of mcpServers) {
+    items.push({
+      type: "mcp",
+      label: server.serverId,
+      description: `MCP: ${server.serverType}${server.command ? ` — ${server.command}` : ""}`,
+      path: "/mcp",
+      scope: scopeLabel,
+    });
+  }
+
+  for (const store of memoryStores) {
+    items.push({
+      type: "memory",
+      label: store.name,
+      description: `Memory: ${store.entryCount} entries`,
+      path: "/memory",
+      scope: scopeLabel,
+    });
+  }
+
+  for (const snapshot of snapshots) {
+    items.push({
+      type: "history",
+      label: snapshot.label,
+      description: `Snapshot: ${snapshot.timestamp}`,
+      path: "/history",
+      scope: scopeLabel,
+    });
+  }
+
+  return items;
+}
+
+export function GlobalSearch({ scope, homePath }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [allItems, setAllItems] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
-  const basePath =
-    scope?.type === "global"
-      ? scope.homePath
-      : scope?.type === "project"
-        ? scope.repo.path
-        : null;
-  const isGlobal = scope?.type === "global";
+  const projectPath = scope?.type === "project" ? scope.repo.path : null;
+  const globalPath = scope?.type === "global" ? scope.homePath : homePath;
 
   // Global keyboard shortcut
   useEffect(() => {
@@ -55,90 +134,76 @@ export function GlobalSearch({ scope }: Props) {
     }
   }, [open]);
 
-  // Load all searchable items when scope changes
-  const loadItems = useCallback(async () => {
-    if (!basePath) {
+  // Load all searchable items from both scopes when modal opens
+  useEffect(() => {
+    if (!open) return;
+
+    // Need at least one path to search
+    if (!projectPath && !globalPath) {
       setAllItems([]);
       return;
     }
 
-    const items: SearchResult[] = [];
+    let cancelled = false;
+    setLoading(true);
 
-    // Static navigation items
-    items.push(
-      { type: "config", label: "Settings Studio", description: "Model, permissions, ignore patterns", path: "/settings" },
+    const staticItems: SearchResult[] = [
+      { type: "overview", label: "Overview", description: "Dashboard with configuration summary", path: "/overview" },
+      { type: "config", label: "Settings Studio", description: "Model, permissions, ignore patterns", path: "/config" },
       { type: "claudemd", label: "CLAUDE.md", description: "Project instructions", path: "/claude-md" },
-    );
+      { type: "plugin", label: "Plugins", description: "Plugin management and import", path: "/plugins" },
+      { type: "history", label: "History", description: "Configuration snapshots and history", path: "/history" },
+      { type: "settings", label: "Settings", description: "App preferences", path: "/settings" },
+    ];
 
-    try {
-      const [agents, hooks, skills, mcpServers, memoryStores] = await Promise.all([
-        api.readAgents(basePath).catch(() => [] as Agent[]),
-        api.readHooks(basePath).catch(() => [] as HookEvent[]),
-        api.readSkills(basePath).catch(() => [] as Skill[]),
-        api.readMcpServers(basePath, isGlobal).catch(() => [] as McpServer[]),
-        api.readMemoryStores(basePath).catch(() => [] as MemoryStore[]),
+    const loadAll = async () => {
+      const items: SearchResult[] = [...staticItems];
+
+      // Load from both scopes in parallel
+      const scopeLoads: Promise<SearchResult[]>[] = [];
+
+      if (projectPath) {
+        scopeLoads.push(loadScopeItems(projectPath, false, "project"));
+      }
+      if (globalPath) {
+        scopeLoads.push(loadScopeItems(globalPath, true, "global"));
+      }
+
+      // Plugins are scope-independent
+      const pluginsPromise = api.listPlugins().catch(() => [] as PluginSummary[]);
+
+      const [scopeResults, plugins] = await Promise.all([
+        Promise.all(scopeLoads),
+        pluginsPromise,
       ]);
 
-      for (const agent of agents) {
+      for (const scopeItems of scopeResults) {
+        items.push(...scopeItems);
+      }
+
+      for (const plugin of plugins) {
         items.push({
-          type: "agent",
-          label: agent.name,
-          description: `Agent: ${agent.agentId} — ${agent.description}`,
-          path: "/agents",
+          type: "plugin",
+          label: plugin.name,
+          description: `Plugin: ${plugin.description || plugin.pluginId}`,
+          path: "/plugins",
         });
       }
 
-      for (const hook of hooks) {
-        const handlerCount = hook.groups.reduce((s, g) => s + g.hooks.length, 0);
-        items.push({
-          type: "hook",
-          label: hook.event,
-          description: `Hook: ${handlerCount} handler(s)`,
-          path: "/hooks",
-        });
+      if (!cancelled) {
+        setAllItems(items);
+        setLoading(false);
       }
+    };
 
-      for (const skill of skills) {
-        items.push({
-          type: "skill",
-          label: skill.name,
-          description: `Skill: ${skill.skillId}${skill.userInvocable ? " (invocable)" : ""}`,
-          path: "/skills",
-        });
-      }
-
-      for (const server of mcpServers) {
-        items.push({
-          type: "mcp",
-          label: server.serverId,
-          description: `MCP: ${server.serverType}${server.command ? ` — ${server.command}` : ""}`,
-          path: "/mcp",
-        });
-      }
-
-      for (const store of memoryStores) {
-        items.push({
-          type: "memory",
-          label: store.name,
-          description: `Memory: ${store.entryCount} entries`,
-          path: "/memory",
-        });
-      }
-    } catch {
-      // Ignore load errors
-    }
-
-    setAllItems(items);
-  }, [basePath, isGlobal]);
-
-  useEffect(() => {
-    if (open) loadItems();
-  }, [open, loadItems]);
+    loadAll();
+    return () => { cancelled = true; };
+  }, [open, projectPath, globalPath]);
 
   // Filter results
   useEffect(() => {
     if (!query.trim()) {
-      setResults(allItems.slice(0, 20));
+      setResults(allItems);
     } else {
       const q = query.toLowerCase();
       const filtered = allItems.filter(
@@ -146,7 +211,7 @@ export function GlobalSearch({ scope }: Props) {
           item.label.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q)
       );
-      setResults(filtered.slice(0, 20));
+      setResults(filtered);
     }
     setSelectedIndex(0);
   }, [query, allItems]);
@@ -176,6 +241,10 @@ export function GlobalSearch({ scope }: Props) {
     memory: "\u25C8",
     config: "\u2638",
     claudemd: "\u2263",
+    plugin: "\u25A3",
+    history: "\u29D6",
+    overview: "\u25A6",
+    settings: "\u2692",
   };
 
   if (!open) return null;
@@ -192,19 +261,21 @@ export function GlobalSearch({ scope }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search agents, skills, hooks, MCP servers..."
+            placeholder="Search agents, skills, hooks, MCP, plugins..."
           />
           <kbd className="search-kbd">ESC</kbd>
         </div>
         <div className="search-results">
-          {results.length === 0 ? (
+          {loading ? (
+            <div className="search-empty">Loading...</div>
+          ) : results.length === 0 ? (
             <div className="search-empty">
-              {query ? "No results found" : "Start typing to search..."}
+              {query ? "No results found" : "No items found"}
             </div>
           ) : (
             results.map((result, i) => (
               <button
-                key={`${result.type}-${result.label}-${i}`}
+                key={`${result.type}-${result.label}-${result.scope || ""}-${i}`}
                 className={`search-result ${i === selectedIndex ? "search-result-active" : ""}`}
                 onClick={() => handleSelect(result)}
                 onMouseEnter={() => setSelectedIndex(i)}
@@ -216,6 +287,9 @@ export function GlobalSearch({ scope }: Props) {
                   <span className="search-result-label">{result.label}</span>
                   <span className="search-result-desc">{result.description}</span>
                 </div>
+                {result.scope && (
+                  <span className="search-result-scope">{result.scope}</span>
+                )}
                 <span className="search-result-type">{result.type}</span>
               </button>
             ))

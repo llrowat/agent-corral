@@ -175,7 +175,6 @@ body {
 }
 
 .sidebar-disclaimer {
-  margin-top: auto;
   padding: 12px 20px;
   font-size: 10px;
   color: var(--text-muted);
@@ -2740,6 +2739,17 @@ textarea.input-error {
   white-space: nowrap;
 }
 
+.search-result-scope {
+  font-size: 9px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
 .search-result-type {
   font-size: 10px;
   color: var(--text-muted);
@@ -2763,6 +2773,109 @@ textarea.input-error {
   padding: 1px 4px;
   font-size: 10px;
   font-family: var(--font-mono);
+}
+
+/* -- Keyboard Shortcuts Modal -- */
+
+.shortcuts-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 9000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 120px;
+}
+
+.shortcuts-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.shortcuts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.shortcuts-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.shortcuts-list {
+  padding: 8px 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+}
+
+.shortcuts-row:hover {
+  background: var(--bg-hover);
+}
+
+.shortcuts-desc {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.shortcuts-keys {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* -- Sidebar Shortcuts Button -- */
+
+.sidebar-shortcuts-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: auto 12px 0;
+  padding: 6px 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.sidebar-shortcuts-btn:hover {
+  color: var(--text-secondary);
+  border-color: var(--text-muted);
+}
+
+.sidebar-shortcuts-btn kbd {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  line-height: 1.4;
 }
 
 /* -- CLAUDE.md Editor -- */
@@ -3372,6 +3485,10 @@ textarea.input-error {
 }
 
 [data-theme="light"] .search-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .shortcuts-overlay {
   background: rgba(0, 0, 0, 0.3);
 }
 

@@ -85,6 +85,13 @@ export function Sidebar({ scope }: SidebarProps) {
           </ul>
         </div>
       ))}
+      <button
+        className="sidebar-shortcuts-btn"
+        onClick={() => window.dispatchEvent(new CustomEvent("open-shortcuts"))}
+        title="Keyboard shortcuts (?)"
+      >
+        <kbd>?</kbd> Keyboard shortcuts
+      </button>
       <div className="sidebar-disclaimer">
         Not affiliated with or endorsed by Anthropic.
       </div>
