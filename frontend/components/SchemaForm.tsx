@@ -209,6 +209,157 @@ function TagInputField({
 }
 
 // ---------------------------------------------------------------------------
+// Tool Checkboxes (with MCP support + custom entry)
+// ---------------------------------------------------------------------------
+
+function ToolCheckboxes({
+  name,
+  title,
+  description,
+  selected,
+  coreTools,
+  mcpPrefixes,
+  customInSelection,
+  disabled,
+  onChange,
+}: {
+  name: string;
+  title: string;
+  description?: string;
+  selected: string[];
+  coreTools: string[];
+  mcpPrefixes: string[];
+  customInSelection: string[];
+  disabled: boolean;
+  onChange: (value: unknown) => void;
+}) {
+  const [customInput, setCustomInput] = useState("");
+
+  const toggle = (tool: string) => {
+    const next = selected.includes(tool)
+      ? selected.filter((t) => t !== tool)
+      : [...selected, tool];
+    onChange(next);
+  };
+
+  const addCustom = () => {
+    const trimmed = customInput.trim();
+    if (trimmed && !selected.includes(trimmed)) {
+      onChange([...selected, trimmed]);
+      setCustomInput("");
+    }
+  };
+
+  return (
+    <div className="form-group" data-field={name}>
+      <label>{title}</label>
+      {description && (
+        <span className="config-field-hint">{description}</span>
+      )}
+
+      {/* Core tools */}
+      <div className="tools-section-label">Core Tools</div>
+      <div className="tools-grid">
+        {coreTools.map((tool) => (
+          <label key={tool} className="tool-checkbox">
+            <input
+              type="checkbox"
+              checked={selected.includes(tool)}
+              onChange={() => toggle(tool)}
+              disabled={disabled}
+            />
+            <span>{tool}</span>
+          </label>
+        ))}
+      </div>
+
+      {/* MCP tools */}
+      {mcpPrefixes.length > 0 && (
+        <>
+          <div className="tools-section-label" style={{ marginTop: 12 }}>
+            MCP Server Tools
+          </div>
+          <span className="config-field-hint">
+            Select an MCP server to allow all its tools, or add specific tools below (e.g. mcp__github__create_issue)
+          </span>
+          <div className="tools-grid">
+            {mcpPrefixes.map((prefix) => {
+              const serverId = prefix.slice(5); // strip "mcp__"
+              const isChecked = selected.some(
+                (t) => t === prefix || t.startsWith(prefix + "__")
+              );
+              return (
+                <label key={prefix} className="tool-checkbox tool-mcp">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggle(prefix)}
+                    disabled={disabled}
+                  />
+                  <span>mcp: {serverId}</span>
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Custom / manually-added tools */}
+      {customInSelection.length > 0 && (
+        <>
+          <div className="tools-section-label" style={{ marginTop: 12 }}>Custom</div>
+          <div className="tools-grid">
+            {customInSelection.map((tool) => (
+              <label key={tool} className="tool-checkbox tool-custom">
+                <input
+                  type="checkbox"
+                  checked
+                  onChange={() => toggle(tool)}
+                  disabled={disabled}
+                />
+                <span>{tool}</span>
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Add custom tool */}
+      <div className="tool-custom-add" style={{ marginTop: 8 }}>
+        <input
+          type="text"
+          value={customInput}
+          onChange={(e) => setCustomInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addCustom();
+            }
+          }}
+          placeholder="Add custom tool (e.g. mcp__github__create_issue)"
+          disabled={disabled}
+          style={{ flex: 1 }}
+        />
+        <button
+          className="btn btn-sm"
+          onClick={addCustom}
+          disabled={disabled || !customInput.trim()}
+          type="button"
+        >
+          Add
+        </button>
+      </div>
+
+      {selected.length === 0 && (
+        <span className="config-field-hint">
+          No tools selected — will have access to all tools
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Field Renderer
 // ---------------------------------------------------------------------------
 
@@ -300,36 +451,24 @@ function SchemaField({
   // --- Widget: tool-checkboxes ---
   if (widget === "tool-checkboxes") {
     const selected = Array.isArray(value) ? (value as string[]) : [];
+    const coreTools = knownTools.filter((t) => !t.startsWith("mcp__"));
+    const mcpPrefixes = knownTools.filter((t) => t.startsWith("mcp__"));
+    // Tools in selection that aren't in knownTools (custom/manually added)
+    const customInSelection = selected.filter(
+      (t) => !knownTools.includes(t) && !knownTools.some((kt) => t.startsWith(kt + "__"))
+    );
     return (
-      <div className="form-group" data-field={name}>
-        <label>{title}</label>
-        {description && (
-          <span className="config-field-hint">{description}</span>
-        )}
-        <div className="tools-grid">
-          {knownTools.map((tool) => (
-            <label key={tool} className="tool-checkbox">
-              <input
-                type="checkbox"
-                checked={selected.includes(tool)}
-                onChange={() => {
-                  const next = selected.includes(tool)
-                    ? selected.filter((t) => t !== tool)
-                    : [...selected, tool];
-                  onChange(next);
-                }}
-                disabled={disabled}
-              />
-              <span>{tool}</span>
-            </label>
-          ))}
-        </div>
-        {selected.length === 0 && (
-          <span className="config-field-hint">
-            No tools selected — will have access to all tools
-          </span>
-        )}
-      </div>
+      <ToolCheckboxes
+        name={name}
+        title={title}
+        description={description}
+        selected={selected}
+        coreTools={coreTools}
+        mcpPrefixes={mcpPrefixes}
+        customInSelection={customInSelection}
+        disabled={disabled}
+        onChange={onChange}
+      />
     );
   }
 

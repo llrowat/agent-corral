@@ -130,6 +130,7 @@ export function McpPage({ scope, homePath }: Props) {
     try {
       await api.writeMcpServer(basePath, editing, isGlobal);
       await loadServers();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       setView("list");
       setEditing(null);
     } catch (e) {
@@ -145,6 +146,7 @@ export function McpPage({ scope, homePath }: Props) {
     try {
       await api.deleteMcpServer(basePath, serverId, isGlobal);
       await loadServers();
+      window.dispatchEvent(new Event("sidebar-refresh"));
     } catch (e) {
       toast.error("Failed to delete server", String(e));
     }

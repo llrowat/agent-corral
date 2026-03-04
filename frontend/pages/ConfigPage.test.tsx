@@ -368,7 +368,7 @@ describe("ConfigPage", () => {
     expect(screen.getByText("MCP Server Approval")).toBeInTheDocument();
     expect(screen.getByText("Environment Variables")).toBeInTheDocument();
     expect(screen.getByText("Session & Login")).toBeInTheDocument();
-    expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument();
+    expect(screen.getByText("Scripts & Credentials")).toBeInTheDocument();
     expect(screen.getByText("Sandbox")).toBeInTheDocument();
     expect(screen.getByText("Advanced (JSON)")).toBeInTheDocument();
   });
@@ -489,11 +489,11 @@ describe("ConfigPage", () => {
     expect(screen.getByDisplayValue("15")).toBeInTheDocument();
   });
 
-  it("renders Scripts & Hooks section after expanding", async () => {
+  it("renders Scripts & Credentials section after expanding", async () => {
     mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument(); });
-    openSection("Scripts & Hooks");
+    await waitFor(() => { expect(screen.getByText("Scripts & Credentials")).toBeInTheDocument(); });
+    openSection("Scripts & Credentials");
     expect(screen.getByText("API Key Helper")).toBeInTheDocument();
     expect(screen.getByText("OTEL Headers Helper")).toBeInTheDocument();
     expect(screen.getByText("AWS Auth Refresh")).toBeInTheDocument();
@@ -504,29 +504,20 @@ describe("ConfigPage", () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { apiKeyHelper: "/bin/gen_key.sh", awsAuthRefresh: "aws sso login" } };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument(); });
-    openSection("Scripts & Hooks");
+    await waitFor(() => { expect(screen.getByText("Scripts & Credentials")).toBeInTheDocument(); });
+    openSection("Scripts & Credentials");
     expect(screen.getByDisplayValue("/bin/gen_key.sh")).toBeInTheDocument();
     expect(screen.getByDisplayValue("aws sso login")).toBeInTheDocument();
   });
 
-  it("renders hook control fields in Scripts & Hooks section", async () => {
-    mockReadClaudeConfig.mockResolvedValue(EMPTY_CONFIG);
-    renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument(); });
-    openSection("Scripts & Hooks");
-    expect(screen.getByText("Allowed HTTP Hook URLs")).toBeInTheDocument();
-    expect(screen.getByText("HTTP Hook Allowed Env Vars")).toBeInTheDocument();
-  });
-
-  it("renders hook control tags from config", async () => {
-    const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: { allowedHttpHookUrls: ["https://hooks.example.com/*"], httpHookAllowedEnvVars: ["MY_TOKEN"] } };
+  it("does not render HTTP hook fields in Scripts & Credentials (moved to Hooks page)", async () => {
+    const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: {} };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
-    await waitFor(() => { expect(screen.getByText("Scripts & Hooks")).toBeInTheDocument(); });
-    openSection("Scripts & Hooks");
-    expect(screen.getByText("https://hooks.example.com/*")).toBeInTheDocument();
-    expect(screen.getByText("MY_TOKEN")).toBeInTheDocument();
+    await waitFor(() => { expect(screen.getByText("Scripts & Credentials")).toBeInTheDocument(); });
+    openSection("Scripts & Credentials");
+    expect(screen.queryByText("Allowed HTTP Hook URLs")).not.toBeInTheDocument();
+    expect(screen.queryByText("HTTP Hook Allowed Env Vars")).not.toBeInTheDocument();
   });
 
   it("renders Permission Default Mode dropdown", async () => {

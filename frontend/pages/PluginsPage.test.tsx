@@ -74,14 +74,14 @@ describe("PluginsPage", () => {
 
   it("renders export button", async () => {
     renderWithProviders(<PluginsPage scope={projectScope} />);
-    expect(screen.getByText("Export Plugin")).toBeInTheDocument();
+    expect(screen.getByText("Export")).toBeInTheDocument();
   });
 
   it("allows export from global scope", async () => {
     renderWithProviders(<PluginsPage scope={globalScope} />);
 
-    // Click the Export Plugin button
-    fireEvent.click(screen.getByText("Export Plugin"));
+    // Click the Export button
+    fireEvent.click(screen.getByText("Export"));
 
     // Should load agents and skills using global basePath
     await waitFor(() => {
@@ -102,7 +102,7 @@ describe("PluginsPage", () => {
   it("allows export from project scope", async () => {
     renderWithProviders(<PluginsPage scope={projectScope} />);
 
-    fireEvent.click(screen.getByText("Export Plugin"));
+    fireEvent.click(screen.getByText("Export"));
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith("read_agents", {
@@ -118,10 +118,10 @@ describe("PluginsPage", () => {
     renderWithProviders(<PluginsPage scope={globalScope} />);
 
     // Open export wizard
-    fireEvent.click(screen.getByText("Export Plugin"));
+    fireEvent.click(screen.getByText("Export"));
 
     await waitFor(() => {
-      expect(screen.getByText("Plugin Name")).toBeInTheDocument();
+      expect(screen.getByText("Bundle Name")).toBeInTheDocument();
     });
 
     // Fill in the required name field
@@ -129,7 +129,7 @@ describe("PluginsPage", () => {
     fireEvent.change(nameInput, { target: { value: "Global Plugin" } });
 
     // Click the export button in the form
-    const exportBtn = screen.getAllByText("Export Plugin").find(
+    const exportBtn = screen.getAllByText("Export").find(
       (el) => el.tagName === "BUTTON" && el.closest(".form-actions")
     );
     fireEvent.click(exportBtn!);
@@ -149,16 +149,16 @@ describe("PluginsPage", () => {
   it("passes isGlobal=false when exporting from project scope", async () => {
     renderWithProviders(<PluginsPage scope={projectScope} />);
 
-    fireEvent.click(screen.getByText("Export Plugin"));
+    fireEvent.click(screen.getByText("Export"));
 
     await waitFor(() => {
-      expect(screen.getByText("Plugin Name")).toBeInTheDocument();
+      expect(screen.getByText("Bundle Name")).toBeInTheDocument();
     });
 
     const nameInput = screen.getByPlaceholderText("My Company Plugin");
     fireEvent.change(nameInput, { target: { value: "Project Plugin" } });
 
-    const exportBtn = screen.getAllByText("Export Plugin").find(
+    const exportBtn = screen.getAllByText("Export").find(
       (el) => el.tagName === "BUTTON" && el.closest(".form-actions")
     );
     fireEvent.click(exportBtn!);
@@ -194,7 +194,7 @@ describe("PluginsPage", () => {
     });
 
     renderWithProviders(<PluginsPage scope={globalScope} />);
-    fireEvent.click(screen.getByText("Export Plugin"));
+    fireEvent.click(screen.getByText("Export"));
 
     await waitFor(() => {
       expect(screen.getByText("No global agents.")).toBeInTheDocument();

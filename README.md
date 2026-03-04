@@ -23,7 +23,7 @@ You've got Claude Code agents scattered across a dozen repos. Hooks defined in o
 - **See everything at a glance** — One dashboard across all your repos. Know instantly which projects have agents, hooks, skills, MCP servers, and memory configured.
 - **Stop copy-pasting JSON** — Visual editors for agents, hooks, skills, MCP servers, settings, and memory. Built-in presets so you're not starting from scratch.
 - **Global or project, your call** — Flip between global (`~/.claude/`) and project-scoped (`.claude/`) config with a single toggle. See exactly what applies where.
-- **Share setups with your team** — Bundle agents, skills, hooks, and MCP servers into plugins. Export from one repo, import into another, install from git, and keep everyone in sync automatically.
+- **Share setups with your team** — Bundle agents, skills, hooks, and MCP servers into config bundles. Export from one repo, import into another, install from git, and keep everyone in sync automatically.
 
 No more digging through dotfiles. No more wondering which repo has that hook you wrote last month. No more breaking your config because you missed a comma in a JSON file.
 
@@ -42,8 +42,8 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 ## Features
 
 - **Global + Project Scope** — Manage configuration at the global (`~/.claude/`) or project (`.claude/`) level. A scope toggle in the header switches between them, and an effective config view shows the merged result with source annotations.
-- **Repo Registry** — Add and switch between repositories. The overview dashboard shows which repos have agents, hooks, skills, MCP servers, and memory configured.
-- **Agent Studio** — Create, edit, and delete agents with a visual editor. Configure tools, model overrides, and memory bindings. Built-in presets for common roles (code reviewer, test writer, doc writer, refactorer). Launch agents directly from the app with `claude --agent <id>`.
+- **Repo Registry** — Add and switch between repositories with a native file picker or manual path entry. The overview dashboard shows which repos have agents, hooks, skills, MCP servers, and memory configured.
+- **Agent Studio** — Create, edit, and delete agents with a visual editor. Configure tools (core + MCP server tools), model overrides, and memory bindings. Built-in presets for common roles (code reviewer, test writer, doc writer, refactorer). Launch agents directly from the app with `claude --agent <id>`.
 
   <img src="assets/screenshot_agents.png" alt="Agent Studio showing a Code Reviewer agent with system prompt, tools, and CLI launch" width="700" />
 
@@ -52,11 +52,11 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
   <img src="assets/screenshot_skills.png" alt="Skills editor with schema-driven form for creating a new skill" width="700" />
 - **MCP Servers** — Configure Model Context Protocol servers with health checks to verify availability.
-- **Settings Studio** — Comprehensive Claude Code settings editor with 12 collapsible sections: General (model, language, output style), Feature Toggles, Permissions, File Patterns, UI Customization (status line, file suggestion, spinner), Attribution, MCP Server Approval, Environment Variables, Session & Login, Scripts & Hooks, Sandbox, and Advanced (JSON). Includes a search filter to quickly find settings.
+- **Settings Studio** — Comprehensive Claude Code settings editor with 12 collapsible sections: General (model, language, output style), Feature Toggles, Permissions, File Patterns, UI Customization (status line, file suggestion, spinner), Attribution, MCP Server Approval, Environment Variables, Session & Login, Scripts & Credentials, Sandbox, and Advanced (JSON). Includes a search filter to quickly find settings. HTTP hook settings (allowed URLs, env vars) are managed in the Hooks page.
 
   <img src="assets/screenshot_config.png" alt="Settings Studio with model selection, feature toggles, and search filter" width="700" />
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
-- **Plugin System** — Bundle agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, install from git, and auto-sync when the source changes.
+- **Export/Import** — Bundle agents, skills, hooks, and MCP servers into portable config bundles. Export from one repo, import into another, install from git, and auto-sync when the source changes.
 - **Config Linter** — Comprehensive linting of your Claude Code configuration with 20+ rules. Detects hierarchy conflicts (CLAUDE.md contradictions, agent/skill/MCP shadowing, permission clashes, model overrides), validates references (dangling memory stores, nonexistent agents in skills), flags incomplete config (placeholder env vars, missing commands, empty prompts), and checks settings.json for unknown keys. Filterable by severity and groupable by category, severity, or scope.
 - **Config Backup & Restore** — Export/import full configuration as a JSON bundle with merge or overwrite modes.
 - **Create with AI** — Generate agents, skills, hooks, or MCP server configs from a natural-language description by launching Claude Code in a terminal.
@@ -115,15 +115,15 @@ agent-corral/
 └── vite.config.ts      # Vite configuration
 ```
 
-## Plugin System
+## Export/Import System
 
-Plugins use a directory-based format (`.claude-plugin/plugin.json`) bundling agents, skills, hooks, and MCP servers. They can be:
+Config bundles use a directory-based format (`.claude-plugin/plugin.json`) bundling agents, skills, hooks, and MCP servers. They can be:
 
 - **Exported** from any repo (choose which agents, skills, hooks, and MCP servers to include)
 - **Imported** into any repo (preview changes before applying, choose add-only or overwrite mode)
 - **Installed from Git** — point to any git repo containing a `.claude-plugin/` directory
-- **Updated** — git-sourced plugins track their source commit and can be checked for updates
-- **Auto-synced** — imported plugins can be tracked and automatically updated when the library version changes. Supports pinning (lock version) and auto-sync toggles per import.
+- **Updated** — git-sourced bundles track their source commit and can be checked for updates
+- **Auto-synced** — imported bundles can be tracked and automatically updated when the library version changes. Supports pinning (lock version) and auto-sync toggles per import.
 
 ## Releases
 

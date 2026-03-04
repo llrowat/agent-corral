@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { ScopeSwitcher } from "./components/ScopeSwitcher";
 import { GlobalSearch } from "./components/GlobalSearch";
@@ -20,7 +20,8 @@ import { ClaudeMdPage } from "./pages/ClaudeMdPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { useRepos } from "./hooks/useRepos";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
-import { getClaudeHome } from "./lib/tauri";
+import { getClaudeHome, scanProjectConfig } from "./lib/tauri";
+import type { ProjectScanResult } from "./lib/tauri";
 import type { Scope } from "./types";
 import appIconSvg from "./assets/agent_corral_icon.svg";
 
@@ -29,10 +30,44 @@ function App() {
   useKeyboardShortcuts();
   const [scope, setScope] = useState<Scope | null>(null);
   const [homePath, setHomePath] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<ProjectScanResult | null>(null);
+  const location = useLocation();
 
   useEffect(() => {
     getClaudeHome().then(setHomePath).catch(() => {});
   }, []);
+
+  // Scan project config for sidebar counts
+  const refreshCounts = useCallback(() => {
+    const basePath = scope?.type === "global"
+      ? scope.homePath
+      : scope?.type === "project"
+        ? scope.repo.path
+        : null;
+    if (basePath) {
+      scanProjectConfig(basePath).then(setScanResult).catch(() => setScanResult(null));
+    } else {
+      setScanResult(null);
+    }
+  }, [scope]);
+
+  // Re-scan when scope changes
+  useEffect(() => {
+    setScanResult(null);
+    refreshCounts();
+  }, [refreshCounts]);
+
+  // Re-scan on route changes (picks up saves when navigating between pages)
+  useEffect(() => {
+    refreshCounts();
+  }, [location.pathname, refreshCounts]);
+
+  // Listen for explicit sidebar-refresh events from pages
+  useEffect(() => {
+    const handler = () => refreshCounts();
+    window.addEventListener("sidebar-refresh", handler);
+    return () => window.removeEventListener("sidebar-refresh", handler);
+  }, [refreshCounts]);
 
   // Key pages on scope identity so they fully remount on scope change,
   // preventing stale async state from causing blank renders.
@@ -68,7 +103,7 @@ function App() {
         </div>
       </header>
       <div className="app-body">
-        <Sidebar scope={scope} />
+        <Sidebar scope={scope} counts={scanResult} />
         <main className="app-main">
           <ErrorBoundary key={scopeKey}>
           <Routes>

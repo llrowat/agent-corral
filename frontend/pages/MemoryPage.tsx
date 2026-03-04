@@ -90,6 +90,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       setNewEntry("");
       await loadEntries(selectedStore);
       await loadStores();
+      window.dispatchEvent(new Event("sidebar-refresh"));
     } catch (e) {
       toast.error("Failed to add entry", String(e));
     }
@@ -103,6 +104,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       setEditContent("");
       await loadEntries(selectedStore);
       await loadStores();
+      window.dispatchEvent(new Event("sidebar-refresh"));
     } catch (e) {
       toast.error("Failed to update entry", String(e));
     }
@@ -114,6 +116,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       await api.deleteMemoryEntry(selectedStore.path, index);
       await loadEntries(selectedStore);
       await loadStores();
+      window.dispatchEvent(new Event("sidebar-refresh"));
     } catch (e) {
       toast.error("Failed to delete entry", String(e));
     }
@@ -125,6 +128,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       await api.resetMemory(selectedStore.path);
       await loadEntries(selectedStore);
       await loadStores();
+      window.dispatchEvent(new Event("sidebar-refresh"));
     } catch (e) {
       toast.error("Failed to reset memory", String(e));
     }
@@ -137,6 +141,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       setSelectedStore(null);
       setEntries([]);
       await loadStores();
+      window.dispatchEvent(new Event("sidebar-refresh"));
     } catch (e) {
       toast.error("Failed to delete store", String(e));
     }
@@ -153,6 +158,7 @@ export function MemoryPage({ scope, homePath }: Props) {
       setNewStoreName("");
       setShowCreateStore(false);
       await loadStores();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       setSelectedStore(store);
     } catch (e) {
       toast.error("Failed to create store", String(e));

@@ -8,6 +8,7 @@ import { HOOK_PRESETS, type HookPreset } from "@/lib/presets";
 import { ScopeBanner } from "@/components/ScopeGuard";
 import { DocsLink } from "@/components/DocsLink";
 import { useToast } from "@/components/Toast";
+import { TagInput } from "@/components/TagInput";
 
 interface Props {
   scope: Scope | null;
@@ -33,6 +34,12 @@ export function HooksPage({ scope, homePath }: Props) {
   const [isNew, setIsNew] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
+
+  // HTTP hook settings (from settings.json)
+  const [allowedHttpHookUrls, setAllowedHttpHookUrls] = useState<string[]>([]);
+  const [httpHookAllowedEnvVars, setHttpHookAllowedEnvVars] = useState<string[]>([]);
+  const [httpSettingsDirty, setHttpSettingsDirty] = useState(false);
+  const [savingHttpSettings, setSavingHttpSettings] = useState(false);
 
   // Drag-and-drop state for reordering hook groups
   const dragIndexRef = useRef<number | null>(null);
@@ -64,13 +71,48 @@ export function HooksPage({ scope, homePath }: Props) {
     }
   }, [isProjectScope, homePath]);
 
+  const loadHttpSettings = useCallback(async () => {
+    if (!basePath) return;
+    try {
+      const config = await api.readClaudeConfig(basePath);
+      const raw = (config.raw ?? {}) as Record<string, unknown>;
+      const urls = Array.isArray(raw.allowedHttpHookUrls) ? raw.allowedHttpHookUrls.filter((s): s is string => typeof s === "string") : [];
+      const envs = Array.isArray(raw.httpHookAllowedEnvVars) ? raw.httpHookAllowedEnvVars.filter((s): s is string => typeof s === "string") : [];
+      setAllowedHttpHookUrls(urls);
+      setHttpHookAllowedEnvVars(envs);
+      setHttpSettingsDirty(false);
+    } catch {
+      // no config yet
+    }
+  }, [basePath]);
+
+  const saveHttpSettings = async () => {
+    if (!basePath) return;
+    setSavingHttpSettings(true);
+    try {
+      const config = await api.readClaudeConfig(basePath);
+      const raw = { ...((config.raw ?? {}) as Record<string, unknown>) };
+      if (allowedHttpHookUrls.length > 0) raw.allowedHttpHookUrls = allowedHttpHookUrls;
+      else delete raw.allowedHttpHookUrls;
+      if (httpHookAllowedEnvVars.length > 0) raw.httpHookAllowedEnvVars = httpHookAllowedEnvVars;
+      else delete raw.httpHookAllowedEnvVars;
+      await api.writeClaudeConfig(basePath, { ...config, raw });
+      setHttpSettingsDirty(false);
+    } catch (e) {
+      toast.error("Failed to save HTTP hook settings", String(e));
+    } finally {
+      setSavingHttpSettings(false);
+    }
+  };
+
   useEffect(() => {
     setSelectedEvent(null);
     setSelectedIsGlobal(false);
     setEditing(null);
     loadHooks();
     loadGlobalHooks();
-  }, [loadHooks, loadGlobalHooks, basePath]);
+    loadHttpSettings();
+  }, [loadHooks, loadGlobalHooks, loadHttpSettings, basePath]);
 
   if (!scope) {
     return (
@@ -95,6 +137,7 @@ export function HooksPage({ scope, homePath }: Props) {
       }
       await api.writeHooks(basePath, updated);
       await loadHooks();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       setSelectedEvent(editing.event);
       setEditing(null);
       setIsNew(false);
@@ -112,6 +155,7 @@ export function HooksPage({ scope, homePath }: Props) {
       const updated = hooks.filter((h) => h.event !== eventName);
       await api.writeHooks(basePath, updated);
       await loadHooks();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       if (selectedEvent === eventName) setSelectedEvent(null);
       if (editing?.event === eventName) setEditing(null);
     } catch (e) {
@@ -683,6 +727,26 @@ export function HooksPage({ scope, homePath }: Props) {
           )}
         </div>
       </div>
+      {/* HTTP Hook Settings */}
+      <div className="http-hook-settings" style={{ marginTop: 24, padding: "16px", borderTop: "1px solid var(--border)" }}>
+        <h3 style={{ marginBottom: 12, fontSize: 16 }}>HTTP Hook Settings</h3>
+        <div className="config-field">
+          <label>Allowed HTTP Hook URLs</label>
+          <p className="config-field-hint">URL patterns allowed for HTTP hooks.</p>
+          <TagInput tags={allowedHttpHookUrls} onAdd={(v) => { setAllowedHttpHookUrls([...allowedHttpHookUrls, v]); setHttpSettingsDirty(true); }} onRemove={(t) => { setAllowedHttpHookUrls(allowedHttpHookUrls.filter((x) => x !== t)); setHttpSettingsDirty(true); }} placeholder="Add URL pattern..." emptyLabel="No HTTP hook URLs allowed" />
+        </div>
+        <div className="config-field" style={{ marginTop: 12 }}>
+          <label>HTTP Hook Allowed Env Vars</label>
+          <p className="config-field-hint">Environment variable names that HTTP hooks can access.</p>
+          <TagInput tags={httpHookAllowedEnvVars} onAdd={(v) => { setHttpHookAllowedEnvVars([...httpHookAllowedEnvVars, v]); setHttpSettingsDirty(true); }} onRemove={(t) => { setHttpHookAllowedEnvVars(httpHookAllowedEnvVars.filter((x) => x !== t)); setHttpSettingsDirty(true); }} placeholder="Add env var name..." emptyLabel="No env vars exposed to HTTP hooks" />
+        </div>
+        {httpSettingsDirty && (
+          <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={saveHttpSettings} disabled={savingHttpSettings}>
+            {savingHttpSettings ? "Saving..." : "Save HTTP Settings"}
+          </button>
+        )}
+      </div>
+
       {showPresets && (
         <PresetPicker
           title="Hook Templates"

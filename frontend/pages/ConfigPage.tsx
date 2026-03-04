@@ -268,7 +268,6 @@ const MANAGED_RAW_KEYS = new Set([
   "attribution", "enabledMcpjsonServers", "disabledMcpjsonServers",
   "cleanupPeriodDays", "autoUpdatesChannel", "plansDirectory", "teammateMode",
   "apiKeyHelper", "otelHeadersHelper", "awsAuthRefresh", "awsCredentialExport",
-  "allowedHttpHookUrls", "httpHookAllowedEnvVars",
   "statusLine", "fileSuggestion", "spinnerVerbs", "spinnerTipsOverride",
   "sandbox", "forceLoginMethod", "forceLoginOrgUUID", "companyAnnouncements",
   "env",
@@ -300,7 +299,7 @@ const SECTION_KEYWORDS: Record<string, string[]> = {
   "MCP Server Approval": ["mcp", "enabled", "disabled", "server"],
   "Environment Variables": ["env", "environment", "variable"],
   "Session & Login": ["cleanup", "auto-update", "plans", "teammate", "login", "org", "announcements", "enterprise"],
-  "Scripts & Hooks": ["api key", "otel", "aws", "credential", "http hook", "url", "script"],
+  "Scripts & Credentials": ["api key", "otel", "aws", "credential", "script"],
   "Sandbox": ["sandbox", "filesystem", "network", "domain", "unix socket", "write", "read"],
   "Advanced (JSON)": ["json", "raw", "advanced"],
 };
@@ -359,8 +358,6 @@ export function ConfigPage({ scope }: Props) {
   const [otelHeadersHelper, setOtelHeadersHelper] = useState("");
   const [awsAuthRefresh, setAwsAuthRefresh] = useState("");
   const [awsCredentialExport, setAwsCredentialExport] = useState("");
-  const [allowedHttpHookUrls, setAllowedHttpHookUrls] = useState<string[]>([]);
-  const [httpHookAllowedEnvVars, setHttpHookAllowedEnvVars] = useState<string[]>([]);
   const [statusLine, setStatusLine] = useState<StatusLineState>({ command: "" });
   const [fileSuggestion, setFileSuggestion] = useState<FileSuggestionState>({ command: "" });
   const [spinnerVerbs, setSpinnerVerbs] = useState<SpinnerVerbsState>({ mode: "append", verbs: [] });
@@ -405,8 +402,6 @@ export function ConfigPage({ scope }: Props) {
     setOtelHeadersHelper(readString(raw, "otelHeadersHelper"));
     setAwsAuthRefresh(readString(raw, "awsAuthRefresh"));
     setAwsCredentialExport(readString(raw, "awsCredentialExport"));
-    setAllowedHttpHookUrls(readStringArray(raw, "allowedHttpHookUrls"));
-    setHttpHookAllowedEnvVars(readStringArray(raw, "httpHookAllowedEnvVars"));
     setStatusLine(readStatusLine(raw));
     setFileSuggestion(readFileSuggestion(raw));
     setSpinnerVerbs(readSpinnerVerbs(raw));
@@ -469,8 +464,6 @@ export function ConfigPage({ scope }: Props) {
     if (otelHeadersHelper) rawObj.otelHeadersHelper = otelHeadersHelper;
     if (awsAuthRefresh) rawObj.awsAuthRefresh = awsAuthRefresh;
     if (awsCredentialExport) rawObj.awsCredentialExport = awsCredentialExport;
-    if (allowedHttpHookUrls.length > 0) rawObj.allowedHttpHookUrls = allowedHttpHookUrls;
-    if (httpHookAllowedEnvVars.length > 0) rawObj.httpHookAllowedEnvVars = httpHookAllowedEnvVars;
     if (statusLine.command) rawObj.statusLine = { type: "command", command: statusLine.command };
     if (fileSuggestion.command) rawObj.fileSuggestion = { type: "command", command: fileSuggestion.command };
     if (spinnerVerbs.verbs.length > 0) rawObj.spinnerVerbs = { mode: spinnerVerbs.mode, verbs: spinnerVerbs.verbs };
@@ -508,8 +501,6 @@ export function ConfigPage({ scope }: Props) {
     if (otelHeadersHelper !== readString(savedRaw, "otelHeadersHelper")) return true;
     if (awsAuthRefresh !== readString(savedRaw, "awsAuthRefresh")) return true;
     if (awsCredentialExport !== readString(savedRaw, "awsCredentialExport")) return true;
-    if (JSON.stringify(allowedHttpHookUrls) !== JSON.stringify(readStringArray(savedRaw, "allowedHttpHookUrls"))) return true;
-    if (JSON.stringify(httpHookAllowedEnvVars) !== JSON.stringify(readStringArray(savedRaw, "httpHookAllowedEnvVars"))) return true;
     if (JSON.stringify(statusLine) !== JSON.stringify(readStatusLine(savedRaw))) return true;
     if (JSON.stringify(fileSuggestion) !== JSON.stringify(readFileSuggestion(savedRaw))) return true;
     if (JSON.stringify(spinnerVerbs) !== JSON.stringify(readSpinnerVerbs(savedRaw))) return true;
@@ -537,6 +528,7 @@ export function ConfigPage({ scope }: Props) {
       await api.writeClaudeConfig(basePath, config);
       const reloaded = await api.readClaudeConfig(basePath);
       setSavedConfig(reloaded); populateForm(reloaded);
+      window.dispatchEvent(new Event("sidebar-refresh"));
     } catch (e) {
       toast.error("Failed to save config", String(e));
     } finally { setSaving(false); }
@@ -581,14 +573,14 @@ export function ConfigPage({ scope }: Props) {
     const hasMcp = !!(readStringArray(raw, "enabledMcpjsonServers").length > 0 || readStringArray(raw, "disabledMcpjsonServers").length > 0);
     const hasEnv = Object.keys(readEnvVars(raw, MANAGED_ENV_KEYS)).length > 0;
     const hasSession = !!(readNumber(raw, "cleanupPeriodDays") !== null || readString(raw, "autoUpdatesChannel") || readString(raw, "plansDirectory") || readString(raw, "teammateMode") || readString(raw, "forceLoginMethod") || readString(raw, "forceLoginOrgUUID") || readStringArray(raw, "companyAnnouncements").length > 0);
-    const hasScripts = !!(readString(raw, "apiKeyHelper") || readString(raw, "otelHeadersHelper") || readString(raw, "awsAuthRefresh") || readString(raw, "awsCredentialExport") || readStringArray(raw, "allowedHttpHookUrls").length > 0 || readStringArray(raw, "httpHookAllowedEnvVars").length > 0);
+    const hasScripts = !!(readString(raw, "apiKeyHelper") || readString(raw, "otelHeadersHelper") || readString(raw, "awsAuthRefresh") || readString(raw, "awsCredentialExport"));
     const hasSandbox = buildSandbox(readSandbox(raw)) !== null;
     const hasAdvanced = Object.keys(getExtraRawFields(raw)).length > 0;
     return {
       "General": hasGeneral, "Feature Toggles": hasToggles, "Permissions": hasPerms,
       "File Patterns": hasFilePatterns, "UI Customization": hasUi, "Attribution": hasAttr,
       "MCP Server Approval": hasMcp, "Environment Variables": hasEnv, "Session & Login": hasSession,
-      "Scripts & Hooks": hasScripts, "Sandbox": hasSandbox, "Advanced (JSON)": hasAdvanced,
+      "Scripts & Credentials": hasScripts, "Sandbox": hasSandbox, "Advanced (JSON)": hasAdvanced,
     };
   }, [savedConfig]);
 
@@ -869,8 +861,8 @@ export function ConfigPage({ scope }: Props) {
         </div>
       </Section>
 
-      {/* ── Scripts & Hooks (merged: Custom Scripts + Hook Controls) ── */}
-      <Section title="Scripts &amp; Hooks" hidden={!sectionVisible("Scripts & Hooks")} forceOpen={sectionForceOpen("Scripts & Hooks")} hasValues={sectionValues["Scripts & Hooks"]}>
+      {/* ── Scripts & Credentials ── */}
+      <Section title="Scripts &amp; Credentials" hidden={!sectionVisible("Scripts & Credentials")} forceOpen={sectionForceOpen("Scripts & Credentials")} hasValues={sectionValues["Scripts & Credentials"]}>
         <div className="config-field">
           <label>API Key Helper</label>
           <p className="config-field-hint">Script to generate authentication values dynamically.</p>
@@ -890,16 +882,6 @@ export function ConfigPage({ scope }: Props) {
           <label>AWS Credential Export</label>
           <p className="config-field-hint">Script that outputs AWS credentials JSON for Bedrock access.</p>
           <input type="text" value={awsCredentialExport} onChange={(e) => setAwsCredentialExport(e.target.value)} placeholder="/path/to/generate_aws_grant.sh" />
-        </div>
-        <div className="config-field" style={{ marginTop: 16 }}>
-          <label>Allowed HTTP Hook URLs</label>
-          <p className="config-field-hint">URL patterns allowed for HTTP hooks.</p>
-          <TagInput tags={allowedHttpHookUrls} onAdd={(v) => setAllowedHttpHookUrls([...allowedHttpHookUrls, v])} onRemove={(t) => setAllowedHttpHookUrls(allowedHttpHookUrls.filter((x) => x !== t))} placeholder="Add URL pattern..." emptyLabel="No HTTP hook URLs allowed" />
-        </div>
-        <div className="config-field" style={{ marginTop: 16 }}>
-          <label>HTTP Hook Allowed Env Vars</label>
-          <p className="config-field-hint">Environment variable names that HTTP hooks can access.</p>
-          <TagInput tags={httpHookAllowedEnvVars} onAdd={(v) => setHttpHookAllowedEnvVars([...httpHookAllowedEnvVars, v])} onRemove={(t) => setHttpHookAllowedEnvVars(httpHookAllowedEnvVars.filter((x) => x !== t))} placeholder="Add env var name..." emptyLabel="No env vars exposed to HTTP hooks" />
         </div>
       </Section>
 

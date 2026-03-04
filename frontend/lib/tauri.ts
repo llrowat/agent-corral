@@ -140,6 +140,10 @@ export async function getKnownTools(): Promise<string[]> {
   return invoke("get_known_tools");
 }
 
+export async function getKnownToolsWithMcp(repoPath: string, isGlobal: boolean = false): Promise<string[]> {
+  return invoke("get_known_tools_with_mcp", { repoPath, isGlobal });
+}
+
 export async function prepareAiCommand(
   repoPath: string,
   prompt: string
@@ -594,6 +598,7 @@ export interface ProjectScanResult {
   hookCount: number;
   mcpServerCount: number;
   hasSettings: boolean;
+  settingsKeyCount: number;
   hasMemory: boolean;
   memoryStoreCount: number;
 }
