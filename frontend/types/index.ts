@@ -289,10 +289,11 @@ export type PageId =
   | "overview"
   | "claude-md"
   | "agents"
-  | "config"
+  | "settings"
   | "memory"
   | "hooks"
   | "skills"
   | "mcp"
   | "plugins"
+  | "preferences"
   | "history";

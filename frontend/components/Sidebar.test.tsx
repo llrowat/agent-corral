@@ -14,7 +14,7 @@ function renderSidebar() {
 describe("Sidebar", () => {
   it("renders all Claude Code nav items", () => {
     renderSidebar();
-    expect(screen.getByText("Config")).toBeInTheDocument();
+    expect(screen.getByText("Settings")).toBeInTheDocument();
     expect(screen.getByText("Agents")).toBeInTheDocument();
     expect(screen.getByText("Hooks")).toBeInTheDocument();
     expect(screen.getByText("Memory")).toBeInTheDocument();
@@ -26,7 +26,7 @@ describe("Sidebar", () => {
     const { container } = renderSidebar();
     const labelSpans = container.querySelectorAll(".sidebar-label");
     const labels = Array.from(labelSpans).map((el) => el.textContent);
-    const claudeCodeItems = ["CLAUDE.md", "Config", "Agents", "Hooks", "Memory", "Skills", "MCP Servers"];
+    const claudeCodeItems = ["CLAUDE.md", "Settings", "Agents", "Hooks", "Memory", "Skills", "MCP Servers"];
     const claudeCodeLabels = labels.filter((l) => claudeCodeItems.includes(l ?? ""));
     expect(claudeCodeLabels[0]).toBe("CLAUDE.md");
     expect(claudeCodeLabels[claudeCodeLabels.length - 1]).toBe("MCP Servers");
@@ -46,5 +46,10 @@ describe("Sidebar", () => {
   it("renders the disclaimer", () => {
     renderSidebar();
     expect(screen.getByText(/not affiliated with.*anthropic/i)).toBeInTheDocument();
+  });
+
+  it("renders Preferences in the App section", () => {
+    renderSidebar();
+    expect(screen.getByText("Preferences")).toBeInTheDocument();
   });
 });

@@ -35,7 +35,7 @@ export function useKeyboardShortcuts() {
         navigate("/claude-md");
       } else if (mod && e.key === "3") {
         e.preventDefault();
-        navigate("/config");
+        navigate("/settings");
       } else if (mod && e.key === "4") {
         e.preventDefault();
         navigate("/agents");

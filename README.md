@@ -21,7 +21,7 @@ You've got Claude Code agents scattered across a dozen repos. Hooks defined in o
 **AgentCorral rounds it all up.** This is your Claude Code configuration management studio — a desktop app that gives you a visual, unified interface to wrangle every piece of your Claude Code setup:
 
 - **See everything at a glance** — One dashboard across all your repos. Know instantly which projects have agents, hooks, skills, MCP servers, and memory configured.
-- **Stop copy-pasting JSON** — Visual editors for agents, hooks, skills, MCP servers, config, and memory. Built-in presets so you're not starting from scratch.
+- **Stop copy-pasting JSON** — Visual editors for agents, hooks, skills, MCP servers, settings, and memory. Built-in presets so you're not starting from scratch.
 - **Global or project, your call** — Flip between global (`~/.claude/`) and project-scoped (`.claude/`) config with a single toggle. See exactly what applies where.
 - **Share setups with your team** — Bundle agents, skills, hooks, and MCP servers into plugins. Export from one repo, import into another, install from git, and keep everyone in sync automatically.
 
@@ -52,9 +52,9 @@ Built with [Tauri v2](https://v2.tauri.app/) + React (TypeScript) + Rust.
 
   <img src="assets/screenshot_skills.png" alt="Skills editor with schema-driven form for creating a new skill" width="700" />
 - **MCP Servers** — Configure Model Context Protocol servers with health checks to verify availability.
-- **Config Studio** — Edit Claude Code settings (model, permissions, ignore patterns) with a form UI. Snapshot configuration at any point and restore from history.
+- **Settings Studio** — Comprehensive Claude Code settings editor with 12 collapsible sections: General (model, language, output style), Feature Toggles, Permissions, File Patterns, UI Customization (status line, file suggestion, spinner), Attribution, MCP Server Approval, Environment Variables, Session & Login, Scripts & Hooks, Sandbox, and Advanced (JSON). Includes a search filter to quickly find settings.
 
-  <img src="assets/screenshot_config.png" alt="Config Studio with model selection and feature toggles" width="700" />
+  <img src="assets/screenshot_config.png" alt="Settings Studio with model selection, feature toggles, and search filter" width="700" />
 - **Memory Studio** — Manage memory stores and entries. Create/delete stores, add/edit/delete individual entries inline.
 - **Plugin System** — Bundle agents, skills, hooks, and MCP servers into portable packages. Export from one repo, import into another, install from git, and auto-sync when the source changes.
 - **Config Linter** — Comprehensive linting of your Claude Code configuration with 20+ rules. Detects hierarchy conflicts (CLAUDE.md contradictions, agent/skill/MCP shadowing, permission clashes, model overrides), validates references (dangling memory stores, nonexistent agents in skills), flags incomplete config (placeholder env vars, missing commands, empty prompts), and checks settings.json for unknown keys. Filterable by severity and groupable by category, severity, or scope.

@@ -24,7 +24,7 @@ const navGroups: NavGroup[] = [
     label: "Claude Code",
     items: [
       { path: "/claude-md", label: "CLAUDE.md", icon: "doc" },
-      { path: "/config", label: "Config", icon: "settings" },
+      { path: "/settings", label: "Settings", icon: "settings" },
       { path: "/agents", label: "Agents", icon: "bot" },
       { path: "/hooks", label: "Hooks", icon: "hook" },
       { path: "/memory", label: "Memory", icon: "database" },
@@ -37,7 +37,7 @@ const navGroups: NavGroup[] = [
     items: [
       { path: "/plugins", label: "Plugins", icon: "package" },
       { path: "/history", label: "History", icon: "history" },
-      { path: "/settings", label: "Settings", icon: "wrench" },
+      { path: "/preferences", label: "Preferences", icon: "wrench" },
     ],
   },
 ];
