@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Scope, Agent, HookEvent, Skill, McpServer, MemoryStore, PluginSummary } from "@/types";
+import type { Repo, Scope, Agent, HookEvent, Skill, McpServer, MemoryStore, PluginSummary } from "@/types";
 import * as api from "@/lib/tauri";
 
 interface Props {
   scope: Scope | null;
   homePath: string | null;
+  onScopeChange: (scope: Scope | null) => void;
 }
 
 interface SearchResult {
@@ -97,7 +98,7 @@ async function loadScopeItems(
   return items;
 }
 
-export function GlobalSearch({ scope, homePath }: Props) {
+export function GlobalSearch({ scope, homePath, onScopeChange }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -105,6 +106,7 @@ export function GlobalSearch({ scope, homePath }: Props) {
   const [allItems, setAllItems] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const projectRepoRef = useRef<Repo | null>(null);
   const navigate = useNavigate();
 
   const projectPath = scope?.type === "project" ? scope.repo.path : null;
@@ -143,6 +145,9 @@ export function GlobalSearch({ scope, homePath }: Props) {
       setAllItems([]);
       return;
     }
+
+    // Capture the project repo at load time so handleSelect can restore it
+    projectRepoRef.current = scope?.type === "project" ? scope.repo : null;
 
     let cancelled = false;
     setLoading(true);
@@ -217,6 +222,12 @@ export function GlobalSearch({ scope, homePath }: Props) {
   }, [query, allItems]);
 
   const handleSelect = (result: SearchResult) => {
+    // Switch scope if the result belongs to a different scope than the current one
+    if (result.scope === "global" && scope?.type !== "global" && homePath) {
+      onScopeChange({ type: "global", homePath });
+    } else if (result.scope === "project" && scope?.type !== "project" && projectRepoRef.current) {
+      onScopeChange({ type: "project", repo: projectRepoRef.current });
+    }
     navigate(result.path);
     setOpen(false);
   };
