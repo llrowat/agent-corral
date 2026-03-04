@@ -140,6 +140,10 @@ export async function getKnownTools(): Promise<string[]> {
   return invoke("get_known_tools");
 }
 
+export async function getKnownToolsWithMcp(repoPath: string, isGlobal: boolean = false): Promise<string[]> {
+  return invoke("get_known_tools_with_mcp", { repoPath, isGlobal });
+}
+
 export async function prepareAiCommand(
   repoPath: string,
   prompt: string

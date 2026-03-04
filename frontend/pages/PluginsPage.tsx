@@ -369,7 +369,7 @@ export function PluginsPage({ scope }: Props) {
     return (
       <div className="page plugins-page">
         <div className="page-header">
-          <h2>Export Plugin</h2>
+          <h2>Export Config Bundle</h2>
           <button className="btn" onClick={() => setView("list")}>
             Back
           </button>
@@ -377,7 +377,7 @@ export function PluginsPage({ scope }: Props) {
 
         <div className="export-form">
           <div className="form-group">
-            <label>Plugin Name</label>
+            <label>Bundle Name</label>
             <input
               type="text"
               value={exportName}
@@ -504,7 +504,7 @@ export function PluginsPage({ scope }: Props) {
               onClick={handleExport}
               disabled={exporting || !exportName.trim()}
             >
-              {exporting ? "Exporting..." : "Export Plugin"}
+              {exporting ? "Exporting..." : "Export"}
             </button>
             <button className="btn" onClick={() => setView("list")}>
               Cancel
@@ -663,14 +663,14 @@ export function PluginsPage({ scope }: Props) {
   return (
     <div className="page plugins-page">
       <div className="page-header">
-        <h2>Plugins</h2>
+        <h2>Export / Import</h2>
         <div className="header-actions">
           <div className="tab-bar">
             <button
               className={`btn btn-sm ${activeTab === "my" ? "active" : ""}`}
               onClick={() => setActiveTab("my")}
             >
-              My Plugins ({myPlugins.length})
+              My Exports ({myPlugins.length})
             </button>
             <button
               className={`btn btn-sm ${activeTab === "library" ? "active" : ""}`}
@@ -686,7 +686,7 @@ export function PluginsPage({ scope }: Props) {
             </button>
           </div>
           <button className="btn btn-primary btn-sm" onClick={startExport}>
-            Export Plugin
+            Export
           </button>
           <button
             className="btn btn-sm"
@@ -711,7 +711,7 @@ export function PluginsPage({ scope }: Props) {
         <div className="sync-status-banner">
           <div className="sync-banner-header">
             <strong>
-              Imported Plugins ({syncStatuses.length})
+              Imported Bundles ({syncStatuses.length})
               {syncUpdatesAvailable > 0 && (
                 <span className="badge-update">
                   {syncUpdatesAvailable} update(s)
@@ -823,26 +823,26 @@ export function PluginsPage({ scope }: Props) {
       )}
 
       {loading ? (
-        <p className="text-muted">Loading plugins...</p>
+        <p className="text-muted">Loading...</p>
       ) : displayedPlugins.length === 0 ? (
         <div className="packs-empty">
           <h3>
             {activeTab === "my"
-              ? "No Plugins Yet"
+              ? "No Exports Yet"
               : activeTab === "git"
-                ? "No Git Plugins"
+                ? "No Git Imports"
                 : "Library Empty"}
           </h3>
           <p>
             {activeTab === "my"
-              ? "Create a plugin by exporting agents, skills, hooks, and MCP servers from your settings."
+              ? "Create an export bundle with agents, skills, hooks, and MCP servers from your settings."
               : activeTab === "git"
-                ? "Install plugins from a git repository containing .claude-plugin directories."
-                : "Install plugins from git or export from your settings to see them here."}
+                ? "Install config bundles from a git repository."
+                : "Install from git or export from your settings to see them here."}
           </p>
           {activeTab === "my" && (
             <button className="btn btn-primary" onClick={startExport}>
-              Export Plugin
+              Export
             </button>
           )}
           {activeTab === "git" && (

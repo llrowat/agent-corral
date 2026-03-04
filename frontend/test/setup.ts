@@ -5,3 +5,8 @@ import { vi } from "vitest";
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
+
+// Mock @tauri-apps/plugin-dialog since we're not in a Tauri runtime during tests
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
+}));

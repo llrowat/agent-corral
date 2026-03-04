@@ -86,6 +86,7 @@ pub fn run() {
             commands::claude::delete_memory_store,
             commands::claude::reset_memory,
             commands::claude::get_known_tools,
+            commands::claude::get_known_tools_with_mcp,
             commands::claude::prepare_ai_command,
             commands::claude::launch_terminal,
             commands::claude::is_process_alive,

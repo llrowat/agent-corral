@@ -612,6 +612,38 @@ impl ClaudeRepoAdapter {
         KNOWN_TOOLS.iter().map(|s| s.to_string()).collect()
     }
 
+    /// Return list of known tools plus MCP-derived tool prefixes for a given scope.
+    /// MCP tools follow the pattern `mcp__<serverId>__<toolName>`.
+    pub fn known_tools_with_mcp(repo_path: &str, is_global: bool) -> Vec<String> {
+        let mut tools: Vec<String> = KNOWN_TOOLS.iter().map(|s| s.to_string()).collect();
+        if let Ok(servers) = Self::read_mcp_servers(repo_path, is_global) {
+            for server in &servers {
+                let disabled = server.disabled.unwrap_or(false);
+                if !disabled {
+                    tools.push(format!("mcp__{}", server.server_id));
+                }
+            }
+        }
+        tools
+    }
+
+    /// Check if a tool name is valid: either a known core tool or an MCP-prefixed tool.
+    pub fn is_valid_tool(tool: &str, mcp_server_ids: &[String]) -> bool {
+        if KNOWN_TOOLS.contains(&tool) {
+            return true;
+        }
+        // MCP tools match pattern mcp__<serverId>__<toolName> or mcp__<serverId>
+        if tool.starts_with("mcp__") {
+            let rest = &tool[5..];
+            for sid in mcp_server_ids {
+                if rest == sid.as_str() || rest.starts_with(&format!("{}__", sid)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     // -- Hooks --
 
     /// Read hooks from .claude/settings.json
@@ -2166,11 +2198,19 @@ impl ClaudeRepoAdapter {
         // =======================================================
         // RULE: agent-empty-description / agent-short-prompt
         // =======================================================
+        // Collect MCP server IDs for tool validation
+        let mut all_mcp_server_ids: Vec<String> = project_mcp.iter().map(|s| s.server_id.clone()).collect();
+        for s in &global_mcp {
+            if !all_mcp_server_ids.contains(&s.server_id) {
+                all_mcp_server_ids.push(s.server_id.clone());
+            }
+        }
+
         for agent in &project_agents {
-            Self::lint_agent(&mut issues, agent, "project");
+            Self::lint_agent(&mut issues, agent, "project", &all_mcp_server_ids);
         }
         for agent in &global_agents {
-            Self::lint_agent(&mut issues, agent, "global");
+            Self::lint_agent(&mut issues, agent, "global", &all_mcp_server_ids);
         }
 
         // =======================================================
@@ -2462,7 +2502,7 @@ impl ClaudeRepoAdapter {
 
     // -- Lint helper methods --
 
-    fn lint_agent(issues: &mut Vec<LintIssue>, agent: &Agent, scope: &str) {
+    fn lint_agent(issues: &mut Vec<LintIssue>, agent: &Agent, scope: &str, mcp_server_ids: &[String]) {
         if agent.description.trim().len() < 5 {
             issues.push(LintIssue {
                 severity: "info".into(),
@@ -2496,9 +2536,9 @@ impl ClaudeRepoAdapter {
                 scope: Some(scope.into()),
             });
         }
-        // Check for unknown tools
+        // Check for unknown tools (core tools + MCP-prefixed tools are valid)
         for tool in &agent.tools {
-            if !KNOWN_TOOLS.contains(&tool.as_str()) {
+            if !Self::is_valid_tool(tool, mcp_server_ids) {
                 issues.push(LintIssue {
                     severity: "warning".into(),
                     category: "agent".into(),
@@ -2508,7 +2548,7 @@ impl ClaudeRepoAdapter {
                         agent.name, tool
                     ),
                     fix: Some(format!(
-                        "Valid tools: {}. Remove or correct this tool name",
+                        "Valid core tools: {}. MCP tools use the pattern mcp__<serverId>__<toolName>",
                         KNOWN_TOOLS.join(", ")
                     )),
                     entity_id: Some(agent.agent_id.clone()),
@@ -3605,6 +3645,72 @@ mod tests {
         assert!(tools.contains(&"Bash".to_string()));
         assert!(tools.contains(&"Edit".to_string()));
         assert!(!tools.is_empty());
+    }
+
+    #[test]
+    fn known_tools_with_mcp_includes_server_prefixes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        // Write an MCP server
+        let mcp_json = r#"{"mcpServers": {"github": {"type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"]}}}"#;
+        fs::write(tmp.path().join(".mcp.json"), mcp_json).unwrap();
+
+        let tools = ClaudeRepoAdapter::known_tools_with_mcp(path, false);
+        assert!(tools.contains(&"Read".to_string()));
+        assert!(tools.contains(&"mcp__github".to_string()));
+    }
+
+    #[test]
+    fn known_tools_with_mcp_excludes_disabled_servers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let mcp_json = r#"{"mcpServers": {"github": {"type": "stdio", "command": "npx", "_disabled": true}}}"#;
+        fs::write(tmp.path().join(".mcp.json"), mcp_json).unwrap();
+
+        let tools = ClaudeRepoAdapter::known_tools_with_mcp(path, false);
+        assert!(!tools.contains(&"mcp__github".to_string()));
+    }
+
+    #[test]
+    fn is_valid_tool_core_tools() {
+        let mcp_ids = vec![];
+        assert!(ClaudeRepoAdapter::is_valid_tool("Read", &mcp_ids));
+        assert!(ClaudeRepoAdapter::is_valid_tool("Bash", &mcp_ids));
+        assert!(!ClaudeRepoAdapter::is_valid_tool("FakeToolXyz", &mcp_ids));
+    }
+
+    #[test]
+    fn is_valid_tool_mcp_tools() {
+        let mcp_ids = vec!["github".to_string(), "filesystem".to_string()];
+        assert!(ClaudeRepoAdapter::is_valid_tool("mcp__github", &mcp_ids));
+        assert!(ClaudeRepoAdapter::is_valid_tool("mcp__github__create_issue", &mcp_ids));
+        assert!(ClaudeRepoAdapter::is_valid_tool("mcp__filesystem__read_file", &mcp_ids));
+        assert!(!ClaudeRepoAdapter::is_valid_tool("mcp__unknown__tool", &mcp_ids));
+        assert!(!ClaudeRepoAdapter::is_valid_tool("mcp__", &mcp_ids));
+    }
+
+    #[test]
+    fn lint_does_not_flag_mcp_tools() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        // Create agent with MCP tool
+        let agents_dir = tmp.path().join(".claude").join("agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        let agent_md = "---\nname: Test Agent\ndescription: An agent for testing MCP tools\nsystemPrompt: You are a test agent that uses MCP tools to interact with GitHub.\ntools: mcp__github__create_issue\n---\nTest agent";
+        fs::write(agents_dir.join("test-agent.md"), agent_md).unwrap();
+
+        // Create MCP server
+        let mcp_json = r#"{"mcpServers": {"github": {"type": "stdio", "command": "npx"}}}"#;
+        fs::write(tmp.path().join(".mcp.json"), mcp_json).unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+        let unknown_tool_issues: Vec<_> = result.issues.iter()
+            .filter(|i| i.rule == "agent-unknown-tool")
+            .collect();
+        assert!(unknown_tool_issues.is_empty(), "MCP tools should not be flagged as unknown");
     }
 
     // -- serialization tests --

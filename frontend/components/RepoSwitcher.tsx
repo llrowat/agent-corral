@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { Repo } from "@/types";
 
 interface RepoSwitcherProps {
@@ -29,6 +30,31 @@ export function RepoSwitcher({
       setShowAddForm(false);
     } catch (e) {
       alert(`Failed to add repo: ${e}`);
+    }
+  };
+
+  const handleBrowse = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Repository Directory",
+      });
+      if (selected && typeof selected === "string") {
+        setAddPath(selected);
+        // Auto-add the selected directory
+        try {
+          const repo = await onAdd(selected);
+          onSelect(repo);
+          setAddPath("");
+          setShowAddForm(false);
+        } catch (e) {
+          // Set the path so user can see it, but don't close the form
+          alert(`Failed to add repo: ${e}`);
+        }
+      }
+    } catch (e) {
+      console.error("File picker error:", e);
     }
   };
 
@@ -95,15 +121,25 @@ export function RepoSwitcher({
                   autoFocus
                 />
                 <button onClick={handleAdd}>Add</button>
+                <button onClick={handleBrowse} title="Browse for directory">Browse</button>
                 <button onClick={() => setShowAddForm(false)}>Cancel</button>
               </div>
             ) : (
-              <button
-                className="repo-add-button"
-                onClick={() => setShowAddForm(true)}
-              >
-                + Add Repository
-              </button>
+              <div className="repo-add-buttons">
+                <button
+                  className="repo-add-button"
+                  onClick={() => setShowAddForm(true)}
+                >
+                  + Add Repository
+                </button>
+                <button
+                  className="repo-add-button"
+                  onClick={handleBrowse}
+                  title="Browse for repository directory"
+                >
+                  Browse...
+                </button>
+              </div>
             )}
           </div>
         </div>

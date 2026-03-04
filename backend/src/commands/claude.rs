@@ -90,6 +90,11 @@ pub fn get_known_tools() -> Vec<String> {
     ClaudeRepoAdapter::known_tools()
 }
 
+#[tauri::command]
+pub fn get_known_tools_with_mcp(repo_path: String, is_global: bool) -> Vec<String> {
+    ClaudeRepoAdapter::known_tools_with_mcp(&repo_path, is_global)
+}
+
 /// Write a prompt to a temp file and a wrapper script that launches Claude Code.
 /// Returns the shell command to execute (the wrapper script path).
 #[tauri::command]

@@ -81,8 +81,13 @@ export function AgentsPage({ scope, homePath }: Props) {
     setEditing(null);
     loadAgents();
     loadGlobalAgents();
-    api.getKnownTools().then(setKnownTools);
-  }, [loadAgents, loadGlobalAgents, basePath]);
+    if (basePath) {
+      const isGlobal = scope?.type === "global";
+      api.getKnownToolsWithMcp(basePath, isGlobal).then(setKnownTools);
+    } else {
+      api.getKnownTools().then(setKnownTools);
+    }
+  }, [loadAgents, loadGlobalAgents, basePath, scope?.type]);
 
   if (!scope) {
     return (

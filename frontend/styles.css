@@ -321,6 +321,15 @@ body {
   flex: 1;
 }
 
+.repo-add-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.repo-add-buttons .repo-add-button {
+  flex: 1;
+}
+
 /* -- Page Common -- */
 .page {
   max-width: 1200px;
@@ -1482,6 +1491,35 @@ code {
 .tool-checkbox input[type="checkbox"] {
   width: auto;
   accent-color: var(--accent);
+}
+
+.tools-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  margin-top: 4px;
+}
+
+.tool-mcp span {
+  color: var(--accent);
+}
+
+.tool-custom span {
+  color: var(--warning);
+  font-style: italic;
+}
+
+.tool-custom-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tool-custom-add input {
+  font-size: 13px;
 }
 
 .tool-tags {

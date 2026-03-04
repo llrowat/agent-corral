@@ -35,7 +35,7 @@ const navGroups: NavGroup[] = [
   {
     label: "App",
     items: [
-      { path: "/plugins", label: "Plugins", icon: "package" },
+      { path: "/plugins", label: "Export/Import", icon: "package" },
       { path: "/history", label: "History", icon: "history" },
       { path: "/preferences", label: "Preferences", icon: "wrench" },
     ],
