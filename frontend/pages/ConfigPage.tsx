@@ -528,6 +528,7 @@ export function ConfigPage({ scope }: Props) {
       await api.writeClaudeConfig(basePath, config);
       const reloaded = await api.readClaudeConfig(basePath);
       setSavedConfig(reloaded); populateForm(reloaded);
+      window.dispatchEvent(new Event("sidebar-refresh"));
     } catch (e) {
       toast.error("Failed to save config", String(e));
     } finally { setSaving(false); }

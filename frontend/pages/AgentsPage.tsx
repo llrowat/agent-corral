@@ -142,6 +142,7 @@ export function AgentsPage({ scope, homePath }: Props) {
     try {
       await api.writeAgent(basePath, editing);
       await loadAgents();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       setSelected(editing);
       setEditing(null);
     } catch (e) {
@@ -157,6 +158,7 @@ export function AgentsPage({ scope, homePath }: Props) {
     try {
       await api.deleteAgent(basePath, agentId);
       await loadAgents();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       if (selected?.agentId === agentId) setSelected(null);
       if (editing?.agentId === agentId) setEditing(null);
     } catch (e) {

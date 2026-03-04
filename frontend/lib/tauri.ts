@@ -598,6 +598,7 @@ export interface ProjectScanResult {
   hookCount: number;
   mcpServerCount: number;
   hasSettings: boolean;
+  settingsKeyCount: number;
   hasMemory: boolean;
   memoryStoreCount: number;
 }

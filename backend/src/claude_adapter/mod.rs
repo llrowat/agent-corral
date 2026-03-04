@@ -214,6 +214,7 @@ pub struct ProjectScanResult {
     pub hook_count: usize,
     pub mcp_server_count: usize,
     pub has_settings: bool,
+    pub settings_key_count: usize,
     pub has_memory: bool,
     pub memory_store_count: usize,
 }
@@ -1970,32 +1971,38 @@ impl ClaudeRepoAdapter {
             0
         };
 
-        // Count hooks from settings.json
+        // Parse settings.json once for hooks count and settings key count
         let settings_path = claude_dir.join("settings.json");
         let has_settings = settings_path.exists();
-        let hook_count = if has_settings {
+        let settings_json: Option<serde_json::Value> = if has_settings {
             fs::read_to_string(&settings_path)
                 .ok()
-                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-                .and_then(|v| v.get("hooks").cloned())
-                .and_then(|h| {
-                    h.as_object().map(|obj| {
-                        obj.values()
-                            .filter_map(|v| v.as_array())
-                            .flat_map(|arr| arr.iter())
-                            .filter_map(|group| {
-                                group
-                                    .get("hooks")
-                                    .and_then(|h| h.as_array())
-                                    .map(|hooks| hooks.len())
-                            })
-                            .sum()
-                    })
-                })
-                .unwrap_or(0)
+                .and_then(|s| serde_json::from_str(&s).ok())
         } else {
-            0
+            None
         };
+
+        let hook_count = settings_json.as_ref()
+            .and_then(|v| v.get("hooks"))
+            .and_then(|h| h.as_object())
+            .map(|obj| {
+                obj.values()
+                    .filter_map(|v| v.as_array())
+                    .flat_map(|arr| arr.iter())
+                    .filter_map(|group| {
+                        group.get("hooks")
+                            .and_then(|h| h.as_array())
+                            .map(|hooks| hooks.len())
+                    })
+                    .sum()
+            })
+            .unwrap_or(0);
+
+        // Count top-level settings keys (excluding "hooks" which is shown separately)
+        let settings_key_count = settings_json.as_ref()
+            .and_then(|v| v.as_object())
+            .map(|obj| obj.keys().filter(|k| k.as_str() != "hooks").count())
+            .unwrap_or(0);
 
         // Count MCP servers from .mcp.json
         let mcp_path = project_path.join(".mcp.json");
@@ -2036,6 +2043,7 @@ impl ClaudeRepoAdapter {
             hook_count,
             mcp_server_count,
             has_settings,
+            settings_key_count,
             has_memory,
             memory_store_count,
         })
@@ -4217,6 +4225,23 @@ mod tests {
     }
 
     #[test]
+    fn scan_project_config_counts_settings_keys_excluding_hooks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let claude_dir = tmp.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+        let settings = serde_json::json!({
+            "model": "claude-sonnet-4-6",
+            "fastMode": true,
+            "ignorePatterns": ["node_modules"],
+            "hooks": { "PreToolUse": [] }
+        });
+        fs::write(claude_dir.join("settings.json"), serde_json::to_string(&settings).unwrap()).unwrap();
+        let result = ClaudeRepoAdapter::scan_project_config(tmp.path()).unwrap();
+        // 3 keys: model, fastMode, ignorePatterns — hooks is excluded
+        assert_eq!(result.settings_key_count, 3);
+    }
+
+    #[test]
     fn scan_project_config_counts_mcp_servers() {
         let tmp = tempfile::tempdir().unwrap();
         let mcp = serde_json::json!({
@@ -4290,6 +4315,7 @@ mod tests {
             hook_count: 4,
             mcp_server_count: 2,
             has_settings: true,
+            settings_key_count: 5,
             has_memory: true,
             memory_store_count: 1,
         };

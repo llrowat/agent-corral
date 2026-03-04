@@ -139,6 +139,7 @@ export function SkillsPage({ scope, homePath }: Props) {
     try {
       await api.writeSkill(basePath, editing);
       await loadSkills();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       setSelected(editing);
       setEditing(null);
     } catch (e) {
@@ -154,6 +155,7 @@ export function SkillsPage({ scope, homePath }: Props) {
     try {
       await api.deleteSkill(basePath, skillId);
       await loadSkills();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       if (selected?.skillId === skillId) setSelected(null);
       if (editing?.skillId === skillId) setEditing(null);
     } catch (e) {

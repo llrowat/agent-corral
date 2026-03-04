@@ -137,6 +137,7 @@ export function HooksPage({ scope, homePath }: Props) {
       }
       await api.writeHooks(basePath, updated);
       await loadHooks();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       setSelectedEvent(editing.event);
       setEditing(null);
       setIsNew(false);
@@ -154,6 +155,7 @@ export function HooksPage({ scope, homePath }: Props) {
       const updated = hooks.filter((h) => h.event !== eventName);
       await api.writeHooks(basePath, updated);
       await loadHooks();
+      window.dispatchEvent(new Event("sidebar-refresh"));
       if (selectedEvent === eventName) setSelectedEvent(null);
       if (editing?.event === eventName) setEditing(null);
     } catch (e) {

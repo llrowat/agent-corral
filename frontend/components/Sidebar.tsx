@@ -1,11 +1,13 @@
 import { NavLink } from "react-router-dom";
 import type { Scope } from "@/types";
+import type { ProjectScanResult } from "@/lib/tauri";
 
 interface NavItem {
   path: string;
   label: string;
   icon: string;
   projectOnly?: boolean;
+  countKey?: keyof ProjectScanResult;
 }
 
 interface NavGroup {
@@ -23,13 +25,13 @@ const navGroups: NavGroup[] = [
   {
     label: "Claude Code",
     items: [
-      { path: "/claude-md", label: "CLAUDE.md", icon: "doc" },
-      { path: "/settings", label: "Settings", icon: "settings" },
-      { path: "/agents", label: "Agents", icon: "bot" },
-      { path: "/hooks", label: "Hooks", icon: "hook" },
-      { path: "/memory", label: "Memory", icon: "database" },
-      { path: "/skills", label: "Skills", icon: "skill" },
-      { path: "/mcp", label: "MCP Servers", icon: "mcp" },
+      { path: "/claude-md", label: "CLAUDE.md", icon: "doc", countKey: "claudeMdCount" },
+      { path: "/settings", label: "Settings", icon: "settings", countKey: "settingsKeyCount" },
+      { path: "/agents", label: "Agents", icon: "bot", countKey: "agentCount" },
+      { path: "/hooks", label: "Hooks", icon: "hook", countKey: "hookCount" },
+      { path: "/memory", label: "Memory", icon: "database", countKey: "memoryStoreCount" },
+      { path: "/skills", label: "Skills", icon: "skill", countKey: "skillCount" },
+      { path: "/mcp", label: "MCP Servers", icon: "mcp", countKey: "mcpServerCount" },
     ],
   },
   {
@@ -44,9 +46,10 @@ const navGroups: NavGroup[] = [
 
 interface SidebarProps {
   scope: Scope | null;
+  counts?: ProjectScanResult | null;
 }
 
-export function Sidebar({ scope }: SidebarProps) {
+export function Sidebar({ scope, counts }: SidebarProps) {
   const isGlobal = scope?.type === "global";
 
   return (
@@ -58,6 +61,9 @@ export function Sidebar({ scope }: SidebarProps) {
           )}
           <ul>
             {group.items.map((item) => {
+              const count = item.countKey && counts ? counts[item.countKey] : undefined;
+              const countDisplay = typeof count === "number" && count > 0 ? count : null;
+
               if (item.projectOnly && isGlobal) {
                 return (
                   <li key={item.path}>
@@ -78,6 +84,9 @@ export function Sidebar({ scope }: SidebarProps) {
                   >
                     <span className="sidebar-icon">{getIcon(item.icon)}</span>
                     <span className="sidebar-label">{item.label}</span>
+                    {countDisplay !== null && (
+                      <span className="sidebar-count">{countDisplay}</span>
+                    )}
                   </NavLink>
                 </li>
               );
