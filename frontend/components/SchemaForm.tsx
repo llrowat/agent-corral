@@ -448,6 +448,41 @@ function SchemaField({
     );
   }
 
+  // --- Widget: combobox (select with free-text input) ---
+  if (widget === "combobox") {
+    const options =
+      hints?.options ?? [];
+    const placeholder = hints?.placeholder ?? "";
+    const currentVal = (value as string) ?? "";
+
+    return (
+      <div className="form-group" data-field={name}>
+        <label>{title}</label>
+        {description && (
+          <span className="config-field-hint">{description}</span>
+        )}
+        <input
+          type="text"
+          list={`${name}-datalist`}
+          value={currentVal}
+          placeholder={placeholder}
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange(isNullable(resolved) && !v ? null : v);
+          }}
+          disabled={disabled}
+        />
+        <datalist id={`${name}-datalist`}>
+          {options.map((opt: { value: string; label: string }) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </datalist>
+      </div>
+    );
+  }
+
   // --- Widget: tool-checkboxes ---
   if (widget === "tool-checkboxes") {
     const selected = Array.isArray(value) ? (value as string[]) : [];

@@ -510,14 +510,14 @@ describe("ConfigPage", () => {
     expect(screen.getByDisplayValue("aws sso login")).toBeInTheDocument();
   });
 
-  it("does not render HTTP hook fields in Scripts & Credentials (moved to Hooks page)", async () => {
+  it("renders HTTP hook fields in Scripts & Credentials", async () => {
     const config: NormalizedConfig = { model: null, permissions: null, ignorePatterns: null, raw: {} };
     mockReadClaudeConfig.mockResolvedValue(config);
     renderWithProviders(<ConfigPage scope={GLOBAL_SCOPE} />);
     await waitFor(() => { expect(screen.getByText("Scripts & Credentials")).toBeInTheDocument(); });
     openSection("Scripts & Credentials");
-    expect(screen.queryByText("Allowed HTTP Hook URLs")).not.toBeInTheDocument();
-    expect(screen.queryByText("HTTP Hook Allowed Env Vars")).not.toBeInTheDocument();
+    expect(screen.getByText("Allowed HTTP Hook URLs")).toBeInTheDocument();
+    expect(screen.getByText("HTTP Hook Allowed Env Vars")).toBeInTheDocument();
   });
 
   it("renders Permission Default Mode dropdown", async () => {

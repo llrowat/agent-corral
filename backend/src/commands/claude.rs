@@ -195,6 +195,11 @@ pub fn read_claude_md(repo_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn write_claude_md(repo_path: String, content: String) -> Result<(), String> {
+    ClaudeRepoAdapter::write_claude_md(&repo_path, &content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn list_claude_md_files(repo_path: String) -> Result<Vec<String>, String> {
     ClaudeRepoAdapter::list_claude_md_files(&repo_path).map_err(|e| e.to_string())
 }

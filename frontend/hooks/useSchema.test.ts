@@ -81,10 +81,10 @@ describe("useSchema", () => {
     const toolsField = schema.properties!.tools;
     expect(toolsField["x-field"]!.widget).toBe("tool-checkboxes");
 
-    // Check modelOverride has select widget
+    // Check modelOverride has combobox widget with model options
     const modelField = schema.properties!.modelOverride;
-    expect(modelField["x-field"]!.widget).toBe("select");
-    expect(modelField["x-field"]!.options).toHaveLength(4);
+    expect(modelField["x-field"]!.widget).toBe("combobox");
+    expect(modelField["x-field"]!.options).toHaveLength(7);
   });
 
   it("mcp-server schema has showWhen conditions", () => {

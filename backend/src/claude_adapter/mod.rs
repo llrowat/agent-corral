@@ -159,6 +159,7 @@ pub const KNOWN_TOOLS: &[&str] = &[
     "TodoWrite",
     "NotebookEdit",
     "Agent",
+    "Skill",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +169,16 @@ pub struct ConfigSnapshot {
     pub label: String,
     pub timestamp: String,
     pub settings_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub agents_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub hooks_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub skills_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub mcp_json: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub claude_md: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,6 +188,16 @@ pub struct ConfigSnapshotSummary {
     pub label: String,
     pub timestamp: String,
     pub has_settings: bool,
+    #[serde(default)]
+    pub has_agents: bool,
+    #[serde(default)]
+    pub has_hooks: bool,
+    #[serde(default)]
+    pub has_skills: bool,
+    #[serde(default)]
+    pub has_mcp: bool,
+    #[serde(default)]
+    pub has_claude_md: bool,
 }
 
 // -- Config Bundle types (backup/restore) --
@@ -395,7 +416,9 @@ impl ClaudeRepoAdapter {
         if !agent.tools.is_empty() {
             frontmatter.insert(
                 "tools".to_string(),
-                serde_json::Value::String(agent.tools.join(", ")),
+                serde_json::Value::Array(
+                    agent.tools.iter().map(|t| serde_json::Value::String(t.clone())).collect(),
+                ),
             );
         }
         if let Some(ref model) = agent.model_override {
@@ -1644,17 +1667,22 @@ impl ClaudeRepoAdapter {
             .unwrap_or("")
             .to_string();
 
-        // Tools: comma-separated string → Vec
-        let tools = frontmatter
-            .get("tools")
-            .and_then(|v| v.as_str())
-            .map(|s| {
+        // Tools: YAML array or legacy comma-separated string → Vec
+        let tools = match frontmatter.get("tools") {
+            Some(serde_json::Value::Array(arr)) => {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            }
+            Some(serde_json::Value::String(s)) => {
+                // Backwards compat: comma-separated string
                 s.split(',')
                     .map(|t| t.trim().to_string())
                     .filter(|t| !t.is_empty())
                     .collect()
-            })
-            .unwrap_or_default();
+            }
+            _ => Vec::new(),
+        };
 
         let model_override = frontmatter
             .get("model")
@@ -1808,6 +1836,13 @@ impl ClaudeRepoAdapter {
         Ok(fs::read_to_string(&md_path)?)
     }
 
+    /// Write CLAUDE.md content to a repo (or global home).
+    pub fn write_claude_md(repo_path: &str, content: &str) -> Result<(), ClaudeAdapterError> {
+        let md_path = Path::new(repo_path).join("CLAUDE.md");
+        atomic_write(&md_path, content)?;
+        Ok(())
+    }
+
     /// List nested CLAUDE.md files in subdirectories (not the root one)
     pub fn list_claude_md_files(repo_path: &str) -> Result<Vec<String>, ClaudeAdapterError> {
         let base = Path::new(repo_path);
@@ -1878,7 +1913,7 @@ impl ClaudeRepoAdapter {
         let timestamp = chrono::Utc::now().to_rfc3339();
         let snapshot_id = format!("{}_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S"), label.replace(' ', "_"));
 
-        // Capture current state (settings.json only — CLAUDE.md is version-controlled)
+        // Capture full config state
         let settings_path = claude_dir.join("settings.json");
         let settings_content = if settings_path.exists() {
             Some(fs::read_to_string(&settings_path)?)
@@ -1886,11 +1921,45 @@ impl ClaudeRepoAdapter {
             None
         };
 
+        // Capture agents
+        let agents_json = Self::read_agents(repo_path)
+            .ok()
+            .filter(|a| !a.is_empty())
+            .and_then(|agents| serde_json::to_string_pretty(&agents).ok());
+
+        // Capture hooks
+        let hooks_json = Self::read_hooks(repo_path)
+            .ok()
+            .filter(|h| !h.is_empty())
+            .and_then(|hooks| serde_json::to_string_pretty(&hooks).ok());
+
+        // Capture skills
+        let skills_json = Self::read_skills(repo_path)
+            .ok()
+            .filter(|s| !s.is_empty())
+            .and_then(|skills| serde_json::to_string_pretty(&skills).ok());
+
+        // Capture MCP servers (project scope uses .mcp.json)
+        let mcp_json = Self::read_mcp_servers(repo_path, false)
+            .ok()
+            .filter(|m| !m.is_empty())
+            .and_then(|servers| serde_json::to_string_pretty(&servers).ok());
+
+        // Capture CLAUDE.md
+        let claude_md = Self::read_claude_md(repo_path)
+            .ok()
+            .filter(|s| !s.is_empty());
+
         let snapshot = ConfigSnapshot {
             snapshot_id: snapshot_id.clone(),
             label: label.to_string(),
             timestamp: timestamp.clone(),
             settings_json: settings_content,
+            agents_json,
+            hooks_json,
+            skills_json,
+            mcp_json,
+            claude_md,
         };
 
         let snapshot_path = history_dir.join(format!("{}.json", snapshot_id));
@@ -1918,6 +1987,11 @@ impl ClaudeRepoAdapter {
                             label: snapshot.label,
                             timestamp: snapshot.timestamp,
                             has_settings: snapshot.settings_json.is_some(),
+                            has_agents: snapshot.agents_json.is_some(),
+                            has_hooks: snapshot.hooks_json.is_some(),
+                            has_skills: snapshot.skills_json.is_some(),
+                            has_mcp: snapshot.mcp_json.is_some(),
+                            has_claude_md: snapshot.claude_md.is_some(),
                         });
                     }
                 }
@@ -1939,10 +2013,51 @@ impl ClaudeRepoAdapter {
         let contents = fs::read_to_string(&snapshot_path)?;
         let snapshot: ConfigSnapshot = serde_json::from_str(&contents)?;
 
+        let claude_dir = Path::new(repo_path).join(".claude");
+        fs::create_dir_all(&claude_dir)?;
+
+        // Restore settings.json
         if let Some(ref settings) = snapshot.settings_json {
-            let claude_dir = Path::new(repo_path).join(".claude");
-            fs::create_dir_all(&claude_dir)?;
             atomic_write(&claude_dir.join("settings.json"), settings)?;
+        }
+
+        // Restore agents
+        if let Some(ref agents_str) = snapshot.agents_json {
+            if let Ok(agents) = serde_json::from_str::<Vec<Agent>>(agents_str) {
+                for agent in &agents {
+                    let _ = Self::write_agent(repo_path, agent);
+                }
+            }
+        }
+
+        // Restore hooks
+        if let Some(ref hooks_str) = snapshot.hooks_json {
+            if let Ok(hooks) = serde_json::from_str::<Vec<HookEvent>>(hooks_str) {
+                let _ = Self::write_hooks(repo_path, &hooks);
+            }
+        }
+
+        // Restore skills
+        if let Some(ref skills_str) = snapshot.skills_json {
+            if let Ok(skills) = serde_json::from_str::<Vec<Skill>>(skills_str) {
+                for skill in &skills {
+                    let _ = Self::write_skill(repo_path, skill);
+                }
+            }
+        }
+
+        // Restore MCP servers
+        if let Some(ref mcp_str) = snapshot.mcp_json {
+            if let Ok(servers) = serde_json::from_str::<Vec<McpServer>>(mcp_str) {
+                for server in &servers {
+                    let _ = Self::write_mcp_server(repo_path, server, false);
+                }
+            }
+        }
+
+        // Restore CLAUDE.md
+        if let Some(ref md) = snapshot.claude_md {
+            let _ = Self::write_claude_md(repo_path, md);
         }
 
         Ok(())
@@ -2523,18 +2638,20 @@ impl ClaudeRepoAdapter {
             let p_perms = project_config.as_ref().and_then(|c| c.permissions.as_ref());
             let g_perms = global_config.as_ref().and_then(|c| c.permissions.as_ref());
             if let (Some(pp), Some(gp)) = (p_perms, g_perms) {
-                // Check if project allows a tool that global denies
-                let p_allow: Vec<&str> = pp
-                    .get("allow")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
-                    .unwrap_or_default();
-                let g_deny: Vec<&str> = gp
-                    .get("deny")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
-                    .unwrap_or_default();
+                let extract = |val: &serde_json::Value, key: &str| -> Vec<String> {
+                    val.get(key)
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_default()
+                };
 
+                let p_allow = extract(pp, "allow");
+                let p_deny = extract(pp, "deny");
+                let p_ask = extract(pp, "ask");
+                let g_allow = extract(gp, "allow");
+                let g_deny = extract(gp, "deny");
+
+                // Check if project allows a tool that global denies
                 for tool in &p_allow {
                     if g_deny.contains(tool) {
                         issues.push(LintIssue {
@@ -2549,6 +2666,60 @@ impl ClaudeRepoAdapter {
                             entity_id: None,
                             scope: Some("project".into()),
                         });
+                    }
+                }
+
+                // Check if project denies a tool that global allows
+                for tool in &p_deny {
+                    if g_allow.contains(tool) {
+                        issues.push(LintIssue {
+                            severity: "info".into(),
+                            category: "hierarchy".into(),
+                            rule: "hierarchy-permission-override".into(),
+                            message: format!(
+                                "Project denies tool \"{}\" which global config allows",
+                                tool
+                            ),
+                            fix: Some("Project deny takes precedence — this is expected if intentional".into()),
+                            entity_id: None,
+                            scope: Some("project".into()),
+                        });
+                    }
+                }
+
+                // Check if project asks for a tool that global denies
+                for tool in &p_ask {
+                    if g_deny.contains(tool) {
+                        issues.push(LintIssue {
+                            severity: "warning".into(),
+                            category: "hierarchy".into(),
+                            rule: "hierarchy-permission-ask-denied".into(),
+                            message: format!(
+                                "Project sets tool \"{}\" to ask, but global config denies it",
+                                tool
+                            ),
+                            fix: Some("Global deny takes precedence — the ask rule will be ignored for this tool".into()),
+                            entity_id: None,
+                            scope: Some("project".into()),
+                        });
+                    }
+                }
+            }
+
+            // RULE: permission-rule-syntax (validate permission patterns in both scopes)
+            for (perms, scope_name) in [
+                (project_config.as_ref().and_then(|c| c.permissions.as_ref()), "project"),
+                (global_config.as_ref().and_then(|c| c.permissions.as_ref()), "global"),
+            ] {
+                if let Some(p) = perms {
+                    for key in &["allow", "deny", "ask"] {
+                        if let Some(arr) = p.get(*key).and_then(|v| v.as_array()) {
+                            for rule_val in arr {
+                                if let Some(rule_str) = rule_val.as_str() {
+                                    Self::lint_permission_rule(&mut issues, rule_str, scope_name);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2642,7 +2813,7 @@ impl ClaudeRepoAdapter {
     }
 
     fn lint_hook_event(issues: &mut Vec<LintIssue>, event: &HookEvent, scope: &str) {
-        let valid_events = ["PreToolUse", "PostToolUse", "Notification", "Stop", "SubagentStop"];
+        let valid_events = ["PreToolUse", "PostToolUse", "Notification", "Stop", "SubagentStop", "SubagentTool"];
         if !valid_events.contains(&event.event.as_str()) {
             issues.push(LintIssue {
                 severity: "error".into(),
@@ -2815,6 +2986,7 @@ impl ClaudeRepoAdapter {
 
     fn lint_settings_keys(issues: &mut Vec<LintIssue>, raw: &serde_json::Value, scope: &str) {
         let known_keys = [
+            // Core settings
             "model",
             "permissions",
             "ignorePatterns",
@@ -2827,6 +2999,66 @@ impl ClaudeRepoAdapter {
             "customApiKeyResponses",
             "env",
             "mcpServers",
+            // Feature toggles
+            "fastMode",
+            "fastModePerSessionOptIn",
+            "alwaysThinkingEnabled",
+            "enableTeams",
+            "enableAllProjectMcpServers",
+            "disableAllHooks",
+            "respectGitignore",
+            "terminalProgressBarEnabled",
+            "showTurnDuration",
+            "spinnerTipsEnabled",
+            "prefersReducedMotion",
+            "skipWebFetchPreflight",
+            // UI customization
+            "statusLine",
+            "fileSuggestion",
+            "spinnerVerbs",
+            "spinnerTipsOverride",
+            "outputStyle",
+            "language",
+            "effortLevel",
+            // Attribution
+            "includeCoAuthoredBy",
+            "attribution",
+            // Session & login
+            "cleanupPeriodDays",
+            "autoUpdatesChannel",
+            "teammateMode",
+            "forceLoginMethod",
+            "forceLoginOrgUUID",
+            "plansDirectory",
+            // Scripts & credentials
+            "apiKeyHelper",
+            "awsCredentialExport",
+            "awsAuthRefresh",
+            "otelHeadersHelper",
+            // HTTP hooks
+            "allowedHttpHookUrls",
+            "httpHookAllowedEnvVars",
+            // MCP management
+            "allowedMcpServers",
+            "deniedMcpServers",
+            "enabledMcpjsonServers",
+            "disabledMcpjsonServers",
+            "allowManagedMcpServersOnly",
+            "allowManagedHooksOnly",
+            "allowManagedPermissionRulesOnly",
+            // Plugins & marketplace
+            "enabledPlugins",
+            "skippedPlugins",
+            "pluginConfigs",
+            "blockedMarketplaces",
+            "extraKnownMarketplaces",
+            "skippedMarketplaces",
+            "strictKnownMarketplaces",
+            // Other
+            "availableModels",
+            "companyAnnouncements",
+            "sandbox",
+            "$schema",
         ];
 
         if let Some(obj) = raw.as_object() {
@@ -2843,6 +3075,65 @@ impl ClaudeRepoAdapter {
                     });
                 }
             }
+        }
+    }
+
+    /// Validate a single permission rule string (e.g., "Bash", "Bash(npm test)", "Edit:*.md")
+    fn lint_permission_rule(issues: &mut Vec<LintIssue>, rule: &str, scope: &str) {
+        let rule_trimmed = rule.trim();
+        if rule_trimmed.is_empty() {
+            issues.push(LintIssue {
+                severity: "warning".into(),
+                category: "permission".into(),
+                rule: "permission-empty-rule".into(),
+                message: "Empty permission rule".into(),
+                fix: Some("Remove the empty rule or specify a tool name".into()),
+                entity_id: None,
+                scope: Some(scope.into()),
+            });
+            return;
+        }
+
+        // Extract the tool name (before parentheses or colon)
+        let tool_name = if let Some(paren_idx) = rule_trimmed.find('(') {
+            // Pattern: Tool(args) — check for matching parens
+            if !rule_trimmed.ends_with(')') {
+                issues.push(LintIssue {
+                    severity: "error".into(),
+                    category: "permission".into(),
+                    rule: "permission-invalid-syntax".into(),
+                    message: format!("Permission rule \"{}\" has unmatched parentheses", rule_trimmed),
+                    fix: Some("Ensure opening and closing parentheses match, e.g., Bash(npm test)".into()),
+                    entity_id: None,
+                    scope: Some(scope.into()),
+                });
+                return;
+            }
+            &rule_trimmed[..paren_idx]
+        } else if let Some(colon_idx) = rule_trimmed.find(':') {
+            // Pattern: Tool:pattern — colon-based pattern
+            &rule_trimmed[..colon_idx]
+        } else {
+            rule_trimmed
+        };
+
+        // Validate the tool name portion (skip MCP tools and wildcard)
+        if tool_name != "*" && !tool_name.starts_with("mcp__") && !Self::is_valid_tool(tool_name, &[]) {
+            issues.push(LintIssue {
+                severity: "info".into(),
+                category: "permission".into(),
+                rule: "permission-unknown-tool".into(),
+                message: format!(
+                    "Permission rule references unknown tool \"{}\"",
+                    tool_name
+                ),
+                fix: Some(format!(
+                    "Valid core tools: {}. MCP tools use mcp__<serverId>__<toolName>",
+                    KNOWN_TOOLS.join(", ")
+                )),
+                entity_id: None,
+                scope: Some(scope.into()),
+            });
         }
     }
 }
@@ -3078,7 +3369,12 @@ mod tests {
         assert!(content.starts_with("---\n"));
         assert!(content.contains("name: My Agent"));
         assert!(content.contains("description: A helpful agent"));
-        assert!(content.contains("tools: Bash"));
+        // Tools should be serialized as a YAML array
+        assert!(
+            content.contains("- Bash") || content.contains("- 'Bash'") || content.contains("- \"Bash\""),
+            "Expected YAML array format for tools, got:\n{}",
+            content
+        );
     }
 
     // -- memory entry parsing tests --
@@ -5237,5 +5533,300 @@ mod tests {
             .issues
             .iter()
             .any(|i| i.rule == "claudemd-broken-reference"));
+    }
+
+    // ================================================================
+    // Tests for new fixes
+    // ================================================================
+
+    #[test]
+    fn skill_tool_is_known() {
+        assert!(KNOWN_TOOLS.contains(&"Skill"));
+    }
+
+    #[test]
+    fn is_valid_tool_accepts_skill() {
+        assert!(ClaudeRepoAdapter::is_valid_tool("Skill", &[]));
+    }
+
+    #[test]
+    fn lint_valid_settings_keys_no_false_warnings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        let claude_dir = base.join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+
+        // Use settings with keys that were previously falsely flagged
+        let settings = r#"{
+            "fastMode": true,
+            "disableAllHooks": false,
+            "allowedHttpHookUrls": ["https://example.com"],
+            "httpHookAllowedEnvVars": ["MY_KEY"],
+            "enableAllProjectMcpServers": true,
+            "sandbox": {}
+        }"#;
+        std::fs::write(claude_dir.join("settings.json"), settings).unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(base.to_str().unwrap(), None);
+
+        let unknown_key_issues: Vec<_> = result
+            .issues
+            .iter()
+            .filter(|i| i.rule == "settings-unknown-key")
+            .collect();
+        assert!(
+            unknown_key_issues.is_empty(),
+            "Expected no unknown-key warnings, got: {:?}",
+            unknown_key_issues
+        );
+    }
+
+    #[test]
+    fn lint_subagent_tool_is_valid_hook_event() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        let claude_dir = base.join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+
+        let settings = r#"{"hooks":{"SubagentTool":[{"hooks":[{"type":"command","command":"echo test","timeout":5000}]}]}}"#;
+        std::fs::write(claude_dir.join("settings.json"), settings).unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(base.to_str().unwrap(), None);
+
+        assert!(
+            !result.issues.iter().any(|i| i.rule == "hook-unknown-event"),
+            "SubagentTool should be a valid hook event"
+        );
+    }
+
+    #[test]
+    fn write_claude_md_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().to_str().unwrap();
+
+        let content = "# My Project\n\nInstructions here.\n";
+        ClaudeRepoAdapter::write_claude_md(base, content).unwrap();
+
+        let read_back = ClaudeRepoAdapter::read_claude_md(base).unwrap();
+        assert_eq!(read_back, content);
+    }
+
+    #[test]
+    fn write_claude_md_overwrites_existing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().to_str().unwrap();
+
+        ClaudeRepoAdapter::write_claude_md(base, "first").unwrap();
+        ClaudeRepoAdapter::write_claude_md(base, "second").unwrap();
+
+        let read_back = ClaudeRepoAdapter::read_claude_md(base).unwrap();
+        assert_eq!(read_back, "second");
+    }
+
+    #[test]
+    fn agent_tools_serialized_as_yaml_array() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().to_str().unwrap();
+
+        let agent = Agent {
+            agent_id: "test-agent".to_string(),
+            name: "Test Agent".to_string(),
+            description: "A test agent".to_string(),
+            system_prompt: "You are a test agent.".to_string(),
+            tools: vec!["Read".to_string(), "Write".to_string(), "Bash".to_string()],
+            model_override: None,
+            memory: None,
+        };
+
+        ClaudeRepoAdapter::write_agent(base, &agent).unwrap();
+
+        // Read the raw file and verify tools are a YAML array, not comma-string
+        let agent_path = tmp.path().join(".claude/agents/test-agent.md");
+        let raw = std::fs::read_to_string(&agent_path).unwrap();
+        // YAML array format contains "- Read" entries
+        assert!(
+            raw.contains("- Read") || raw.contains("- 'Read'") || raw.contains("- \"Read\""),
+            "Expected YAML array format for tools, got:\n{}",
+            raw
+        );
+        // Should NOT contain comma-separated format
+        assert!(
+            !raw.contains("Read, Write, Bash"),
+            "Tools should not be comma-separated string"
+        );
+
+        // Verify round-trip works
+        let agents = ClaudeRepoAdapter::read_agents(base).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].tools, vec!["Read", "Write", "Bash"]);
+    }
+
+    #[test]
+    fn agent_tools_reads_legacy_comma_format() {
+        let tmp = tempfile::tempdir().unwrap();
+        let agents_dir = tmp.path().join(".claude/agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+
+        // Write legacy comma-separated format manually
+        let legacy_content = "---\nname: Legacy Agent\ndescription: Old format\ntools: Read, Write, Bash\n---\n\nYou are a legacy agent.\n";
+        std::fs::write(agents_dir.join("legacy-agent.md"), legacy_content).unwrap();
+
+        let agents = ClaudeRepoAdapter::read_agents(tmp.path().to_str().unwrap()).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].tools, vec!["Read", "Write", "Bash"]);
+    }
+
+    #[test]
+    fn full_config_snapshot_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().to_str().unwrap();
+
+        // Set up a full config
+        let claude_dir = tmp.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(claude_dir.join("settings.json"), r#"{"model":"sonnet"}"#).unwrap();
+        std::fs::write(tmp.path().join("CLAUDE.md"), "# Test Project").unwrap();
+
+        let agent = Agent {
+            agent_id: "snapshot-agent".to_string(),
+            name: "Snapshot Agent".to_string(),
+            description: "Agent for snapshot test".to_string(),
+            system_prompt: "You help with snapshots.".to_string(),
+            tools: vec!["Read".to_string()],
+            model_override: None,
+            memory: None,
+        };
+        ClaudeRepoAdapter::write_agent(base, &agent).unwrap();
+
+        // Save snapshot
+        let snapshot = ClaudeRepoAdapter::save_config_snapshot(base, "test snapshot").unwrap();
+        assert!(snapshot.settings_json.is_some());
+        assert!(snapshot.agents_json.is_some());
+        assert!(snapshot.claude_md.is_some());
+
+        // Verify snapshot summary
+        let summaries = ClaudeRepoAdapter::list_config_snapshots(base).unwrap();
+        assert_eq!(summaries.len(), 1);
+        assert!(summaries[0].has_settings);
+        assert!(summaries[0].has_agents);
+        assert!(summaries[0].has_claude_md);
+
+        // Delete the agent and CLAUDE.md to verify restore
+        ClaudeRepoAdapter::delete_agent(base, "snapshot-agent").unwrap();
+        std::fs::remove_file(tmp.path().join("CLAUDE.md")).unwrap();
+
+        // Restore snapshot
+        ClaudeRepoAdapter::restore_config_snapshot(base, &snapshot.snapshot_id).unwrap();
+
+        // Verify restored state
+        let agents = ClaudeRepoAdapter::read_agents(base).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].agent_id, "snapshot-agent");
+        let md = ClaudeRepoAdapter::read_claude_md(base).unwrap();
+        assert_eq!(md, "# Test Project");
+    }
+
+    #[test]
+    fn lint_permission_rule_valid_patterns() {
+        let mut issues = Vec::new();
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "Bash", "project");
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "Bash(npm test)", "project");
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "Edit:*.md", "project");
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "mcp__myserver__mytool", "project");
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "*", "project");
+
+        let errors: Vec<_> = issues.iter().filter(|i| i.severity == "error").collect();
+        assert!(
+            errors.is_empty(),
+            "Valid permission rules should not produce errors: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn lint_permission_rule_invalid_patterns() {
+        let mut issues = Vec::new();
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "Bash(npm test", "project");
+        assert!(
+            issues.iter().any(|i| i.rule == "permission-invalid-syntax"),
+            "Unmatched parentheses should be flagged"
+        );
+
+        issues.clear();
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "", "project");
+        assert!(
+            issues.iter().any(|i| i.rule == "permission-empty-rule"),
+            "Empty rule should be flagged"
+        );
+    }
+
+    #[test]
+    fn lint_permission_rule_unknown_tool_info() {
+        let mut issues = Vec::new();
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "FakeTool", "project");
+        assert!(
+            issues.iter().any(|i| i.rule == "permission-unknown-tool"),
+            "Unknown tool in permission should be flagged as info"
+        );
+    }
+
+    #[test]
+    fn lint_hierarchy_permission_reverse_check() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        let p_claude = project_dir.path().join(".claude");
+        let g_claude = global_dir.path().join(".claude");
+        std::fs::create_dir_all(&p_claude).unwrap();
+        std::fs::create_dir_all(&g_claude).unwrap();
+
+        // Project denies Bash, global allows it
+        std::fs::write(
+            p_claude.join("settings.json"),
+            r#"{"permissions":{"deny":["Bash"]}}"#,
+        ).unwrap();
+        std::fs::write(
+            g_claude.join("settings.json"),
+            r#"{"permissions":{"allow":["Bash"]}}"#,
+        ).unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(
+            result.issues.iter().any(|i| i.rule == "hierarchy-permission-override"),
+            "Should detect project deny overriding global allow"
+        );
+    }
+
+    #[test]
+    fn lint_hierarchy_permission_ask_denied() {
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let pp = project_dir.path().to_str().unwrap();
+        let gp = global_dir.path().to_str().unwrap();
+
+        let p_claude = project_dir.path().join(".claude");
+        let g_claude = global_dir.path().join(".claude");
+        std::fs::create_dir_all(&p_claude).unwrap();
+        std::fs::create_dir_all(&g_claude).unwrap();
+
+        // Project asks for Bash, global denies it
+        std::fs::write(
+            p_claude.join("settings.json"),
+            r#"{"permissions":{"ask":["Bash"]}}"#,
+        ).unwrap();
+        std::fs::write(
+            g_claude.join("settings.json"),
+            r#"{"permissions":{"deny":["Bash"]}}"#,
+        ).unwrap();
+
+        let result = ClaudeRepoAdapter::lint_config(pp, Some(gp));
+
+        assert!(
+            result.issues.iter().any(|i| i.rule == "hierarchy-permission-ask-denied"),
+            "Should detect project ask conflicting with global deny"
+        );
     }
 }
