@@ -182,15 +182,18 @@ describe("Type definitions", () => {
     it("accepts valid page ids", () => {
       const pages: PageId[] = [
         "overview",
+        "claude-md",
         "agents",
-        "config",
+        "settings",
         "memory",
         "hooks",
         "skills",
         "mcp",
         "plugins",
+        "preferences",
+        "history",
       ];
-      expect(pages).toHaveLength(8);
+      expect(pages).toHaveLength(11);
     });
   });
 
