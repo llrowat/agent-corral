@@ -57,6 +57,25 @@
         "nullable": true
       }
     },
+    "disableModelInvocation": {
+      "type": ["boolean", "null"],
+      "title": "Disable Model Invocation",
+      "description": "When true, this skill cannot be invoked by the model — only by the user or other skills",
+      "default": false,
+      "x-field": { "widget": "checkbox", "label": "Disable model invocation (only user/skill can invoke)" }
+    },
+    "context": {
+      "type": ["string", "null"],
+      "title": "Context",
+      "description": "Additional context or instructions appended to the skill prompt",
+      "x-field": { "widget": "textarea", "rows": 4, "placeholder": "Additional context for this skill...", "nullable": true }
+    },
+    "agent": {
+      "type": ["string", "null"],
+      "title": "Agent",
+      "description": "Agent ID to delegate execution to (the skill runs as this agent)",
+      "x-field": { "placeholder": "e.g. code-reviewer", "nullable": true }
+    },
     "argumentHint": {
       "type": ["string", "null"],
       "title": "Argument Hint",

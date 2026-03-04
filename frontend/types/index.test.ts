@@ -25,7 +25,19 @@ describe("Type definitions", () => {
     });
 
     it("has correct length", () => {
-      expect(HOOK_EVENTS).toHaveLength(5);
+      expect(HOOK_EVENTS).toHaveLength(17);
+    });
+
+    it("contains all new event types", () => {
+      const newEvents = [
+        "SessionStart", "UserPromptSubmit", "PermissionRequest",
+        "PostToolUseFailure", "SubagentStart", "TeammateIdle",
+        "TaskCompleted", "ConfigChange", "WorktreeCreate",
+        "WorktreeRemove", "PreCompact", "SessionEnd",
+      ];
+      for (const evt of newEvents) {
+        expect(HOOK_EVENTS).toContain(evt);
+      }
     });
   });
 
@@ -106,6 +118,36 @@ describe("Type definitions", () => {
       };
 
       expect(event.groups[0].hooks[0].command).toBe("echo test");
+    });
+
+    it("supports new HookHandler fields (async, statusMessage, model)", () => {
+      const handler: HookHandler = {
+        hookType: "command",
+        command: "echo test",
+        prompt: null,
+        timeout: 30,
+        async: true,
+        statusMessage: "Running hook...",
+        model: "claude-haiku-4-5-20251001",
+      };
+      expect(handler.async).toBe(true);
+      expect(handler.statusMessage).toBe("Running hook...");
+      expect(handler.model).toBe("claude-haiku-4-5-20251001");
+    });
+
+    it("allows null for new HookHandler fields", () => {
+      const handler: HookHandler = {
+        hookType: "prompt",
+        command: null,
+        prompt: "Review this",
+        timeout: null,
+        async: null,
+        statusMessage: null,
+        model: null,
+      };
+      expect(handler.async).toBeNull();
+      expect(handler.statusMessage).toBeNull();
+      expect(handler.model).toBeNull();
     });
   });
 

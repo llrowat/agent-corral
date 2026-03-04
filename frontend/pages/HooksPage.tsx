@@ -15,7 +15,7 @@ interface Props {
 }
 
 function newHandler(): HookHandler {
-  return { hookType: "command", command: "", prompt: null, timeout: null };
+  return { hookType: "command", command: "", prompt: null, timeout: null, async: null, statusMessage: null, model: null };
 }
 
 function newGroup(): HookGroup {
@@ -440,6 +440,7 @@ export function HooksPage({ scope, homePath }: Props) {
                         >
                           <option value="command">Command</option>
                           <option value="prompt">Prompt</option>
+                          <option value="agent">Agent</option>
                         </select>
                       </div>
 
@@ -460,7 +461,7 @@ export function HooksPage({ scope, homePath }: Props) {
                         </div>
                       )}
 
-                      {handler.hookType === "prompt" && (
+                      {(handler.hookType === "prompt" || handler.hookType === "agent") && (
                         <div className="form-group">
                           <label>Prompt</label>
                           <textarea
@@ -477,8 +478,58 @@ export function HooksPage({ scope, homePath }: Props) {
                         </div>
                       )}
 
+                      {handler.hookType === "command" && (
+                        <div className="form-group">
+                          <label className="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={handler.async ?? false}
+                              onChange={(e) =>
+                                updateHandler(gi, hi, (h) => ({
+                                  ...h,
+                                  async: e.target.checked || null,
+                                }))
+                              }
+                            />
+                            Run asynchronously
+                          </label>
+                        </div>
+                      )}
+
                       <div className="form-group">
-                        <label>Timeout (ms, optional)</label>
+                        <label>Status Message (optional)</label>
+                        <input
+                          type="text"
+                          value={handler.statusMessage ?? ""}
+                          onChange={(e) =>
+                            updateHandler(gi, hi, (h) => ({
+                              ...h,
+                              statusMessage: e.target.value || null,
+                            }))
+                          }
+                          placeholder="Shown while hook runs..."
+                        />
+                      </div>
+
+                      {(handler.hookType === "prompt" || handler.hookType === "agent") && (
+                        <div className="form-group">
+                          <label>Model (optional)</label>
+                          <input
+                            type="text"
+                            value={handler.model ?? ""}
+                            onChange={(e) =>
+                              updateHandler(gi, hi, (h) => ({
+                                ...h,
+                                model: e.target.value || null,
+                              }))
+                            }
+                            placeholder="e.g. claude-haiku-4-5-20251001"
+                          />
+                        </div>
+                      )}
+
+                      <div className="form-group">
+                        <label>Timeout (seconds, optional)</label>
                         <input
                           type="text"
                           value={handler.timeout ?? ""}
@@ -590,10 +641,28 @@ export function HooksPage({ scope, homePath }: Props) {
                           <pre className="prompt-preview">{handler.prompt}</pre>
                         </div>
                       )}
+                      {handler.async && (
+                        <div className="detail-field">
+                          <label>Async</label>
+                          <span>Yes</span>
+                        </div>
+                      )}
+                      {handler.statusMessage && (
+                        <div className="detail-field">
+                          <label>Status Message</label>
+                          <code>{handler.statusMessage}</code>
+                        </div>
+                      )}
+                      {handler.model && (
+                        <div className="detail-field">
+                          <label>Model</label>
+                          <code>{handler.model}</code>
+                        </div>
+                      )}
                       {handler.timeout && (
                         <div className="detail-field">
                           <label>Timeout</label>
-                          <code>{handler.timeout}ms</code>
+                          <code>{handler.timeout}s</code>
                         </div>
                       )}
                     </div>

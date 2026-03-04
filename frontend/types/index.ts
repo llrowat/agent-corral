@@ -65,6 +65,9 @@ export interface HookHandler {
   command?: string | null;
   prompt?: string | null;
   timeout?: number | null;
+  async?: boolean | null;
+  statusMessage?: string | null;
+  model?: string | null;
 }
 
 export interface HookGroup {
@@ -84,6 +87,18 @@ export const HOOK_EVENTS = [
   "Notification",
   "Stop",
   "SubagentStop",
+  "SessionStart",
+  "UserPromptSubmit",
+  "PermissionRequest",
+  "PostToolUseFailure",
+  "SubagentStart",
+  "TeammateIdle",
+  "TaskCompleted",
+  "ConfigChange",
+  "WorktreeCreate",
+  "WorktreeRemove",
+  "PreCompact",
+  "SessionEnd",
 ] as const;
 
 // -- Skills --

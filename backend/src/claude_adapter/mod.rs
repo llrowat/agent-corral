@@ -87,6 +87,12 @@ pub struct HookHandler {
     pub command: Option<String>,
     pub prompt: Option<String>,
     pub timeout: Option<u64>,
+    #[serde(rename = "async", skip_serializing_if = "Option::is_none")]
+    pub async_hook: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -664,12 +670,24 @@ impl ClaudeRepoAdapter {
                         .and_then(|v| v.as_str())
                         .map(String::from);
                     let timeout = hook_val.get("timeout").and_then(|v| v.as_u64());
+                    let async_hook = hook_val.get("async").and_then(|v| v.as_bool());
+                    let status_message = hook_val
+                        .get("statusMessage")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
+                    let model = hook_val
+                        .get("model")
+                        .and_then(|v| v.as_str())
+                        .map(String::from);
 
                     handlers.push(HookHandler {
                         hook_type,
                         command,
                         prompt,
                         timeout,
+                        async_hook,
+                        status_message,
+                        model,
                     });
                 }
 
@@ -751,6 +769,24 @@ impl ClaudeRepoAdapter {
                                 obj.insert(
                                     "timeout".to_string(),
                                     serde_json::Value::Number(timeout.into()),
+                                );
+                            }
+                            if let Some(async_hook) = h.async_hook {
+                                obj.insert(
+                                    "async".to_string(),
+                                    serde_json::Value::Bool(async_hook),
+                                );
+                            }
+                            if let Some(ref status_message) = h.status_message {
+                                obj.insert(
+                                    "statusMessage".to_string(),
+                                    serde_json::Value::String(status_message.clone()),
+                                );
+                            }
+                            if let Some(ref model) = h.model {
+                                obj.insert(
+                                    "model".to_string(),
+                                    serde_json::Value::String(model.clone()),
                                 );
                             }
                             serde_json::Value::Object(obj)
@@ -3104,6 +3140,9 @@ mod tests {
                     command: Some("echo 'pre-hook'".to_string()),
                     prompt: None,
                     timeout: Some(5000),
+                    async_hook: None,
+                    status_message: None,
+                    model: None,
                 }],
                 disabled: None,
             }],
@@ -3295,6 +3334,105 @@ mod tests {
         assert_eq!(event.groups[0].matcher, Some("A".to_string()));
         assert_eq!(event.groups[1].matcher, Some("B".to_string()));
         assert_eq!(event.groups[2].matcher, Some("C".to_string()));
+    }
+
+    // -- new HookHandler field tests --
+
+    #[test]
+    fn write_and_read_hooks_with_new_fields() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let hooks = vec![HookEvent {
+            event: "PreToolUse".to_string(),
+            groups: vec![HookGroup {
+                matcher: Some("Bash".to_string()),
+                hooks: vec![HookHandler {
+                    hook_type: "command".to_string(),
+                    command: Some("echo test".to_string()),
+                    prompt: None,
+                    timeout: Some(30),
+                    async_hook: Some(true),
+                    status_message: Some("Running lint...".to_string()),
+                    model: None,
+                }],
+                disabled: None,
+            }],
+        }];
+
+        ClaudeRepoAdapter::write_hooks(path, &hooks).unwrap();
+        let loaded = ClaudeRepoAdapter::read_hooks(path).unwrap();
+
+        assert_eq!(loaded.len(), 1);
+        let handler = &loaded[0].groups[0].hooks[0];
+        assert_eq!(handler.async_hook, Some(true));
+        assert_eq!(handler.status_message, Some("Running lint...".to_string()));
+        assert_eq!(handler.model, None);
+    }
+
+    #[test]
+    fn write_and_read_agent_handler_type() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let hooks = vec![HookEvent {
+            event: "Stop".to_string(),
+            groups: vec![HookGroup {
+                matcher: None,
+                hooks: vec![HookHandler {
+                    hook_type: "agent".to_string(),
+                    command: None,
+                    prompt: Some("Review the output".to_string()),
+                    timeout: None,
+                    async_hook: None,
+                    status_message: None,
+                    model: Some("claude-haiku-4-5-20251001".to_string()),
+                }],
+                disabled: None,
+            }],
+        }];
+
+        ClaudeRepoAdapter::write_hooks(path, &hooks).unwrap();
+        let loaded = ClaudeRepoAdapter::read_hooks(path).unwrap();
+
+        assert_eq!(loaded.len(), 1);
+        let handler = &loaded[0].groups[0].hooks[0];
+        assert_eq!(handler.hook_type, "agent");
+        assert_eq!(handler.prompt, Some("Review the output".to_string()));
+        assert_eq!(handler.model, Some("claude-haiku-4-5-20251001".to_string()));
+    }
+
+    #[test]
+    fn none_hook_fields_omitted_from_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().to_str().unwrap();
+
+        let hooks = vec![HookEvent {
+            event: "Stop".to_string(),
+            groups: vec![HookGroup {
+                matcher: None,
+                hooks: vec![HookHandler {
+                    hook_type: "command".to_string(),
+                    command: Some("echo done".to_string()),
+                    prompt: None,
+                    timeout: None,
+                    async_hook: None,
+                    status_message: None,
+                    model: None,
+                }],
+                disabled: None,
+            }],
+        }];
+
+        ClaudeRepoAdapter::write_hooks(path, &hooks).unwrap();
+
+        let contents = fs::read_to_string(
+            tmp.path().join(".claude/settings.json")
+        ).unwrap();
+        // None fields should not appear in the JSON output
+        assert!(!contents.contains("\"async\""));
+        assert!(!contents.contains("\"statusMessage\""));
+        assert!(!contents.contains("\"model\""));
     }
 
     // -- skills tests --
@@ -3739,6 +3877,9 @@ mod tests {
                     command: Some("echo hi".to_string()),
                     prompt: None,
                     timeout: None,
+                    async_hook: None,
+                    status_message: None,
+                    model: None,
                 }],
                 disabled: None,
             }],
@@ -4306,6 +4447,9 @@ mod tests {
                         command: Some("echo hook".to_string()),
                         prompt: None,
                         timeout: None,
+                        async_hook: None,
+                        status_message: None,
+                        model: None,
                     }],
                     disabled: None,
                 }],

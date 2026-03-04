@@ -53,7 +53,7 @@ const KNOWN_TOOLS = [
 
 const SKILL_FIELDS = [
   "skillId", "name", "description", "userInvocable",
-  "allowedTools", "model", "argumentHint", "content",
+  "allowedTools", "model", "disableModelInvocation", "context", "agent", "argumentHint", "content",
 ];
 
 export function SkillsPage({ scope, homePath }: Props) {
@@ -409,6 +409,24 @@ export function SkillsPage({ scope, homePath }: Props) {
                 <div className="detail-field">
                   <label>Model Override</label>
                   <code>{selected!.model}</code>
+                </div>
+              )}
+              {selected!.disableModelInvocation && (
+                <div className="detail-field">
+                  <label>Model Invocation</label>
+                  <span>Disabled</span>
+                </div>
+              )}
+              {selected!.context && (
+                <div className="detail-field">
+                  <label>Context</label>
+                  <pre className="prompt-preview">{selected!.context}</pre>
+                </div>
+              )}
+              {selected!.agent && (
+                <div className="detail-field">
+                  <label>Agent</label>
+                  <code>{selected!.agent}</code>
                 </div>
               )}
               {selected!.argumentHint && (
