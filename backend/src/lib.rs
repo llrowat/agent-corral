@@ -92,6 +92,7 @@ pub fn run() {
             commands::claude::is_process_alive,
             commands::claude::read_claude_md,
             commands::claude::list_claude_md_files,
+            commands::claude::list_markdown_references,
             commands::claude::save_config_snapshot,
             commands::claude::list_config_snapshots,
             commands::claude::restore_config_snapshot,

@@ -470,6 +470,19 @@ export async function listClaudeMdFiles(
   return invoke("list_claude_md_files", { repoPath });
 }
 
+export interface MarkdownReference {
+  reference: string;
+  filePath: string;
+  exists: boolean;
+  content: string | null;
+}
+
+export async function listMarkdownReferences(
+  repoPath: string
+): Promise<MarkdownReference[]> {
+  return invoke("list_markdown_references", { repoPath });
+}
+
 // -- Config history commands --
 
 export interface ConfigSnapshotSummary {

@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 }));
 
 const mockRepos: Repo[] = [
-  { repo_id: "1", name: "my-repo", path: "/home/user/my-repo", pinned: false, last_opened: null },
+  { repo_id: "1", name: "my-repo", path: "/home/user/my-repo", pinned: false, last_opened_at: null },
 ];
 
 describe("RepoSwitcher", () => {
