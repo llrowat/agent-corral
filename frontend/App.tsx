@@ -119,7 +119,7 @@ function App() {
           </ErrorBoundary>
         </main>
       </div>
-      <GlobalSearch scope={scope} />
+      <GlobalSearch scope={scope} homePath={homePath} />
       <KeyboardShortcuts />
     </div>
   );

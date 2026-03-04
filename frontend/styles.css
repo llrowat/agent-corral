@@ -175,7 +175,6 @@ body {
 }
 
 .sidebar-disclaimer {
-  margin-top: auto;
   padding: 12px 20px;
   font-size: 10px;
   color: var(--text-muted);
@@ -2631,6 +2630,17 @@ textarea.input-error {
   white-space: nowrap;
 }
 
+.search-result-scope {
+  font-size: 9px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
 .search-result-type {
   font-size: 10px;
   color: var(--text-muted);
@@ -2732,7 +2742,7 @@ textarea.input-error {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 8px 12px 0;
+  margin: auto 12px 0;
   padding: 6px 8px;
   background: none;
   border: 1px solid var(--border);
