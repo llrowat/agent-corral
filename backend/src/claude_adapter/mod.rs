@@ -82,7 +82,6 @@ pub struct MemoryEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HookHandler {
-    #[serde(rename = "type")]
     pub hook_type: String,
     pub command: Option<String>,
     pub prompt: Option<String>,
@@ -283,7 +282,9 @@ impl ClaudeRepoAdapter {
         let base = Path::new(repo_path);
         let claude_dir = base.join(".claude");
         let settings_json = claude_dir.join("settings.json");
+        // Check both {base}/CLAUDE.md (project) and {base}/.claude/CLAUDE.md (global)
         let claude_md = base.join("CLAUDE.md");
+        let claude_md_alt = claude_dir.join("CLAUDE.md");
         let agents_dir = claude_dir.join("agents");
         let memory_dir = claude_dir.join("memory");
         let skills_dir = claude_dir.join("skills");
@@ -304,7 +305,7 @@ impl ClaudeRepoAdapter {
 
         ClaudeDetection {
             has_settings_json: settings_json.exists(),
-            has_claude_md: claude_md.exists(),
+            has_claude_md: claude_md.exists() || claude_md_alt.exists(),
             has_agents_dir: agents_dir.exists(),
             has_memory_dir: memory_dir.exists(),
             has_skills_dir: skills_dir.exists(),
@@ -1830,10 +1831,15 @@ impl ClaudeRepoAdapter {
     /// Read CLAUDE.md content from a repo (or global home). Returns empty string if not found.
     pub fn read_claude_md(repo_path: &str) -> Result<String, ClaudeAdapterError> {
         let md_path = Path::new(repo_path).join("CLAUDE.md");
-        if !md_path.exists() {
-            return Ok(String::new());
+        if md_path.exists() {
+            return Ok(fs::read_to_string(&md_path)?);
         }
-        Ok(fs::read_to_string(&md_path)?)
+        // Also check .claude/CLAUDE.md (global scope stores CLAUDE.md there)
+        let alt_path = Path::new(repo_path).join(".claude/CLAUDE.md");
+        if alt_path.exists() {
+            return Ok(fs::read_to_string(&alt_path)?);
+        }
+        Ok(String::new())
     }
 
     /// Write CLAUDE.md content to a repo (or global home).
@@ -2310,7 +2316,9 @@ impl ClaudeRepoAdapter {
         // =======================================================
         // RULE: missing-claude-md
         // =======================================================
-        if !project_detection.has_claude_md {
+        // Only warn about missing CLAUDE.md for project scope (when global_path is provided).
+        // For global scope (global_path is None), CLAUDE.md is optional.
+        if global_path.is_some() && !project_detection.has_claude_md {
             issues.push(LintIssue {
                 severity: "warning".into(),
                 category: "claudemd".into(),
@@ -3058,6 +3066,7 @@ impl ClaudeRepoAdapter {
             "availableModels",
             "companyAnnouncements",
             "sandbox",
+            "feedbackSurveyState",
             "$schema",
         ];
 
@@ -3117,24 +3126,9 @@ impl ClaudeRepoAdapter {
             rule_trimmed
         };
 
-        // Validate the tool name portion (skip MCP tools and wildcard)
-        if tool_name != "*" && !tool_name.starts_with("mcp__") && !Self::is_valid_tool(tool_name, &[]) {
-            issues.push(LintIssue {
-                severity: "info".into(),
-                category: "permission".into(),
-                rule: "permission-unknown-tool".into(),
-                message: format!(
-                    "Permission rule references unknown tool \"{}\"",
-                    tool_name
-                ),
-                fix: Some(format!(
-                    "Valid core tools: {}. MCP tools use mcp__<serverId>__<toolName>",
-                    KNOWN_TOOLS.join(", ")
-                )),
-                entity_id: None,
-                scope: Some(scope.into()),
-            });
-        }
+        // Note: We don't flag unknown tool names in permission rules because
+        // they can legitimately reference non-core tools (custom tools, programs
+        // used with Bash, future tools, etc.).
     }
 }
 
@@ -3219,6 +3213,29 @@ mod tests {
         assert!(detection.has_mcp_json);
         assert_eq!(detection.hook_count, 2);
         assert!(detection.config_path.is_some());
+    }
+
+    #[test]
+    fn detect_finds_claude_md_in_dot_claude_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let claude_dir = tmp.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+        fs::write(claude_dir.join("CLAUDE.md"), "# Global instructions").unwrap();
+
+        let detection = ClaudeRepoAdapter::detect(tmp.path().to_str().unwrap());
+        assert!(detection.has_claude_md, "Should detect CLAUDE.md inside .claude/ directory");
+    }
+
+    #[test]
+    fn read_claude_md_finds_file_in_dot_claude_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let claude_dir = tmp.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+        let content = "# Global CLAUDE.md";
+        fs::write(claude_dir.join("CLAUDE.md"), content).unwrap();
+
+        let result = ClaudeRepoAdapter::read_claude_md(tmp.path().to_str().unwrap()).unwrap();
+        assert_eq!(result, content);
     }
 
     #[test]
@@ -5039,14 +5056,30 @@ mod tests {
 
     #[test]
     fn lint_empty_project_reports_missing_claudemd_and_no_model() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().to_str().unwrap();
+        let project_dir = tempfile::tempdir().unwrap();
+        let global_dir = tempfile::tempdir().unwrap();
+        let project_path = project_dir.path().to_str().unwrap();
+        let global_path = global_dir.path().to_str().unwrap();
 
-        let result = ClaudeRepoAdapter::lint_config(path, None);
+        let result = ClaudeRepoAdapter::lint_config(project_path, Some(global_path));
 
         assert!(result.issues.iter().any(|i| i.rule == "missing-claude-md"));
         assert!(result.issues.iter().any(|i| i.rule == "no-model-configured"));
         assert!(result.issues.iter().any(|i| i.rule == "no-ignore-patterns"));
+    }
+
+    #[test]
+    fn lint_global_scope_does_not_warn_missing_claudemd() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_str().unwrap();
+
+        // global_path = None means global scope
+        let result = ClaudeRepoAdapter::lint_config(path, None);
+
+        assert!(
+            !result.issues.iter().any(|i| i.rule == "missing-claude-md"),
+            "Global scope should not warn about missing CLAUDE.md"
+        );
     }
 
     #[test]
@@ -5761,12 +5794,18 @@ mod tests {
     }
 
     #[test]
-    fn lint_permission_rule_unknown_tool_info() {
+    fn lint_permission_rule_unknown_tool_not_flagged() {
         let mut issues = Vec::new();
         ClaudeRepoAdapter::lint_permission_rule(&mut issues, "FakeTool", "project");
         assert!(
-            issues.iter().any(|i| i.rule == "permission-unknown-tool"),
-            "Unknown tool in permission should be flagged as info"
+            !issues.iter().any(|i| i.rule == "permission-unknown-tool"),
+            "Unknown tools in permission rules should not be flagged"
+        );
+        // Also verify program names like git are not flagged
+        ClaudeRepoAdapter::lint_permission_rule(&mut issues, "git", "project");
+        assert!(
+            issues.is_empty(),
+            "Program names in permission rules should not produce any issues"
         );
     }
 

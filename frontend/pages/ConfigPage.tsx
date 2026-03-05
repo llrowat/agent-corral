@@ -272,7 +272,7 @@ const MANAGED_RAW_KEYS = new Set([
   "allowedHttpHookUrls", "httpHookAllowedEnvVars",
   "statusLine", "fileSuggestion", "spinnerVerbs", "spinnerTipsOverride",
   "sandbox", "forceLoginMethod", "forceLoginOrgUUID", "companyAnnouncements",
-  "env",
+  "env", "hooks",
 ]);
 
 function getExtraRawFields(raw: Record<string, unknown>): Record<string, unknown> {
