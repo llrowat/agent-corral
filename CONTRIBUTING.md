@@ -30,27 +30,24 @@ npm run tauri build
 ## Project Structure
 
 - `backend/` — Rust backend (Tauri app, state management, IPC commands)
-  - `src/commands/` — 12 Tauri IPC command handler modules (one per domain)
-  - `src/preferences.rs` — App-level preferences (terminal emulator, plugin sync interval)
+  - `src/commands/` — Tauri IPC command handler modules (one per domain)
+  - `src/preferences.rs` — App-level preferences (plugin sync interval)
   - `src/repo_registry/` — SQLite-based repository management
-  - `src/session_manager/` — Session tracking, process lifecycle, git worktree management
   - `src/claude_adapter/` — Claude Code file format adapter (agents, hooks, skills, MCP, memory)
   - `src/plugin_manager/` — Plugin system with import sync registry
   - `src/pack_manager/` — Legacy pack system (kept for migration)
-  - `src/command_templates/` — Template engine with variable substitution
-  - `src/terminal_launcher/` — Native terminal spawning (per-platform)
 - `frontend/` — React + TypeScript frontend
-  - `components/` — 10 shared UI components (Sidebar, ScopeSwitcher, ScopeGuard, RepoSwitcher, ConfigSummary, DocsLink, InlineValidation, PresetPicker, QuickSetup, CreateWithAiModal)
-  - `pages/` — 12 page components
-  - `hooks/` — React hooks (useRepos, useSessions, usePluginSync)
-  - `lib/` — Tauri IPC bindings + built-in presets
+  - `components/` — Shared UI components (Sidebar, ScopeSwitcher, ScopeGuard, RepoSwitcher, GlobalSearch, ConfigSummary, ConfigLinter, DocsLink, InlineValidation, PresetPicker, QuickSetup, CreateWithAiModal, SchemaForm, KeyboardShortcuts, ThemeToggle, etc.)
+  - `pages/` — Page components (Overview, Agents, Hooks, Skills, MCP, Config, Memory, Plugins, Packs, ClaudeMd, History, Settings)
+  - `hooks/` — React hooks (useRepos, usePluginSync, useSchema)
+  - `lib/` — Tauri IPC bindings, built-in presets, JSON schemas
 - See `CLAUDE.md` for detailed architecture notes
 
 ## How to Contribute
 
 ### Reporting Bugs
 
-Open an issue using the bug report template. Include:
+Open an issue with:
 - Steps to reproduce
 - Expected vs actual behavior
 - OS and version
@@ -65,7 +62,7 @@ Open an issue describing the use case and proposed solution.
 2. Make your changes
 3. Add tests for new or modified functionality (see Testing below)
 4. Ensure all tests pass: `cd backend && cargo test --lib` and `npm test`
-5. Ensure the build succeeds: `npm run tauri build`
+5. Ensure TypeScript compiles: `npx tsc --noEmit`
 6. Submit a pull request
 
 ### Code Style
@@ -101,6 +98,7 @@ npm run test:watch
 - **Tauri IPC commands** go in `backend/src/commands/`. Each domain gets its own file.
 - **TypeScript bindings** in `frontend/lib/tauri.ts` must stay in sync with Rust command signatures.
 - **Presets** live in `frontend/lib/presets.ts`. When adding new built-in presets, follow the existing pattern (typed preset objects with id, label, description, and the entity payload).
+- **Schema-driven forms** — Entity editors use JSON Schema definitions in `frontend/lib/schemas/` to generate form controls via `SchemaForm`. Adding a field to a schema auto-generates the form control.
 - **Plugin import sync** — When importing plugins, the import registry (`{repo}/.claude/plugin-imports.json`) tracks each import. Use the sync APIs to manage updates, not direct file manipulation.
 
 ## License
