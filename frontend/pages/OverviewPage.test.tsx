@@ -130,8 +130,8 @@ describe("OverviewPage", () => {
 
   it("shows counts when config areas have items", async () => {
     mockReadAgents.mockResolvedValue([
-      { agentId: "reviewer", name: "Code Reviewer", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null },
-      { agentId: "writer", name: "Writer", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+      { agentId: "reviewer", name: "Code Reviewer", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
+      { agentId: "writer", name: "Writer", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
     ]);
     mockReadHooks.mockResolvedValue([
       { event: "PreToolUse", groups: [{ matcher: null, hooks: [{ hookType: "command", command: "echo" }] }] },
@@ -170,7 +170,7 @@ describe("OverviewPage", () => {
 
   it("shows progress when some areas are configured", async () => {
     mockReadAgents.mockResolvedValue([
-      { agentId: "a", name: "Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+      { agentId: "a", name: "Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
     ]);
     mockReadClaudeConfig.mockResolvedValue({
       model: "claude-sonnet-4-6",
@@ -188,7 +188,7 @@ describe("OverviewPage", () => {
 
   it("shows all configured message when all areas have items", async () => {
     mockReadAgents.mockResolvedValue([
-      { agentId: "a", name: "Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+      { agentId: "a", name: "Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
     ]);
     mockReadHooks.mockResolvedValue([
       { event: "PreToolUse", groups: [{ matcher: null, hooks: [{ hookType: "command", command: "echo" }] }] },

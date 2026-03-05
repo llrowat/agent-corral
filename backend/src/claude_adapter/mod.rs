@@ -59,6 +59,7 @@ pub struct Agent {
     pub tools: Vec<String>,
     pub model_override: Option<String>,
     pub memory: Option<String>,
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -432,6 +433,12 @@ impl ClaudeRepoAdapter {
             frontmatter.insert(
                 "memory".to_string(),
                 serde_json::Value::String(memory.clone()),
+            );
+        }
+        if let Some(ref color) = agent.color {
+            frontmatter.insert(
+                "color".to_string(),
+                serde_json::Value::String(color.clone()),
             );
         }
 
@@ -1695,6 +1702,11 @@ impl ClaudeRepoAdapter {
             .and_then(|v| v.as_str())
             .map(String::from);
 
+        let color = frontmatter
+            .get("color")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
         Ok(Agent {
             agent_id: agent_id.to_string(),
             name,
@@ -1703,6 +1715,7 @@ impl ClaudeRepoAdapter {
             tools,
             model_override,
             memory,
+            color,
         })
     }
 
@@ -3300,6 +3313,7 @@ mod tests {
             tools: vec!["Read".to_string(), "Write".to_string()],
             model_override: Some("sonnet".to_string()),
             memory: Some("user".to_string()),
+            color: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -3328,6 +3342,7 @@ mod tests {
             tools: vec![],
             model_override: None,
             memory: None,
+            color: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -3356,6 +3371,7 @@ mod tests {
             tools: vec!["Bash".to_string()],
             model_override: None,
             memory: None,
+            color: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -4122,6 +4138,7 @@ mod tests {
             tools: vec![],
             model_override: None,
             memory: None,
+            color: None,
         };
         let json = serde_json::to_value(&agent).unwrap();
         assert!(json.get("agentId").is_some());
@@ -4289,6 +4306,7 @@ mod tests {
             tools: vec![],
             model_override: None,
             memory: None,
+            color: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -4784,6 +4802,7 @@ mod tests {
             tools: vec!["Read".to_string()],
             model_override: None,
             memory: None,
+            color: None,
         };
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
 
@@ -4840,6 +4859,7 @@ mod tests {
             tools: vec![],
             model_override: None,
             memory: None,
+            color: None,
         };
         ClaudeRepoAdapter::write_agent(path, &existing_agent).unwrap();
 
@@ -4856,6 +4876,7 @@ mod tests {
                     tools: vec![],
                     model_override: None,
                     memory: None,
+                    color: None,
                 })
                 .unwrap(),
                 serde_json::to_value(&Agent {
@@ -4866,6 +4887,7 @@ mod tests {
                     tools: vec![],
                     model_override: None,
                     memory: None,
+                    color: None,
                 })
                 .unwrap(),
             ],
@@ -4900,6 +4922,7 @@ mod tests {
             tools: vec![],
             model_override: None,
             memory: None,
+            color: None,
         };
         ClaudeRepoAdapter::write_agent(path, &existing_agent).unwrap();
 
@@ -4915,6 +4938,7 @@ mod tests {
                 tools: vec![],
                 model_override: None,
                 memory: None,
+                color: None,
             })
             .unwrap()],
             skills: vec![],
@@ -4951,6 +4975,7 @@ mod tests {
             tools: vec!["Read".to_string()],
             model_override: None,
             memory: None,
+            color: None,
         };
         ClaudeRepoAdapter::write_agent(src_path, &agent).unwrap();
 
@@ -5654,6 +5679,7 @@ mod tests {
             tools: vec!["Read".to_string(), "Write".to_string(), "Bash".to_string()],
             model_override: None,
             memory: None,
+            color: None,
         };
 
         ClaudeRepoAdapter::write_agent(base, &agent).unwrap();
@@ -5713,6 +5739,7 @@ mod tests {
             tools: vec!["Read".to_string()],
             model_override: None,
             memory: None,
+            color: None,
         };
         ClaudeRepoAdapter::write_agent(base, &agent).unwrap();
 

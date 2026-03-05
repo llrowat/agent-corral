@@ -77,6 +77,15 @@
         ],
         "nullable": true
       }
+    },
+    "color": {
+      "type": ["string", "null"],
+      "title": "Color",
+      "description": "Display color for this agent in the sidebar and list views",
+      "x-field": {
+        "widget": "color",
+        "nullable": true
+      }
     }
   },
   "required": ["agentId", "name", "description", "systemPrompt"]

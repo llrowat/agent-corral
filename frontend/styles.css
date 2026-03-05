@@ -739,6 +739,69 @@ body {
 .agent-name {
   font-weight: 600;
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-color-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.agent-color-dot-lg {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+/* Color picker (SchemaForm widget) */
+.color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.15s;
+}
+
+.color-swatch:hover {
+  border-color: var(--text-secondary);
+}
+
+.color-swatch-active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--bg-primary);
+}
+
+.color-input-native {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+}
+
+.color-input-native::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-input-native::-webkit-color-swatch {
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .agent-id {

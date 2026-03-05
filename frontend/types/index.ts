@@ -44,6 +44,7 @@ export interface Agent {
   tools: string[];
   modelOverride: string | null;
   memory: string | null;
+  color: string | null;
 }
 
 export interface MemoryStore {

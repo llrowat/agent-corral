@@ -20,7 +20,7 @@ const mockAgentNoTools: Agent = {
   systemPrompt: "No tools.",
   tools: [],
   modelOverride: null,
-  memory: null,
+  memory: null, color: null,
 };
 
 const mockMemoryStore: MemoryStore = {
