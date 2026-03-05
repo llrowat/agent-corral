@@ -10,6 +10,7 @@ export interface XFieldHints {
     | "textarea"
     | "select"
     | "checkbox"
+    | "combobox"
     | "tool-checkboxes"
     | "key-value-pairs"
     | "textarea-lines"

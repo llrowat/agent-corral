@@ -46,17 +46,20 @@
     "modelOverride": {
       "type": ["string", "null"],
       "title": "Model Override",
-      "description": "Override the default model for this agent",
-      "enum": [null, "opus", "sonnet", "haiku"],
+      "description": "Override the default model for this agent. Use short names (opus, sonnet, haiku) or full model IDs.",
       "x-field": {
-        "widget": "select",
+        "widget": "combobox",
         "options": [
           { "value": "", "label": "Default" },
           { "value": "opus", "label": "Opus" },
           { "value": "sonnet", "label": "Sonnet" },
-          { "value": "haiku", "label": "Haiku" }
+          { "value": "haiku", "label": "Haiku" },
+          { "value": "claude-opus-4-6", "label": "claude-opus-4-6" },
+          { "value": "claude-sonnet-4-6", "label": "claude-sonnet-4-6" },
+          { "value": "claude-haiku-4-5-20251001", "label": "claude-haiku-4-5-20251001" }
         ],
-        "nullable": true
+        "nullable": true,
+        "placeholder": "Type a model name or select one"
       }
     },
     "memory": {

@@ -30,6 +30,9 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
   const [mdRefs, setMdRefs] = useState<MarkdownReference[]>([]);
   const [expandedRef, setExpandedRef] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const basePath =
     scope?.type === "global"
@@ -85,6 +88,31 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
     );
   };
 
+  const handleStartEdit = () => {
+    setEditContent(content);
+    setEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(false);
+    setEditContent("");
+  };
+
+  const handleSave = async () => {
+    if (!basePath) return;
+    setSaving(true);
+    try {
+      await api.writeClaudeMd(basePath, editContent);
+      setContent(editContent);
+      setEditing(false);
+      toast.success("CLAUDE.md saved");
+    } catch (err) {
+      toast.error(`Failed to save: ${err}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (!scope) {
     return (
       <div className="page page-empty">
@@ -136,11 +164,58 @@ export function ClaudeMdPage({ scope, homePath }: Props) {
             </div>
           )}
 
-          {!isEmpty && (
+          {!isEmpty && !editing && (
             <div className="claude-md-editor-layout">
+              <div className="form-actions" style={{ marginBottom: 12 }}>
+                <button className="btn btn-secondary" onClick={handleStartEdit}>
+                  Edit
+                </button>
+              </div>
               <div className="claude-md-preview">
                 <MarkdownPreview content={content} />
               </div>
+            </div>
+          )}
+
+          {editing && (
+            <div className="claude-md-editor-layout">
+              <textarea
+                className="form-textarea"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                rows={20}
+                style={{ width: "100%", fontFamily: "monospace", fontSize: 13 }}
+              />
+              <div className="form-actions" style={{ marginTop: 12 }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : "Save"}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleCancelEdit}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isEmpty && !editing && (
+            <div className="form-actions" style={{ marginTop: 12 }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  setEditContent("");
+                  setEditing(true);
+                }}
+              >
+                Create CLAUDE.md Manually
+              </button>
             </div>
           )}
 

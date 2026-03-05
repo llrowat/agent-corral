@@ -79,6 +79,7 @@ const FEATURE_TOGGLES: FeatureToggleDef[] = [
   { key: "spinnerTipsEnabled", label: "Spinner Tips", description: "Show tips in the spinner while Claude is working.", settingsPath: "spinnerTipsEnabled", defaultValue: true },
   { key: "prefersReducedMotion", label: "Reduced Motion", description: "Reduce UI animations for accessibility.", settingsPath: "prefersReducedMotion" },
   { key: "fastModePerSessionOptIn", label: "Fast Mode Per-Session Opt-In", description: "Require fast mode to be opted into each session.", settingsPath: "fastModePerSessionOptIn" },
+  { key: "skipWebFetchPreflight", label: "Skip WebFetch Preflight", description: "Skip URL verification before web fetches.", settingsPath: "skipWebFetchPreflight" },
 ];
 
 // -- Toggle Helpers --
@@ -268,6 +269,7 @@ const MANAGED_RAW_KEYS = new Set([
   "attribution", "enabledMcpjsonServers", "disabledMcpjsonServers",
   "cleanupPeriodDays", "autoUpdatesChannel", "plansDirectory", "teammateMode",
   "apiKeyHelper", "otelHeadersHelper", "awsAuthRefresh", "awsCredentialExport",
+  "allowedHttpHookUrls", "httpHookAllowedEnvVars",
   "statusLine", "fileSuggestion", "spinnerVerbs", "spinnerTipsOverride",
   "sandbox", "forceLoginMethod", "forceLoginOrgUUID", "companyAnnouncements",
   "env",
@@ -299,7 +301,7 @@ const SECTION_KEYWORDS: Record<string, string[]> = {
   "MCP Server Approval": ["mcp", "enabled", "disabled", "server"],
   "Environment Variables": ["env", "environment", "variable"],
   "Session & Login": ["cleanup", "auto-update", "plans", "teammate", "login", "org", "announcements", "enterprise"],
-  "Scripts & Credentials": ["api key", "otel", "aws", "credential", "script"],
+  "Scripts & Credentials": ["api key", "otel", "aws", "credential", "script", "http hook", "webhook", "env var"],
   "Sandbox": ["sandbox", "filesystem", "network", "domain", "unix socket", "write", "read"],
   "Advanced (JSON)": ["json", "raw", "advanced"],
 };
@@ -358,6 +360,8 @@ export function ConfigPage({ scope }: Props) {
   const [otelHeadersHelper, setOtelHeadersHelper] = useState("");
   const [awsAuthRefresh, setAwsAuthRefresh] = useState("");
   const [awsCredentialExport, setAwsCredentialExport] = useState("");
+  const [allowedHttpHookUrls, setAllowedHttpHookUrls] = useState<string[]>([]);
+  const [httpHookAllowedEnvVars, setHttpHookAllowedEnvVars] = useState<string[]>([]);
   const [statusLine, setStatusLine] = useState<StatusLineState>({ command: "" });
   const [fileSuggestion, setFileSuggestion] = useState<FileSuggestionState>({ command: "" });
   const [spinnerVerbs, setSpinnerVerbs] = useState<SpinnerVerbsState>({ mode: "append", verbs: [] });
@@ -402,6 +406,8 @@ export function ConfigPage({ scope }: Props) {
     setOtelHeadersHelper(readString(raw, "otelHeadersHelper"));
     setAwsAuthRefresh(readString(raw, "awsAuthRefresh"));
     setAwsCredentialExport(readString(raw, "awsCredentialExport"));
+    setAllowedHttpHookUrls(readStringArray(raw, "allowedHttpHookUrls"));
+    setHttpHookAllowedEnvVars(readStringArray(raw, "httpHookAllowedEnvVars"));
     setStatusLine(readStatusLine(raw));
     setFileSuggestion(readFileSuggestion(raw));
     setSpinnerVerbs(readSpinnerVerbs(raw));
@@ -464,6 +470,8 @@ export function ConfigPage({ scope }: Props) {
     if (otelHeadersHelper) rawObj.otelHeadersHelper = otelHeadersHelper;
     if (awsAuthRefresh) rawObj.awsAuthRefresh = awsAuthRefresh;
     if (awsCredentialExport) rawObj.awsCredentialExport = awsCredentialExport;
+    if (allowedHttpHookUrls.length > 0) rawObj.allowedHttpHookUrls = allowedHttpHookUrls;
+    if (httpHookAllowedEnvVars.length > 0) rawObj.httpHookAllowedEnvVars = httpHookAllowedEnvVars;
     if (statusLine.command) rawObj.statusLine = { type: "command", command: statusLine.command };
     if (fileSuggestion.command) rawObj.fileSuggestion = { type: "command", command: fileSuggestion.command };
     if (spinnerVerbs.verbs.length > 0) rawObj.spinnerVerbs = { mode: spinnerVerbs.mode, verbs: spinnerVerbs.verbs };
@@ -501,6 +509,8 @@ export function ConfigPage({ scope }: Props) {
     if (otelHeadersHelper !== readString(savedRaw, "otelHeadersHelper")) return true;
     if (awsAuthRefresh !== readString(savedRaw, "awsAuthRefresh")) return true;
     if (awsCredentialExport !== readString(savedRaw, "awsCredentialExport")) return true;
+    if (JSON.stringify(allowedHttpHookUrls) !== JSON.stringify(readStringArray(savedRaw, "allowedHttpHookUrls"))) return true;
+    if (JSON.stringify(httpHookAllowedEnvVars) !== JSON.stringify(readStringArray(savedRaw, "httpHookAllowedEnvVars"))) return true;
     if (JSON.stringify(statusLine) !== JSON.stringify(readStatusLine(savedRaw))) return true;
     if (JSON.stringify(fileSuggestion) !== JSON.stringify(readFileSuggestion(savedRaw))) return true;
     if (JSON.stringify(spinnerVerbs) !== JSON.stringify(readSpinnerVerbs(savedRaw))) return true;
@@ -882,6 +892,16 @@ export function ConfigPage({ scope }: Props) {
           <label>AWS Credential Export</label>
           <p className="config-field-hint">Script that outputs AWS credentials JSON for Bedrock access.</p>
           <input type="text" value={awsCredentialExport} onChange={(e) => setAwsCredentialExport(e.target.value)} placeholder="/path/to/generate_aws_grant.sh" />
+        </div>
+        <div className="config-field" style={{ marginTop: 16 }}>
+          <label>Allowed HTTP Hook URLs</label>
+          <p className="config-field-hint">URLs that hooks are allowed to make HTTP requests to.</p>
+          <TagInput tags={allowedHttpHookUrls} onAdd={(v) => setAllowedHttpHookUrls([...allowedHttpHookUrls, v])} onRemove={(t) => setAllowedHttpHookUrls(allowedHttpHookUrls.filter((x) => x !== t))} placeholder="https://example.com/webhook" />
+        </div>
+        <div className="config-field" style={{ marginTop: 16 }}>
+          <label>HTTP Hook Allowed Env Vars</label>
+          <p className="config-field-hint">Environment variable names that HTTP hooks are allowed to read.</p>
+          <TagInput tags={httpHookAllowedEnvVars} onAdd={(v) => setHttpHookAllowedEnvVars([...httpHookAllowedEnvVars, v])} onRemove={(t) => setHttpHookAllowedEnvVars(httpHookAllowedEnvVars.filter((x) => x !== t))} placeholder="MY_API_KEY" />
         </div>
       </Section>
 
