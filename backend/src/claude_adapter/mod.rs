@@ -2798,26 +2798,9 @@ impl ClaudeRepoAdapter {
                 scope: Some(scope.into()),
             });
         }
-        // Check for unknown tools (core tools + MCP-prefixed tools are valid)
-        for tool in &agent.tools {
-            if !Self::is_valid_tool(tool, mcp_server_ids) {
-                issues.push(LintIssue {
-                    severity: "warning".into(),
-                    category: "agent".into(),
-                    rule: "agent-unknown-tool".into(),
-                    message: format!(
-                        "Agent \"{}\" references unknown tool \"{}\"",
-                        agent.name, tool
-                    ),
-                    fix: Some(format!(
-                        "Valid core tools: {}. MCP tools use the pattern mcp__<serverId>__<toolName>",
-                        KNOWN_TOOLS.join(", ")
-                    )),
-                    entity_id: Some(agent.agent_id.clone()),
-                    scope: Some(scope.into()),
-                });
-            }
-        }
+        // Note: We don't flag unknown tool names in agents because they can
+        // legitimately reference non-core tools (custom tools, MCP tools from
+        // servers not yet detected, programs, etc.).
     }
 
     fn lint_hook_event(issues: &mut Vec<LintIssue>, event: &HookEvent, scope: &str) {
@@ -5132,7 +5115,7 @@ mod tests {
     }
 
     #[test]
-    fn lint_agent_unknown_tool_flagged() {
+    fn lint_agent_unknown_tool_not_flagged() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().to_str().unwrap();
 
@@ -5151,8 +5134,10 @@ mod tests {
             .iter()
             .filter(|i| i.rule == "agent-unknown-tool")
             .collect();
-        assert_eq!(unknown_tool_issues.len(), 1);
-        assert!(unknown_tool_issues[0].message.contains("FakeTool"));
+        assert!(
+            unknown_tool_issues.is_empty(),
+            "Non-core tools in agents should not be flagged as unknown"
+        );
     }
 
     #[test]
