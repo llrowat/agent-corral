@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -49,7 +49,7 @@ pub struct NormalizedConfig {
     pub raw: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Agent {
     pub agent_id: String,
@@ -60,6 +60,12 @@ pub struct Agent {
     pub model_override: Option<String>,
     pub memory: Option<String>,
     pub color: Option<String>,
+    /// Source of this agent: None for local, Some("plugin:<name>") for plugin-sourced
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Whether this agent is read-only (e.g., from a plugin source directory)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,7 +119,7 @@ pub struct HookEvent {
 
 // -- Skill types --
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Skill {
     pub skill_id: String,
@@ -127,6 +133,12 @@ pub struct Skill {
     pub agent: Option<String>,
     pub argument_hint: Option<String>,
     pub content: String,
+    /// Source of this skill: None for local, Some("plugin:<name>") for plugin-sourced
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// Whether this skill is read-only (e.g., from a plugin source directory)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_only: Option<bool>,
 }
 
 // -- MCP types --
@@ -1716,6 +1728,8 @@ impl ClaudeRepoAdapter {
             model_override,
             memory,
             color,
+            source: None,
+            read_only: None,
         })
     }
 
@@ -1838,6 +1852,8 @@ impl ClaudeRepoAdapter {
             agent,
             argument_hint,
             content: body,
+            source: None,
+            read_only: None,
         })
     }
 
@@ -1893,20 +1909,41 @@ impl ClaudeRepoAdapter {
             .collect()
     }
 
+    /// Locate the CLAUDE.md file, returning its path if found.
+    /// Checks {repo_path}/CLAUDE.md first, then {repo_path}/.claude/CLAUDE.md.
+    pub fn find_claude_md(repo_path: &str) -> Option<PathBuf> {
+        let base = Path::new(repo_path);
+        let root_md = base.join("CLAUDE.md");
+        if root_md.exists() {
+            return Some(root_md);
+        }
+        let alt_md = base.join(".claude/CLAUDE.md");
+        if alt_md.exists() {
+            return Some(alt_md);
+        }
+        None
+    }
+
     /// List @file.md references from a repo's CLAUDE.md with resolution status.
+    /// References are resolved relative to the directory containing the CLAUDE.md file,
+    /// not the repo root. This matters for global scope where CLAUDE.md lives in .claude/.
     pub fn list_markdown_references(repo_path: &str) -> Result<Vec<MarkdownReference>, ClaudeAdapterError> {
         let content = Self::read_claude_md(repo_path)?;
         if content.is_empty() {
             return Ok(Vec::new());
         }
 
-        let base = Path::new(repo_path);
+        // Resolve references relative to the directory containing CLAUDE.md
+        let resolve_base = Self::find_claude_md(repo_path)
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from(repo_path));
+
         let refs = Self::parse_markdown_references(&content);
 
         Ok(refs
             .into_iter()
             .map(|reference| {
-                let resolved = base.join(&reference);
+                let resolved = resolve_base.join(&reference);
                 let exists = resolved.is_file();
                 let file_content = if exists {
                     fs::read_to_string(&resolved).ok()
@@ -3314,6 +3351,8 @@ mod tests {
             model_override: Some("sonnet".to_string()),
             memory: Some("user".to_string()),
             color: None,
+            source: None,
+            read_only: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -3343,6 +3382,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -3372,6 +3413,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -3896,6 +3939,8 @@ mod tests {
             agent: None,
             argument_hint: Some("file path".to_string()),
             content: "Do the thing.\n".to_string(),
+            source: None,
+            read_only: None,
         };
 
         ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
@@ -3927,6 +3972,8 @@ mod tests {
             agent: None,
             argument_hint: None,
             content: "temp".to_string(),
+            source: None,
+            read_only: None,
         };
 
         ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
@@ -4139,6 +4186,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
         let json = serde_json::to_value(&agent).unwrap();
         assert!(json.get("agentId").is_some());
@@ -4245,6 +4294,74 @@ mod tests {
         assert!(refs.is_empty());
     }
 
+    #[test]
+    fn list_markdown_references_resolves_relative_to_claude_dir_for_global() {
+        // When CLAUDE.md is in .claude/ (global scope), @ references should resolve
+        // relative to .claude/, not the base directory
+        let dir = tempfile::tempdir().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(claude_dir.join("CLAUDE.md"), "# Global\n@coding-standards.md\n").unwrap();
+        std::fs::write(claude_dir.join("coding-standards.md"), "# Standards").unwrap();
+
+        let path = dir.path().to_str().unwrap();
+        let refs = ClaudeRepoAdapter::list_markdown_references(path).unwrap();
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].reference, "@coding-standards.md");
+        assert!(refs[0].exists, "Reference should resolve relative to .claude/ directory");
+        assert_eq!(refs[0].content.as_deref(), Some("# Standards"));
+    }
+
+    #[test]
+    fn list_markdown_references_not_found_in_root_when_file_in_claude_dir() {
+        // If CLAUDE.md is in .claude/ and the referenced file is only in the root,
+        // it should NOT be found (because resolution is relative to .claude/)
+        let dir = tempfile::tempdir().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(claude_dir.join("CLAUDE.md"), "# Global\n@agents.md\n").unwrap();
+        // Put agents.md in root, NOT in .claude/
+        std::fs::write(dir.path().join("agents.md"), "# Agents").unwrap();
+
+        let path = dir.path().to_str().unwrap();
+        let refs = ClaudeRepoAdapter::list_markdown_references(path).unwrap();
+        assert_eq!(refs.len(), 1);
+        assert!(!refs[0].exists, "Reference in root should not match when CLAUDE.md is in .claude/");
+    }
+
+    #[test]
+    fn find_claude_md_prefers_root_over_dotclaude() {
+        let dir = tempfile::tempdir().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        // Both exist: root should be preferred
+        std::fs::write(dir.path().join("CLAUDE.md"), "# Root").unwrap();
+        std::fs::write(claude_dir.join("CLAUDE.md"), "# Inner").unwrap();
+
+        let found = ClaudeRepoAdapter::find_claude_md(dir.path().to_str().unwrap());
+        assert!(found.is_some());
+        assert_eq!(found.unwrap(), dir.path().join("CLAUDE.md"));
+    }
+
+    #[test]
+    fn find_claude_md_falls_back_to_dotclaude() {
+        let dir = tempfile::tempdir().unwrap();
+        let claude_dir = dir.path().join(".claude");
+        std::fs::create_dir_all(&claude_dir).unwrap();
+        std::fs::write(claude_dir.join("CLAUDE.md"), "# Inner").unwrap();
+
+        let found = ClaudeRepoAdapter::find_claude_md(dir.path().to_str().unwrap());
+        assert!(found.is_some());
+        assert_eq!(found.unwrap(), claude_dir.join("CLAUDE.md"));
+    }
+
+    #[test]
+    fn find_claude_md_returns_none_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let found = ClaudeRepoAdapter::find_claude_md(dir.path().to_str().unwrap());
+        assert!(found.is_none());
+    }
+
     // -- config snapshot tests --
 
     #[test]
@@ -4307,6 +4424,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
 
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
@@ -4374,6 +4493,8 @@ mod tests {
             agent: None,
             argument_hint: None,
             content: "Do something".to_string(),
+            source: None,
+            read_only: None,
         };
 
         ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
@@ -4803,6 +4924,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
         ClaudeRepoAdapter::write_agent(path, &agent).unwrap();
 
@@ -4818,6 +4941,8 @@ mod tests {
             agent: None,
             argument_hint: None,
             content: "Do the thing.".to_string(),
+            source: None,
+            read_only: None,
         };
         ClaudeRepoAdapter::write_skill(path, &skill).unwrap();
 
@@ -4860,6 +4985,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
         ClaudeRepoAdapter::write_agent(path, &existing_agent).unwrap();
 
@@ -4877,6 +5004,8 @@ mod tests {
                     model_override: None,
                     memory: None,
                     color: None,
+                    source: None,
+                    read_only: None,
                 })
                 .unwrap(),
                 serde_json::to_value(&Agent {
@@ -4888,6 +5017,8 @@ mod tests {
                     model_override: None,
                     memory: None,
                     color: None,
+                    source: None,
+                    read_only: None,
                 })
                 .unwrap(),
             ],
@@ -4923,6 +5054,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
         ClaudeRepoAdapter::write_agent(path, &existing_agent).unwrap();
 
@@ -4939,6 +5072,8 @@ mod tests {
                 model_override: None,
                 memory: None,
                 color: None,
+                source: None,
+                read_only: None,
             })
             .unwrap()],
             skills: vec![],
@@ -4976,6 +5111,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
         ClaudeRepoAdapter::write_agent(src_path, &agent).unwrap();
 
@@ -5680,6 +5817,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
 
         ClaudeRepoAdapter::write_agent(base, &agent).unwrap();
@@ -5740,6 +5879,8 @@ mod tests {
             model_override: None,
             memory: None,
             color: None,
+            source: None,
+            read_only: None,
         };
         ClaudeRepoAdapter::write_agent(base, &agent).unwrap();
 

@@ -1,3 +1,4 @@
+use crate::claude_adapter::{Agent, Skill};
 use crate::plugin_manager::{
     ImportMode, PluginContents, PluginImportPreview, PluginImportRegistry, PluginSummary,
     PluginSyncStatus, PluginUpdateCheck,
@@ -259,6 +260,32 @@ pub fn read_import_registry(
         .lock()
         .map_err(|e| e.to_string())?
         .read_import_registry(&repo_path)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_plugin_source_agents(
+    state: tauri::State<AppState>,
+    repo_path: String,
+) -> Result<Vec<Agent>, String> {
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .read_plugin_source_agents(&repo_path)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_plugin_source_skills(
+    state: tauri::State<AppState>,
+    repo_path: String,
+) -> Result<Vec<Skill>, String> {
+    state
+        .plugin_manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .read_plugin_source_skills(&repo_path)
         .map_err(|e| e.to_string())
 }
 

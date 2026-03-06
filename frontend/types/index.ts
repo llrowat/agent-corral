@@ -45,6 +45,10 @@ export interface Agent {
   modelOverride: string | null;
   memory: string | null;
   color: string | null;
+  /** Source of this agent: undefined for local, "plugin:<name>" for plugin-sourced */
+  source?: string | null;
+  /** Whether this agent is read-only (e.g., from a plugin source directory) */
+  readOnly?: boolean | null;
 }
 
 export interface MemoryStore {
@@ -116,6 +120,10 @@ export interface Skill {
   agent?: string | null;
   argumentHint?: string | null;
   content: string;
+  /** Source of this skill: undefined for local, "plugin:<name>" for plugin-sourced */
+  source?: string | null;
+  /** Whether this skill is read-only (e.g., from a plugin source directory) */
+  readOnly?: boolean | null;
 }
 
 // -- MCP Servers --

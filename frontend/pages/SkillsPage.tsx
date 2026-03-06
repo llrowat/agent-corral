@@ -60,8 +60,10 @@ export function SkillsPage({ scope, homePath }: Props) {
   const toast = useToast();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [globalSkills, setGlobalSkills] = useState<Skill[]>([]);
+  const [pluginSkills, setPluginSkills] = useState<Skill[]>([]);
   const [selected, setSelected] = useState<Skill | null>(null);
   const [selectedIsGlobal, setSelectedIsGlobal] = useState(false);
+  const [selectedIsPlugin, setSelectedIsPlugin] = useState(false);
   const [editing, setEditing] = useState<Skill | null>(null);
   const [saving, setSaving] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
@@ -101,13 +103,28 @@ export function SkillsPage({ scope, homePath }: Props) {
     }
   }, [isProjectScope, homePath]);
 
+  const loadPluginSkills = useCallback(async () => {
+    if (!basePath) {
+      setPluginSkills([]);
+      return;
+    }
+    try {
+      const result = await api.readPluginSourceSkills(basePath);
+      setPluginSkills(result);
+    } catch {
+      setPluginSkills([]);
+    }
+  }, [basePath]);
+
   useEffect(() => {
     setSelected(null);
     setSelectedIsGlobal(false);
+    setSelectedIsPlugin(false);
     setEditing(null);
     loadSkills();
     loadGlobalSkills();
-  }, [loadSkills, loadGlobalSkills, basePath]);
+    loadPluginSkills();
+  }, [loadSkills, loadGlobalSkills, loadPluginSkills, basePath]);
 
   if (!scope) {
     return (
@@ -225,6 +242,7 @@ export function SkillsPage({ scope, homePath }: Props) {
                   onClick={() => {
                     setSelected(skill);
                     setSelectedIsGlobal(false);
+                    setSelectedIsPlugin(false);
                     setEditing(null);
                   }}
                 >
@@ -301,12 +319,51 @@ export function SkillsPage({ scope, homePath }: Props) {
                       onClick={() => {
                         setSelected(skill);
                         setSelectedIsGlobal(true);
+                        setSelectedIsPlugin(false);
                         setEditing(null);
                       }}
                     >
                       <span className="agent-name">
                         {skill.name}
                         <span className="badge-global">global</span>
+                        {skill.userInvocable && (
+                          <span className="badge-new">
+                            invocable
+                          </span>
+                        )}
+                      </span>
+                      <span className="agent-id">{skill.skillId}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {pluginSkills.length > 0 && (
+            <>
+              <div className="global-section-header">
+                <span className="global-section-label">Plugins</span>
+              </div>
+              <ul className="agent-list">
+                {pluginSkills.map((skill) => (
+                  <li
+                    key={`plugin-${skill.source}-${skill.skillId}`}
+                    className={`agent-list-item global-item ${
+                      currentSkill?.skillId === skill.skillId && selectedIsPlugin ? "active" : ""
+                    }`}
+                  >
+                    <button
+                      className="agent-select"
+                      onClick={() => {
+                        setSelected(skill);
+                        setSelectedIsGlobal(false);
+                        setSelectedIsPlugin(true);
+                        setEditing(null);
+                      }}
+                    >
+                      <span className="agent-name">
+                        {skill.name}
+                        <span className="badge-plugin">plugin</span>
                         {skill.userInvocable && (
                           <span className="badge-new">
                             invocable
@@ -374,6 +431,7 @@ export function SkillsPage({ scope, homePath }: Props) {
               <h3>
                 {selected!.name}
                 {selectedIsGlobal && <span className="badge-global">global</span>}
+                {selectedIsPlugin && <span className="badge-plugin">plugin</span>}
                 {selected!.userInvocable && (
                   <span className="badge-new">
                     invocable
@@ -383,6 +441,11 @@ export function SkillsPage({ scope, homePath }: Props) {
               {selectedIsGlobal && (
                 <p className="global-readonly-hint">
                   This skill is defined in the global scope. Switch to Global Settings to edit it.
+                </p>
+              )}
+              {selectedIsPlugin && selected?.source && (
+                <p className="global-readonly-hint">
+                  This skill is from {selected.source.replace("plugin:", "plugin ")} and is read-only. Import the plugin to edit a local copy.
                 </p>
               )}
               <div className="detail-field">
@@ -441,7 +504,7 @@ export function SkillsPage({ scope, homePath }: Props) {
                 <label>Content</label>
                 <pre className="prompt-preview">{selected!.content}</pre>
               </div>
-              {!selectedIsGlobal && (
+              {!selectedIsGlobal && !selectedIsPlugin && (
                 <div className="form-actions">
                   <button
                     className="btn"

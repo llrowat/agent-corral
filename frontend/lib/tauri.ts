@@ -458,6 +458,20 @@ export async function getPluginSyncInterval(): Promise<number> {
   return invoke("get_plugin_sync_interval");
 }
 
+// -- Plugin source entity discovery (read-only) --
+
+export async function readPluginSourceAgents(
+  repoPath: string
+): Promise<Agent[]> {
+  return invoke("read_plugin_source_agents", { repoPath });
+}
+
+export async function readPluginSourceSkills(
+  repoPath: string
+): Promise<Skill[]> {
+  return invoke("read_plugin_source_skills", { repoPath });
+}
+
 // -- CLAUDE.md commands --
 
 export async function readClaudeMd(repoPath: string): Promise<string> {

@@ -1283,6 +1283,62 @@ impl PluginManager {
         &self.library_dir
     }
 
+    /// Read agents from all plugin source directories associated with a repo's imports.
+    /// Returns agents marked with source and read_only flags.
+    pub fn read_plugin_source_agents(&self, repo_path: &str) -> Result<Vec<Agent>, PluginError> {
+        let registry = self.read_import_registry(repo_path)?;
+        let mut all_agents = Vec::new();
+
+        for record in &registry.imports {
+            let plugin_dir = Path::new(&record.plugin_dir);
+            if !plugin_dir.exists() {
+                continue;
+            }
+            let agents_dir = plugin_dir.join("agents");
+            if agents_dir.exists() {
+                if let Ok(mut agents) = self.read_plugin_agents(&agents_dir) {
+                    let source_label = format!("plugin:{}", record.plugin_name);
+                    for agent in &mut agents {
+                        agent.source = Some(source_label.clone());
+                        agent.read_only = Some(true);
+                    }
+                    all_agents.extend(agents);
+                }
+            }
+        }
+
+        all_agents.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(all_agents)
+    }
+
+    /// Read skills from all plugin source directories associated with a repo's imports.
+    /// Returns skills marked with source and read_only flags.
+    pub fn read_plugin_source_skills(&self, repo_path: &str) -> Result<Vec<Skill>, PluginError> {
+        let registry = self.read_import_registry(repo_path)?;
+        let mut all_skills = Vec::new();
+
+        for record in &registry.imports {
+            let plugin_dir = Path::new(&record.plugin_dir);
+            if !plugin_dir.exists() {
+                continue;
+            }
+            let skills_dir = plugin_dir.join("skills");
+            if skills_dir.exists() {
+                if let Ok(mut skills) = self.read_plugin_skills(&skills_dir) {
+                    let source_label = format!("plugin:{}", record.plugin_name);
+                    for skill in &mut skills {
+                        skill.source = Some(source_label.clone());
+                        skill.read_only = Some(true);
+                    }
+                    all_skills.extend(skills);
+                }
+            }
+        }
+
+        all_skills.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(all_skills)
+    }
+
     // -- Private helpers --
 
     fn read_manifest(&self, plugin_dir: &Path) -> Result<PluginManifest, PluginError> {
@@ -1374,6 +1430,8 @@ impl PluginManager {
                     model_override,
                     memory,
                     color,
+                    source: None,
+                    read_only: None,
                 });
             }
         }
@@ -1781,6 +1839,8 @@ fn parse_skill_contents(contents: &str, skill_id: &str) -> Skill {
             .and_then(|v| v.as_str())
             .map(String::from),
         content: body,
+        source: None,
+        read_only: None,
     }
 }
 
@@ -2236,5 +2296,184 @@ mod tests {
         // Update is technically available but plugin is pinned
         assert!(statuses[0].update_available);
         assert!(statuses[0].pinned);
+    }
+
+    #[test]
+    fn read_plugin_source_agents_returns_read_only() {
+        let plugins_dir = tempfile::tempdir().unwrap();
+        let library_dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(
+            plugins_dir.path().to_path_buf(),
+            library_dir.path().to_path_buf(),
+        );
+
+        // Create a plugin directory with agents
+        let plugin_dir = plugins_dir.path().join("my-plugin");
+        fs::create_dir_all(plugin_dir.join(".claude-plugin")).unwrap();
+        atomic_write(
+            &plugin_dir.join(".claude-plugin/plugin.json"),
+            &serde_json::to_string_pretty(&PluginManifest {
+                name: "My Plugin".to_string(),
+                description: "Test plugin".to_string(),
+                version: "1.0.0".to_string(),
+                author: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let agents_dir = plugin_dir.join("agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        fs::write(
+            agents_dir.join("test-agent.md"),
+            "---\nname: Test Agent\ndescription: From plugin\n---\nYou are a test.",
+        )
+        .unwrap();
+
+        // Create repo with import registry pointing to the plugin
+        let repo = tempfile::tempdir().unwrap();
+        let repo_path = repo.path().to_str().unwrap();
+        let claude_dir = repo.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+
+        let registry = PluginImportRegistry {
+            imports: vec![PluginImportRecord {
+                plugin_name: "My Plugin".to_string(),
+                plugin_dir: plugin_dir.to_string_lossy().to_string(),
+                git_source: None,
+                imported_commit: None,
+                imported_at: "2026-03-01T00:00:00Z".to_string(),
+                import_mode: ImportMode::AddOnly,
+                pinned: false,
+                auto_sync: false,
+            }],
+        };
+        atomic_write(
+            &claude_dir.join("plugin-imports.json"),
+            &serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+
+        let agents = mgr.read_plugin_source_agents(repo_path).unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].agent_id, "test-agent");
+        assert_eq!(agents[0].name, "Test Agent");
+        assert_eq!(agents[0].source, Some("plugin:My Plugin".to_string()));
+        assert_eq!(agents[0].read_only, Some(true));
+    }
+
+    #[test]
+    fn read_plugin_source_skills_returns_read_only() {
+        let plugins_dir = tempfile::tempdir().unwrap();
+        let library_dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(
+            plugins_dir.path().to_path_buf(),
+            library_dir.path().to_path_buf(),
+        );
+
+        // Create a plugin directory with skills
+        let plugin_dir = plugins_dir.path().join("my-plugin");
+        fs::create_dir_all(plugin_dir.join(".claude-plugin")).unwrap();
+        atomic_write(
+            &plugin_dir.join(".claude-plugin/plugin.json"),
+            &serde_json::to_string_pretty(&PluginManifest {
+                name: "My Plugin".to_string(),
+                description: "Test plugin".to_string(),
+                version: "1.0.0".to_string(),
+                author: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let skill_dir = plugin_dir.join("skills/lint");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: Lint\ndescription: Run linting\n---\nLint the code.",
+        )
+        .unwrap();
+
+        // Create repo with import registry
+        let repo = tempfile::tempdir().unwrap();
+        let repo_path = repo.path().to_str().unwrap();
+        let claude_dir = repo.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+
+        let registry = PluginImportRegistry {
+            imports: vec![PluginImportRecord {
+                plugin_name: "My Plugin".to_string(),
+                plugin_dir: plugin_dir.to_string_lossy().to_string(),
+                git_source: None,
+                imported_commit: None,
+                imported_at: "2026-03-01T00:00:00Z".to_string(),
+                import_mode: ImportMode::AddOnly,
+                pinned: false,
+                auto_sync: false,
+            }],
+        };
+        atomic_write(
+            &claude_dir.join("plugin-imports.json"),
+            &serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+
+        let skills = mgr.read_plugin_source_skills(repo_path).unwrap();
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].skill_id, "lint");
+        assert_eq!(skills[0].name, "Lint");
+        assert_eq!(skills[0].source, Some("plugin:My Plugin".to_string()));
+        assert_eq!(skills[0].read_only, Some(true));
+    }
+
+    #[test]
+    fn read_plugin_source_agents_empty_when_no_imports() {
+        let plugins_dir = tempfile::tempdir().unwrap();
+        let library_dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(
+            plugins_dir.path().to_path_buf(),
+            library_dir.path().to_path_buf(),
+        );
+
+        let repo = tempfile::tempdir().unwrap();
+        let agents = mgr.read_plugin_source_agents(repo.path().to_str().unwrap()).unwrap();
+        assert!(agents.is_empty());
+    }
+
+    #[test]
+    fn read_plugin_source_agents_skips_deleted_plugin() {
+        let plugins_dir = tempfile::tempdir().unwrap();
+        let library_dir = tempfile::tempdir().unwrap();
+        let mgr = PluginManager::new(
+            plugins_dir.path().to_path_buf(),
+            library_dir.path().to_path_buf(),
+        );
+
+        // Create repo with import registry pointing to a non-existent plugin
+        let repo = tempfile::tempdir().unwrap();
+        let repo_path = repo.path().to_str().unwrap();
+        let claude_dir = repo.path().join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+
+        let registry = PluginImportRegistry {
+            imports: vec![PluginImportRecord {
+                plugin_name: "Gone Plugin".to_string(),
+                plugin_dir: "/nonexistent/path/to/plugin".to_string(),
+                git_source: None,
+                imported_commit: None,
+                imported_at: "2026-03-01T00:00:00Z".to_string(),
+                import_mode: ImportMode::AddOnly,
+                pinned: false,
+                auto_sync: false,
+            }],
+        };
+        atomic_write(
+            &claude_dir.join("plugin-imports.json"),
+            &serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+
+        let agents = mgr.read_plugin_source_agents(repo_path).unwrap();
+        assert!(agents.is_empty(), "Should gracefully skip deleted plugin directories");
     }
 }
