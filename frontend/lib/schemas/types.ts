@@ -14,7 +14,8 @@ export interface XFieldHints {
     | "tool-checkboxes"
     | "key-value-pairs"
     | "textarea-lines"
-    | "tag-input";
+    | "tag-input"
+    | "color";
   /** Placeholder text */
   placeholder?: string;
   /** Textarea rows */

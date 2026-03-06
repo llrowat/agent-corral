@@ -90,6 +90,7 @@ describe("Type definitions", () => {
         tools: ["Read", "Write", "Bash"],
         modelOverride: "sonnet",
         memory: "user",
+        color: null,
       };
       expect(agent.tools).toHaveLength(3);
       expect(agent.tools).toContain("Bash");

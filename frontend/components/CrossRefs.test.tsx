@@ -11,6 +11,7 @@ const mockAgent: Agent = {
   tools: ["Read", "Grep"],
   modelOverride: null,
   memory: "default",
+  color: null,
 };
 
 const mockAgentNoTools: Agent = {
