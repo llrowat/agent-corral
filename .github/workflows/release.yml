@@ -64,6 +64,15 @@ jobs:
       - name: Clean build artifacts
         run: cargo clean --manifest-path backend/Cargo.toml
 
+      - name: Write Apple API key to file
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APPLE_API_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -73,7 +82,6 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "AgentCorral ${{ github.ref_name }}"
