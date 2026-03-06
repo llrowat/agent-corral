@@ -1360,6 +1360,11 @@ impl PluginManager {
                     .and_then(|v| v.as_str())
                     .map(String::from);
 
+                let color = frontmatter
+                    .get("color")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+
                 agents.push(Agent {
                     agent_id,
                     name,
@@ -1368,6 +1373,7 @@ impl PluginManager {
                     tools,
                     model_override,
                     memory,
+                    color,
                 });
             }
         }

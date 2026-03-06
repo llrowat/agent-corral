@@ -30,6 +30,7 @@ function newAgent(): Agent {
     tools: [],
     modelOverride: null,
     memory: null,
+    color: null,
   };
 }
 
@@ -232,7 +233,10 @@ export function AgentsPage({ scope, homePath }: Props) {
                     setEditing(null);
                   }}
                 >
-                  <span className="agent-name">{agent.name}</span>
+                  <span className="agent-name">
+                    {agent.color && <span className="agent-color-dot" style={{ background: agent.color }} />}
+                    {agent.name}
+                  </span>
                   <span className="agent-id">{agent.agentId}</span>
                 </button>
                 <button
@@ -302,6 +306,7 @@ export function AgentsPage({ scope, homePath }: Props) {
                       }}
                     >
                       <span className="agent-name">
+                        {agent.color && <span className="agent-color-dot" style={{ background: agent.color }} />}
                         {agent.name}
                         <span className="badge-global">global</span>
                       </span>
@@ -365,6 +370,7 @@ export function AgentsPage({ scope, homePath }: Props) {
           ) : (
             <div className="agent-detail">
               <h3>
+                {selected!.color && <span className="agent-color-dot agent-color-dot-lg" style={{ background: selected!.color }} />}
                 {selected!.name}
                 {selectedIsGlobal && <span className="badge-global">global</span>}
               </h3>

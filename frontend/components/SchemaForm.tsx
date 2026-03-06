@@ -585,6 +585,51 @@ function SchemaField({
     );
   }
 
+  // --- Widget: color ---
+  if (widget === "color") {
+    const PRESET_COLORS = [
+      "#ef4444", "#f97316", "#eab308", "#22c55e",
+      "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
+    ];
+    const currentColor = (value as string) ?? "";
+    return (
+      <div className="form-group" data-field={name}>
+        <label>{title}</label>
+        {description && (
+          <span className="config-field-hint">{description}</span>
+        )}
+        <div className="color-picker-row">
+          {PRESET_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`color-swatch${currentColor === c ? " color-swatch-active" : ""}`}
+              style={{ background: c }}
+              onClick={() => onChange(c)}
+              title={c}
+            />
+          ))}
+          <input
+            type="color"
+            value={currentColor || "#3b82f6"}
+            onChange={(e) => onChange(e.target.value)}
+            className="color-input-native"
+            title="Pick a custom color"
+          />
+          {currentColor && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => onChange(null)}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // --- Widget: textarea ---
   if (widget === "textarea" || (type === "string" && (hints?.rows ?? 0) > 1)) {
     return (

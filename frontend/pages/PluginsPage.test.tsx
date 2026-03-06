@@ -32,6 +32,7 @@ const mockAgents: Agent[] = [
     tools: [],
     modelOverride: null,
     memory: null,
+    color: null,
   },
 ];
 

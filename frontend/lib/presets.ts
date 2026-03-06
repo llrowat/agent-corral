@@ -23,6 +23,7 @@ export const AGENT_PRESETS: AgentPreset[] = [
       tools: ["Read", "Glob", "Grep"],
       modelOverride: null,
       memory: null,
+      color: null,
     },
   },
   {
@@ -38,6 +39,7 @@ export const AGENT_PRESETS: AgentPreset[] = [
       tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
       modelOverride: null,
       memory: null,
+      color: null,
     },
   },
   {
@@ -53,6 +55,7 @@ export const AGENT_PRESETS: AgentPreset[] = [
       tools: ["Read", "Write", "Edit", "Glob", "Grep"],
       modelOverride: null,
       memory: null,
+      color: null,
     },
   },
   {
@@ -68,6 +71,7 @@ export const AGENT_PRESETS: AgentPreset[] = [
       tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
       modelOverride: null,
       memory: null,
+      color: null,
     },
   },
   {
@@ -83,6 +87,7 @@ export const AGENT_PRESETS: AgentPreset[] = [
       tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
       modelOverride: null,
       memory: null,
+      color: null,
     },
   },
 ];

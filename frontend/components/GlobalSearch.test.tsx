@@ -94,7 +94,7 @@ describe("GlobalSearch", () => {
 
   it("includes agents in search results", async () => {
     mockForProjectScope(mockReadAgents, [
-      { agentId: "reviewer", name: "Code Reviewer", description: "Reviews code", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+      { agentId: "reviewer", name: "Code Reviewer", description: "Reviews code", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
     ]);
 
     renderSearch();
@@ -210,10 +210,10 @@ describe("GlobalSearch", () => {
   it("searches across both project and global scopes", async () => {
     mockReadAgents
       .mockResolvedValueOnce([
-        { agentId: "local-agent", name: "Local Agent", description: "Project agent", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+        { agentId: "local-agent", name: "Local Agent", description: "Project agent", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
       ])
       .mockResolvedValueOnce([
-        { agentId: "global-agent", name: "Global Agent", description: "Global agent", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+        { agentId: "global-agent", name: "Global Agent", description: "Global agent", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
       ]);
 
     renderSearch(PROJECT_SCOPE, HOME_PATH);
@@ -231,10 +231,10 @@ describe("GlobalSearch", () => {
   it("shows scope labels on results", async () => {
     mockReadAgents
       .mockResolvedValueOnce([
-        { agentId: "local-agent", name: "Local Agent", description: "Project agent", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+        { agentId: "local-agent", name: "Local Agent", description: "Project agent", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
       ])
       .mockResolvedValueOnce([
-        { agentId: "global-agent", name: "Global Agent", description: "Global agent", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+        { agentId: "global-agent", name: "Global Agent", description: "Global agent", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
       ]);
 
     renderSearch(PROJECT_SCOPE, HOME_PATH);
@@ -250,7 +250,7 @@ describe("GlobalSearch", () => {
 
   it("loads only global scope when global scope is selected", async () => {
     mockReadAgents.mockResolvedValue([
-      { agentId: "g-agent", name: "G Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+      { agentId: "g-agent", name: "G Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
     ]);
 
     renderSearch(GLOBAL_SCOPE, HOME_PATH);
@@ -267,7 +267,7 @@ describe("GlobalSearch", () => {
 
   it("loads global scope when no scope selected but homePath available", async () => {
     mockReadAgents.mockResolvedValue([
-      { agentId: "g-agent", name: "G Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+      { agentId: "g-agent", name: "G Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
     ]);
 
     renderSearch(null, HOME_PATH);
@@ -282,7 +282,7 @@ describe("GlobalSearch", () => {
 
   it("filters results by query across all entity types", async () => {
     mockForProjectScope(mockReadAgents, [
-      { agentId: "reviewer", name: "Code Reviewer", description: "Reviews code", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+      { agentId: "reviewer", name: "Code Reviewer", description: "Reviews code", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
     ]);
     mockListPlugins.mockResolvedValue([
       {
@@ -370,7 +370,7 @@ describe("GlobalSearch", () => {
     mockReadAgents
       .mockResolvedValueOnce([]) // project scope — no agents
       .mockResolvedValueOnce([
-        { agentId: "global-agent", name: "Global Agent", description: "A global agent", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+        { agentId: "global-agent", name: "Global Agent", description: "A global agent", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
       ]);
 
     renderSearch(PROJECT_SCOPE, HOME_PATH);
@@ -391,7 +391,7 @@ describe("GlobalSearch", () => {
     // Then re-render with global scope, but items still have project-scoped results
     mockReadAgents
       .mockResolvedValueOnce([
-        { agentId: "local-agent", name: "Local Agent", description: "A project agent", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+        { agentId: "local-agent", name: "Local Agent", description: "A project agent", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
       ])
       .mockResolvedValueOnce([]); // global scope
 
@@ -411,7 +411,7 @@ describe("GlobalSearch", () => {
 
   it("does not switch scope when selecting a result matching current scope", async () => {
     mockReadAgents.mockResolvedValue([
-      { agentId: "g-agent", name: "G Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null },
+      { agentId: "g-agent", name: "G Agent", description: "", systemPrompt: "", tools: [], modelOverride: null, memory: null, color: null },
     ]);
 
     renderSearch(GLOBAL_SCOPE, HOME_PATH);
