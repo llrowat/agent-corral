@@ -126,7 +126,7 @@ describe("PluginsPage", () => {
     });
 
     // Fill in the required name field
-    const nameInput = screen.getByPlaceholderText("My Company Plugin");
+    const nameInput = screen.getByPlaceholderText("My Config Bundle");
     fireEvent.change(nameInput, { target: { value: "Global Plugin" } });
 
     // Click the export button in the form
@@ -156,7 +156,7 @@ describe("PluginsPage", () => {
       expect(screen.getByText("Bundle Name")).toBeInTheDocument();
     });
 
-    const nameInput = screen.getByPlaceholderText("My Company Plugin");
+    const nameInput = screen.getByPlaceholderText("My Config Bundle");
     fireEvent.change(nameInput, { target: { value: "Project Plugin" } });
 
     const exportBtn = screen.getAllByText("Export").find(

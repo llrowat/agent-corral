@@ -177,7 +177,8 @@ impl PluginManager {
         }
     }
 
-    /// Export a plugin from a repo (or global settings) into a plugin directory
+    /// Export a plugin from a repo (or global settings) into a plugin directory.
+    /// If `export_dir_override` is provided, the plugin is exported there instead of the default plugins dir.
     pub fn export_plugin(
         &self,
         repo_path: &str,
@@ -191,9 +192,18 @@ impl PluginManager {
         include_hooks: bool,
         include_mcp: bool,
         is_global: bool,
+        export_dir_override: Option<&str>,
     ) -> Result<String, PluginError> {
         let dir_name = name.to_lowercase().replace(' ', "-");
-        let plugin_dir = self.plugins_dir.join(&dir_name);
+        let base = match export_dir_override {
+            Some(d) => {
+                let p = PathBuf::from(d);
+                fs::create_dir_all(&p)?;
+                p
+            }
+            None => self.plugins_dir.clone(),
+        };
+        let plugin_dir = base.join(&dir_name);
 
         // Create plugin directory structure
         let claude_plugin_dir = plugin_dir.join(".claude-plugin");
@@ -490,6 +500,7 @@ impl PluginManager {
         &self,
         plugin_dir: &str,
         repo_path: &str,
+        is_global: bool,
     ) -> Result<PluginImportPreview, PluginError> {
         let contents = self.read_plugin(plugin_dir)?;
 
@@ -503,7 +514,7 @@ impl PluginManager {
         let existing_skill_ids: Vec<String> =
             existing_skills.iter().map(|s| s.skill_id.clone()).collect();
 
-        let existing_mcp = ClaudeRepoAdapter::read_mcp_servers(repo_path, false)
+        let existing_mcp = ClaudeRepoAdapter::read_mcp_servers(repo_path, is_global)
             .map_err(|e| PluginError::Adapter(e.to_string()))?;
         let existing_mcp_ids: Vec<String> =
             existing_mcp.iter().map(|m| m.server_id.clone()).collect();
@@ -552,12 +563,13 @@ impl PluginManager {
         })
     }
 
-    /// Import a plugin into a repo
+    /// Import a plugin into a repo or global scope
     pub fn import_plugin(
         &self,
         plugin_dir: &str,
         repo_path: &str,
         mode: ImportMode,
+        is_global: bool,
     ) -> Result<(), PluginError> {
         let contents = self.read_plugin(plugin_dir)?;
 
@@ -620,7 +632,7 @@ impl PluginManager {
 
         // Import MCP servers
         for server in &contents.mcp_servers {
-            ClaudeRepoAdapter::write_mcp_server(repo_path, server, false)
+            ClaudeRepoAdapter::write_mcp_server(repo_path, server, is_global)
                 .map_err(|e| PluginError::Adapter(e.to_string()))?;
         }
 
@@ -1150,8 +1162,8 @@ impl PluginManager {
             )));
         }
 
-        // Re-import with Overwrite mode
-        self.import_plugin(&plugin_dir, repo_path, ImportMode::Overwrite)?;
+        // Re-import with Overwrite mode (sync is always project scope)
+        self.import_plugin(&plugin_dir, repo_path, ImportMode::Overwrite, false)?;
 
         // Return fresh sync status for this plugin
         let statuses = self.get_import_sync_status(repo_path)?;
@@ -2215,6 +2227,7 @@ mod tests {
             false,
             true,
             false,
+            None,
         );
         assert!(result.is_ok());
         let plugin_dir = PathBuf::from(result.unwrap());
@@ -2251,6 +2264,7 @@ mod tests {
             false,
             true,
             true, // is_global = true
+            None,
         );
         assert!(result.is_ok());
         let plugin_dir = PathBuf::from(result.unwrap());
@@ -2264,6 +2278,41 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(plugin_dir.join(".mcp.json")).unwrap())
                 .unwrap();
         assert!(exported_mcp["mcpServers"]["global-server"].is_object());
+    }
+
+    #[test]
+    fn export_plugin_uses_custom_export_dir() {
+        let (tmp, mgr) = make_test_manager();
+        let repo = create_test_repo(tmp.path());
+        let repo_path = repo.to_string_lossy().to_string();
+
+        let agents_dir = repo.join(".claude/agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        let agent_content =
+            "---\nname: Test Agent\ndescription: A test\n---\n\nYou are a test agent.\n";
+        fs::write(agents_dir.join("test-agent.md"), agent_content).unwrap();
+
+        let custom_dir = tmp.path().join("custom-exports");
+        let result = mgr.export_plugin(
+            &repo_path,
+            "Custom Dir Export",
+            "Exported to custom dir",
+            None,
+            None,
+            false,
+            &[],
+            &[],
+            false,
+            false,
+            false,
+            Some(&custom_dir.to_string_lossy()),
+        );
+        assert!(result.is_ok());
+        let plugin_dir = PathBuf::from(result.unwrap());
+        // Should be inside the custom directory, not the default plugins dir
+        assert!(plugin_dir.starts_with(&custom_dir));
+        assert!(plugin_dir.join(".claude-plugin/plugin.json").exists());
+        assert!(plugin_dir.join("agents/test-agent.md").exists());
     }
 
     #[test]

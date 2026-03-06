@@ -145,7 +145,7 @@ export function PluginsPage({ scope }: Props) {
         exportIncludeMcp,
         isGlobal,
       );
-      toast.success(`Plugin exported to: ${path}`);
+      toast.success(`Exported to: ${path}`);
       setView("list");
       await loadPlugins();
     } catch (e) {
@@ -163,7 +163,7 @@ export function PluginsPage({ scope }: Props) {
         gitUrl.trim(),
         gitBranch.trim() || undefined
       );
-      toast.success(`Installed ${installed.length} plugin(s): ${installed.map((p) => p.name).join(", ")}`);
+      toast.success(`Installed ${installed.length} bundle(s): ${installed.map((p) => p.name).join(", ")}`);
       setView("list");
       setGitUrl("");
       setGitBranch("");
@@ -183,7 +183,7 @@ export function PluginsPage({ scope }: Props) {
       setUpdates(result);
       const available = result.filter((u) => u.updateAvailable);
       if (available.length === 0) {
-        toast.info("All plugins are up to date.");
+        toast.info("All bundles are up to date.");
       } else {
         toast.info(`${available.length} update(s) available.`);
       }
@@ -198,7 +198,7 @@ export function PluginsPage({ scope }: Props) {
     setUpdatingPlugin(plugin.dirPath);
     try {
       const updated = await api.updatePlugin(plugin.dirPath);
-      toast.success(`Updated "${updated.name}" to v${updated.version}`);
+      toast.success(`Updated "${updated.name}" to v${updated.version}.`);
       setUpdates((prev) =>
         prev.filter((u) => u.dirPath !== plugin.dirPath)
       );
@@ -214,7 +214,7 @@ export function PluginsPage({ scope }: Props) {
     setSyncingPlugin(status.pluginName);
     try {
       await syncPlugin(status.pluginName);
-      toast.success(`Synced "${status.pluginName}" to latest.`);
+      toast.success(`Synced "${status.pluginName}" to latest`);
     } catch (e) {
       toast.error("Sync failed", String(e));
     } finally {
@@ -229,7 +229,7 @@ export function PluginsPage({ scope }: Props) {
       if (synced.length === 0) {
         toast.info("Everything is up to date.");
       } else {
-        toast.success(`Auto-synced ${synced.length} plugin(s): ${synced.join(", ")}`);
+        toast.success(`Auto-synced ${synced.length} bundle(s): ${synced.join(", ")}`);
       }
     } catch (e) {
       toast.error("Auto-sync failed", String(e));
@@ -239,12 +239,12 @@ export function PluginsPage({ scope }: Props) {
   };
 
   const startImport = async (plugin: PluginSummary) => {
-    if (!repo) {
-      toast.warn("Select a repository to import into");
+    if (!basePath) {
+      toast.warn("Select a scope first");
       return;
     }
     try {
-      const preview = await api.previewPluginImport(plugin.dirPath, repo.path);
+      const preview = await api.previewPluginImport(plugin.dirPath, basePath, isGlobal);
       setImportPluginDir(plugin.dirPath);
       setImportPreview(preview);
       setView("import-preview");
@@ -254,11 +254,11 @@ export function PluginsPage({ scope }: Props) {
   };
 
   const handleImport = async (mode: "addOnly" | "overwrite") => {
-    if (!repo || !importPluginDir) return;
+    if (!basePath || !importPluginDir) return;
     setImporting(true);
     try {
-      await api.importPlugin(importPluginDir, repo.path, mode);
-      toast.success("Plugin imported successfully!");
+      await api.importPlugin(importPluginDir, basePath, mode, isGlobal);
+      toast.success("Imported successfully!");
       setView("list");
     } catch (e) {
       toast.error("Import failed", String(e));
@@ -268,7 +268,7 @@ export function PluginsPage({ scope }: Props) {
   };
 
   const handleDeletePlugin = async (plugin: PluginSummary) => {
-    if (!confirm(`Delete plugin "${plugin.name}"?`)) return;
+    if (!confirm(`Delete "${plugin.name}"?`)) return;
     try {
       await api.deletePlugin(plugin.dirPath);
       await loadPlugins();
@@ -319,8 +319,7 @@ export function PluginsPage({ scope }: Props) {
               placeholder="https://github.com/user/plugin-repo.git"
             />
             <p className="text-muted" style={{ marginTop: 4 }}>
-              Supports HTTPS and SSH URLs. Private repos work if your git
-              credentials are configured.
+              Supports HTTPS and SSH URLs. Private repos work if your git credentials are configured.
             </p>
           </div>
           <div className="form-group">
@@ -340,7 +339,7 @@ export function PluginsPage({ scope }: Props) {
                 The repo is cloned and scanned for{" "}
                 <code>.claude-plugin/plugin.json</code> directories
               </li>
-              <li>Found plugins are installed to your library</li>
+              <li>Found config bundles are installed to your library</li>
               <li>
                 Git source is tracked so you can check for updates later
               </li>
@@ -382,7 +381,7 @@ export function PluginsPage({ scope }: Props) {
               type="text"
               value={exportName}
               onChange={(e) => setExportName(e.target.value)}
-              placeholder="My Company Plugin"
+              placeholder="My Config Bundle"
             />
           </div>
           <div className="form-group">
@@ -619,7 +618,7 @@ export function PluginsPage({ scope }: Props) {
           {importPreview.configChanges && (
             <div className="preview-section">
               <h3>Config Changes</h3>
-              <p>This plugin includes config defaults that will be applied.</p>
+              <p>This bundle includes config defaults that will be applied.</p>
             </div>
           )}
 
@@ -757,7 +756,7 @@ export function PluginsPage({ scope }: Props) {
                     <span className="badge-pinned">pinned</span>
                   )}
                   {!status.pluginExists && (
-                    <span className="badge-missing">plugin removed</span>
+                    <span className="badge-missing">bundle removed</span>
                   )}
                 </div>
                 <div className="sync-status-actions">
@@ -835,10 +834,10 @@ export function PluginsPage({ scope }: Props) {
           </h3>
           <p>
             {activeTab === "my"
-              ? "Create an export bundle with agents, skills, hooks, and MCP servers from your settings."
+              ? "Create a config bundle with agents, skills, hooks, and MCP servers from your current scope."
               : activeTab === "git"
                 ? "Install config bundles from a git repository."
-                : "Install from git or export from your settings to see them here."}
+                : "Install from git or create an export to see bundles here."}
           </p>
           {activeTab === "my" && (
             <button className="btn btn-primary" onClick={startExport}>

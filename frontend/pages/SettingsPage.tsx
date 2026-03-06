@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { getPreferences, setPluginSyncInterval, getPlatform } from "@/lib/tauri";
+import { getPreferences, setPluginSyncInterval, getExportDir, setExportDir, getPlatform } from "@/lib/tauri";
 
 export function SettingsPage() {
   const [syncInterval, setSyncInterval] = useState<number>(30);
+  const [exportDirValue, setExportDirValue] = useState<string>("");
   const [platform, setPlatform] = useState<string>("linux");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -12,7 +13,10 @@ export function SettingsPage() {
       .then((p) => setPlatform(p))
       .catch(() => {});
     getPreferences()
-      .then((prefs) => setSyncInterval(prefs.plugin_sync_interval_minutes))
+      .then((prefs) => {
+        setSyncInterval(prefs.plugin_sync_interval_minutes);
+        setExportDirValue(prefs.export_dir ?? "");
+      })
       .catch(() => {});
   }, []);
 
@@ -21,6 +25,7 @@ export function SettingsPage() {
     setSaved(false);
     try {
       await setPluginSyncInterval(syncInterval);
+      await setExportDir(exportDirValue.trim() || null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -38,9 +43,26 @@ export function SettingsPage() {
       </p>
 
       <div className="settings-section">
-        <h3>Plugin Sync</h3>
+        <h3>Export Directory</h3>
         <p className="text-muted" style={{ marginBottom: 12 }}>
-          How often to auto-check git-sourced plugins for updates.
+          Directory where exported config bundles are saved. Leave empty to use the default app data directory.
+        </p>
+        <div className="form-group" style={{ maxWidth: 500 }}>
+          <label htmlFor="export-dir">Export path</label>
+          <input
+            id="export-dir"
+            type="text"
+            value={exportDirValue}
+            onChange={(e) => setExportDirValue(e.target.value)}
+            placeholder="Default (app data directory)"
+          />
+        </div>
+      </div>
+
+      <div className="settings-section" style={{ marginTop: 24 }}>
+        <h3>Bundle Sync</h3>
+        <p className="text-muted" style={{ marginBottom: 12 }}>
+          How often to auto-check git-sourced config bundles for updates.
         </p>
         <div className="form-group" style={{ maxWidth: 400 }}>
           <label htmlFor="sync-interval">Check interval (minutes)</label>
@@ -55,16 +77,17 @@ export function SettingsPage() {
             Set to 0 to disable automatic checking.
           </span>
         </div>
-        <div className="form-actions">
-          <button
-            className="btn btn-primary"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-          {saved && <span className="settings-saved">Saved</span>}
-        </div>
+      </div>
+
+      <div className="form-actions" style={{ marginTop: 24 }}>
+        <button
+          className="btn btn-primary"
+          onClick={handleSave}
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+        {saved && <span className="settings-saved">Saved</span>}
       </div>
 
       <div className="settings-section" style={{ marginTop: 24 }}>

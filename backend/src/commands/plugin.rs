@@ -30,6 +30,11 @@ pub fn export_plugin(
     include_mcp: bool,
     is_global: bool,
 ) -> Result<String, String> {
+    let export_dir = state
+        .preferences
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get_export_dir();
     state
         .plugin_manager
         .lock()
@@ -46,6 +51,7 @@ pub fn export_plugin(
             include_hooks,
             include_mcp,
             is_global,
+            export_dir.as_deref(),
         )
         .map_err(|e| e.to_string())
 }
@@ -55,12 +61,13 @@ pub fn preview_plugin_import(
     state: tauri::State<AppState>,
     plugin_dir: String,
     repo_path: String,
+    is_global: bool,
 ) -> Result<PluginImportPreview, String> {
     state
         .plugin_manager
         .lock()
         .map_err(|e| e.to_string())?
-        .preview_import(&plugin_dir, &repo_path)
+        .preview_import(&plugin_dir, &repo_path, is_global)
         .map_err(|e| e.to_string())
 }
 
@@ -70,12 +77,13 @@ pub fn import_plugin(
     plugin_dir: String,
     repo_path: String,
     mode: ImportMode,
+    is_global: bool,
 ) -> Result<(), String> {
     state
         .plugin_manager
         .lock()
         .map_err(|e| e.to_string())?
-        .import_plugin(&plugin_dir, &repo_path, mode)
+        .import_plugin(&plugin_dir, &repo_path, mode, is_global)
         .map_err(|e| e.to_string())
 }
 
@@ -308,4 +316,25 @@ pub fn get_plugin_sync_interval(state: tauri::State<AppState>) -> Result<u32, St
         .lock()
         .map_err(|e| e.to_string())?
         .get_plugin_sync_interval())
+}
+
+#[tauri::command]
+pub fn get_export_dir(state: tauri::State<AppState>) -> Result<Option<String>, String> {
+    Ok(state
+        .preferences
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get_export_dir())
+}
+
+#[tauri::command]
+pub fn set_export_dir(
+    state: tauri::State<AppState>,
+    dir: Option<String>,
+) -> Result<(), String> {
+    state
+        .preferences
+        .lock()
+        .map_err(|e| e.to_string())?
+        .set_export_dir(dir)
 }
