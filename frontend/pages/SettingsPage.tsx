@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getPreferences, setPluginSyncInterval, getExportDir, setExportDir, getPlatform } from "@/lib/tauri";
+import { getPreferences, setPluginSyncInterval, setExportDir, getPlatform } from "@/lib/tauri";
 
 export function SettingsPage() {
   const [syncInterval, setSyncInterval] = useState<number>(30);
