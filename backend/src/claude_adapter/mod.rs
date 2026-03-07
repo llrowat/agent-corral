@@ -172,6 +172,9 @@ pub const KNOWN_TOOLS: &[&str] = &[
     "NotebookEdit",
     "Agent",
     "Skill",
+    "CronCreate",
+    "CronList",
+    "CronDelete",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -5727,6 +5730,20 @@ mod tests {
     #[test]
     fn is_valid_tool_accepts_skill() {
         assert!(ClaudeRepoAdapter::is_valid_tool("Skill", &[]));
+    }
+
+    #[test]
+    fn cron_tools_are_known() {
+        assert!(KNOWN_TOOLS.contains(&"CronCreate"));
+        assert!(KNOWN_TOOLS.contains(&"CronList"));
+        assert!(KNOWN_TOOLS.contains(&"CronDelete"));
+    }
+
+    #[test]
+    fn is_valid_tool_accepts_cron_tools() {
+        assert!(ClaudeRepoAdapter::is_valid_tool("CronCreate", &[]));
+        assert!(ClaudeRepoAdapter::is_valid_tool("CronList", &[]));
+        assert!(ClaudeRepoAdapter::is_valid_tool("CronDelete", &[]));
     }
 
     #[test]
