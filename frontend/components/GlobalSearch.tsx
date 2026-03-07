@@ -25,13 +25,15 @@ async function loadScopeItems(
 ): Promise<SearchResult[]> {
   const items: SearchResult[] = [];
 
-  const [agents, hooks, skills, mcpServers, memoryStores, snapshots] = await Promise.all([
+  const [agents, hooks, skills, mcpServers, memoryStores, snapshots, pluginAgents, pluginSkills] = await Promise.all([
     api.readAgents(basePath).catch(() => [] as Agent[]),
     api.readHooks(basePath).catch(() => [] as HookEvent[]),
     api.readSkills(basePath).catch(() => [] as Skill[]),
     api.readMcpServers(basePath, isGlobal).catch(() => [] as McpServer[]),
     api.readMemoryStores(basePath).catch(() => [] as MemoryStore[]),
     api.listConfigSnapshots(basePath).catch(() => [] as api.ConfigSnapshotSummary[]),
+    api.readPluginSourceAgents(basePath).catch(() => [] as Agent[]),
+    api.readPluginSourceSkills(basePath).catch(() => [] as Skill[]),
   ]);
 
   for (const agent of agents) {
@@ -39,6 +41,16 @@ async function loadScopeItems(
       type: "agent",
       label: agent.name,
       description: `Agent: ${agent.agentId} — ${agent.description}`,
+      path: "/agents",
+      scope: scopeLabel,
+    });
+  }
+
+  for (const agent of pluginAgents) {
+    items.push({
+      type: "agent",
+      label: agent.name,
+      description: `Agent: ${agent.agentId} — ${agent.description} (plugin)`,
       path: "/agents",
       scope: scopeLabel,
     });
@@ -60,6 +72,16 @@ async function loadScopeItems(
       type: "skill",
       label: skill.name,
       description: `Skill: ${skill.skillId}${skill.userInvocable ? " (invocable)" : ""}`,
+      path: "/skills",
+      scope: scopeLabel,
+    });
+  }
+
+  for (const skill of pluginSkills) {
+    items.push({
+      type: "skill",
+      label: skill.name,
+      description: `Skill: ${skill.skillId} (plugin)`,
       path: "/skills",
       scope: scopeLabel,
     });

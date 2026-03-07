@@ -20,7 +20,7 @@ import { ClaudeMdPage } from "./pages/ClaudeMdPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { useRepos } from "./hooks/useRepos";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
-import { getClaudeHome, scanProjectConfig } from "./lib/tauri";
+import { getClaudeHome, scanProjectConfig, readPluginSourceAgents, readPluginSourceSkills } from "./lib/tauri";
 import type { ProjectScanResult } from "./lib/tauri";
 import type { Scope } from "./types";
 import appIconSvg from "./assets/agent_corral_icon.svg";
@@ -37,7 +37,7 @@ function App() {
     getClaudeHome().then(setHomePath).catch(() => {});
   }, []);
 
-  // Scan project config for sidebar counts
+  // Scan project config for sidebar counts (including plugin-sourced entities)
   const refreshCounts = useCallback(() => {
     const basePath = scope?.type === "global"
       ? scope.homePath
@@ -45,7 +45,17 @@ function App() {
         ? scope.repo.path
         : null;
     if (basePath) {
-      scanProjectConfig(basePath).then(setScanResult).catch(() => setScanResult(null));
+      Promise.all([
+        scanProjectConfig(basePath),
+        readPluginSourceAgents(basePath).catch(() => []),
+        readPluginSourceSkills(basePath).catch(() => []),
+      ]).then(([scan, pluginAgents, pluginSkills]) => {
+        setScanResult({
+          ...scan,
+          agentCount: scan.agentCount + pluginAgents.length,
+          skillCount: scan.skillCount + pluginSkills.length,
+        });
+      }).catch(() => setScanResult(null));
     } else {
       setScanResult(null);
     }

@@ -12,6 +12,8 @@ const mockReadMcpServers = vi.fn();
 const mockReadMemoryStores = vi.fn();
 const mockListPlugins = vi.fn();
 const mockListConfigSnapshots = vi.fn();
+const mockReadPluginSourceAgents = vi.fn();
+const mockReadPluginSourceSkills = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
   readAgents: (...args: unknown[]) => mockReadAgents(...args),
@@ -21,6 +23,8 @@ vi.mock("@/lib/tauri", () => ({
   readMemoryStores: (...args: unknown[]) => mockReadMemoryStores(...args),
   listPlugins: (...args: unknown[]) => mockListPlugins(...args),
   listConfigSnapshots: (...args: unknown[]) => mockListConfigSnapshots(...args),
+  readPluginSourceAgents: (...args: unknown[]) => mockReadPluginSourceAgents(...args),
+  readPluginSourceSkills: (...args: unknown[]) => mockReadPluginSourceSkills(...args),
 }));
 
 const mockOnScopeChange = vi.fn();
@@ -69,6 +73,8 @@ describe("GlobalSearch", () => {
     mockReadMemoryStores.mockResolvedValue([]);
     mockListPlugins.mockResolvedValue([]);
     mockListConfigSnapshots.mockResolvedValue([]);
+    mockReadPluginSourceAgents.mockResolvedValue([]);
+    mockReadPluginSourceSkills.mockResolvedValue([]);
   });
 
   it("opens with Ctrl+K and shows search input", async () => {

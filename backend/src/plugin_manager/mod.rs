@@ -167,6 +167,9 @@ pub struct PluginSyncStatus {
 pub struct PluginManager {
     plugins_dir: PathBuf,
     library_dir: PathBuf,
+    /// Override for Claude Code's native plugins directory (~/.claude/plugins/).
+    /// When None, uses the real home directory. Set in tests to isolate from the host.
+    native_plugins_dir: Option<PathBuf>,
 }
 
 impl PluginManager {
@@ -174,6 +177,7 @@ impl PluginManager {
         Self {
             plugins_dir,
             library_dir,
+            native_plugins_dir: None,
         }
     }
 
@@ -1295,7 +1299,8 @@ impl PluginManager {
         &self.library_dir
     }
 
-    /// Read agents from all plugin source directories associated with a repo's imports.
+    /// Read agents from all plugin source directories associated with a repo's imports,
+    /// plus agents from Claude Code's native installed plugins (~/.claude/plugins/).
     /// Returns agents marked with source and read_only flags.
     pub fn read_plugin_source_agents(&self, repo_path: &str) -> Result<Vec<Agent>, PluginError> {
         let registry = self.read_import_registry(repo_path)?;
@@ -1319,11 +1324,15 @@ impl PluginManager {
             }
         }
 
+        // Also include agents from Claude Code's native installed plugins
+        all_agents.extend(self.read_native_plugin_agents());
+
         all_agents.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(all_agents)
     }
 
-    /// Read skills from all plugin source directories associated with a repo's imports.
+    /// Read skills from all plugin source directories associated with a repo's imports,
+    /// plus skills from Claude Code's native installed plugins (~/.claude/plugins/).
     /// Returns skills marked with source and read_only flags.
     pub fn read_plugin_source_skills(&self, repo_path: &str) -> Result<Vec<Skill>, PluginError> {
         let registry = self.read_import_registry(repo_path)?;
@@ -1347,8 +1356,181 @@ impl PluginManager {
             }
         }
 
+        // Also include skills from Claude Code's native installed plugins
+        all_skills.extend(self.read_native_plugin_skills());
+
         all_skills.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(all_skills)
+    }
+
+    // -- Native Claude Code plugin discovery --
+
+    /// Read the native Claude Code installed_plugins.json and return install paths with plugin names.
+    fn native_plugin_installs(&self) -> Vec<(String, PathBuf)> {
+        let registry_path = if let Some(ref dir) = self.native_plugins_dir {
+            dir.join("installed_plugins.json")
+        } else {
+            let home = match dirs::home_dir() {
+                Some(h) => h,
+                None => return vec![],
+            };
+            home.join(".claude/plugins/installed_plugins.json")
+        };
+        let json = match fs::read_to_string(&registry_path) {
+            Ok(j) => j,
+            Err(_) => return vec![],
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&json) {
+            Ok(v) => v,
+            Err(_) => return vec![],
+        };
+        let plugins = match parsed.get("plugins").and_then(|v| v.as_object()) {
+            Some(p) => p,
+            None => return vec![],
+        };
+
+        let mut result = Vec::new();
+        for (plugin_key, installs) in plugins {
+            // plugin_key is like "code-simplifier@claude-plugins-official"
+            let plugin_name = plugin_key
+                .split('@')
+                .next()
+                .unwrap_or(plugin_key)
+                .to_string();
+            if let Some(arr) = installs.as_array() {
+                for install in arr {
+                    if let Some(path_str) = install.get("installPath").and_then(|v| v.as_str()) {
+                        let install_path = PathBuf::from(path_str);
+                        if install_path.exists() {
+                            result.push((plugin_name.clone(), install_path));
+                        }
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    /// Read agents from all natively installed Claude Code plugins.
+    fn read_native_plugin_agents(&self) -> Vec<Agent> {
+        let mut all_agents = Vec::new();
+        for (plugin_name, install_path) in self.native_plugin_installs() {
+            let agents_dir = install_path.join("agents");
+            if !agents_dir.exists() {
+                continue;
+            }
+            for entry in fs::read_dir(&agents_dir).into_iter().flatten() {
+                let Ok(entry) = entry else { continue };
+                let path = entry.path();
+                if !path.extension().map_or(false, |ext| ext == "md") {
+                    continue;
+                }
+                let agent_id = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let Ok(contents) = fs::read_to_string(&path) else {
+                    continue;
+                };
+
+                let (frontmatter, body) = if contents.starts_with("---") {
+                    let after_first = &contents[3..];
+                    if let Some(end_idx) = after_first.find("\n---") {
+                        let yaml_str = &after_first[..end_idx];
+                        let body_start = end_idx + 4;
+                        let body = after_first[body_start..].trim_start_matches('\n').to_string();
+                        let fm: serde_json::Value =
+                            serde_yaml::from_str(yaml_str).unwrap_or(serde_json::json!({}));
+                        (fm, body)
+                    } else {
+                        (serde_json::json!({}), contents)
+                    }
+                } else {
+                    (serde_json::json!({}), contents)
+                };
+
+                let name = frontmatter
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&agent_id)
+                    .to_string();
+                let description = frontmatter
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let tools = frontmatter
+                    .get("tools")
+                    .and_then(|v| v.as_str())
+                    .map(|s| {
+                        s.split(',')
+                            .map(|t| t.trim().to_string())
+                            .filter(|t| !t.is_empty())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let model_override = frontmatter
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                let memory = frontmatter
+                    .get("memory")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                let color = frontmatter
+                    .get("color")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+
+                all_agents.push(Agent {
+                    agent_id,
+                    name,
+                    description,
+                    system_prompt: body,
+                    tools,
+                    model_override,
+                    memory,
+                    color,
+                    source: Some(format!("plugin:{}", plugin_name)),
+                    read_only: Some(true),
+                });
+            }
+        }
+        all_agents
+    }
+
+    /// Read skills from all natively installed Claude Code plugins.
+    fn read_native_plugin_skills(&self) -> Vec<Skill> {
+        let mut all_skills = Vec::new();
+        for (plugin_name, install_path) in self.native_plugin_installs() {
+            let skills_dir = install_path.join("skills");
+            if !skills_dir.exists() {
+                continue;
+            }
+            for entry in fs::read_dir(&skills_dir).into_iter().flatten() {
+                let Ok(entry) = entry else { continue };
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                let skill_md = path.join("SKILL.md");
+                if !skill_md.exists() {
+                    continue;
+                }
+                let skill_id = path
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let Ok(contents) = fs::read_to_string(&skill_md) else {
+                    continue;
+                };
+                let mut skill = parse_skill_contents(&contents, &skill_id);
+                skill.source = Some(format!("plugin:{}", plugin_name));
+                skill.read_only = Some(true);
+                all_skills.push(skill);
+            }
+        }
+        all_skills
     }
 
     // -- Private helpers --
@@ -1864,9 +2046,13 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let plugins_dir = tmp.path().join("plugins");
         let library_dir = tmp.path().join("library");
+        let native_dir = tmp.path().join("native_plugins");
         fs::create_dir_all(&plugins_dir).unwrap();
         fs::create_dir_all(&library_dir).unwrap();
-        (tmp, PluginManager::new(plugins_dir, library_dir))
+        fs::create_dir_all(&native_dir).unwrap();
+        let mut mgr = PluginManager::new(plugins_dir, library_dir);
+        mgr.native_plugins_dir = Some(native_dir);
+        (tmp, mgr)
     }
 
     fn create_test_plugin(dir: &Path, name: &str) {
@@ -2351,10 +2537,12 @@ mod tests {
     fn read_plugin_source_agents_returns_read_only() {
         let plugins_dir = tempfile::tempdir().unwrap();
         let library_dir = tempfile::tempdir().unwrap();
-        let mgr = PluginManager::new(
+        let native_dir = tempfile::tempdir().unwrap();
+        let mut mgr = PluginManager::new(
             plugins_dir.path().to_path_buf(),
             library_dir.path().to_path_buf(),
         );
+        mgr.native_plugins_dir = Some(native_dir.path().to_path_buf());
 
         // Create a plugin directory with agents
         let plugin_dir = plugins_dir.path().join("my-plugin");
@@ -2415,10 +2603,12 @@ mod tests {
     fn read_plugin_source_skills_returns_read_only() {
         let plugins_dir = tempfile::tempdir().unwrap();
         let library_dir = tempfile::tempdir().unwrap();
-        let mgr = PluginManager::new(
+        let native_dir = tempfile::tempdir().unwrap();
+        let mut mgr = PluginManager::new(
             plugins_dir.path().to_path_buf(),
             library_dir.path().to_path_buf(),
         );
+        mgr.native_plugins_dir = Some(native_dir.path().to_path_buf());
 
         // Create a plugin directory with skills
         let plugin_dir = plugins_dir.path().join("my-plugin");
@@ -2479,10 +2669,12 @@ mod tests {
     fn read_plugin_source_agents_empty_when_no_imports() {
         let plugins_dir = tempfile::tempdir().unwrap();
         let library_dir = tempfile::tempdir().unwrap();
-        let mgr = PluginManager::new(
+        let native_dir = tempfile::tempdir().unwrap();
+        let mut mgr = PluginManager::new(
             plugins_dir.path().to_path_buf(),
             library_dir.path().to_path_buf(),
         );
+        mgr.native_plugins_dir = Some(native_dir.path().to_path_buf());
 
         let repo = tempfile::tempdir().unwrap();
         let agents = mgr.read_plugin_source_agents(repo.path().to_str().unwrap()).unwrap();
@@ -2493,10 +2685,12 @@ mod tests {
     fn read_plugin_source_agents_skips_deleted_plugin() {
         let plugins_dir = tempfile::tempdir().unwrap();
         let library_dir = tempfile::tempdir().unwrap();
-        let mgr = PluginManager::new(
+        let native_dir = tempfile::tempdir().unwrap();
+        let mut mgr = PluginManager::new(
             plugins_dir.path().to_path_buf(),
             library_dir.path().to_path_buf(),
         );
+        mgr.native_plugins_dir = Some(native_dir.path().to_path_buf());
 
         // Create repo with import registry pointing to a non-existent plugin
         let repo = tempfile::tempdir().unwrap();
@@ -2524,5 +2718,157 @@ mod tests {
 
         let agents = mgr.read_plugin_source_agents(repo_path).unwrap();
         assert!(agents.is_empty(), "Should gracefully skip deleted plugin directories");
+    }
+
+    #[test]
+    fn read_native_plugin_agents_discovers_installed_plugins() {
+        let native_dir = tempfile::tempdir().unwrap();
+        let plugins_dir = tempfile::tempdir().unwrap();
+        let library_dir = tempfile::tempdir().unwrap();
+        let mut mgr = PluginManager::new(
+            plugins_dir.path().to_path_buf(),
+            library_dir.path().to_path_buf(),
+        );
+        mgr.native_plugins_dir = Some(native_dir.path().to_path_buf());
+
+        // Create a plugin install directory with an agent
+        let install_path = native_dir.path().join("cache/marketplace/my-tool/1.0.0");
+        let agents_dir = install_path.join("agents");
+        fs::create_dir_all(&agents_dir).unwrap();
+        fs::write(
+            agents_dir.join("helper.md"),
+            "---\nname: Helper\ndescription: A helper agent\nmodel: opus\n---\nYou help with things.",
+        )
+        .unwrap();
+
+        // Write installed_plugins.json
+        let registry = serde_json::json!({
+            "version": 2,
+            "plugins": {
+                "my-tool@marketplace": [
+                    {
+                        "scope": "user",
+                        "installPath": install_path.to_string_lossy(),
+                        "version": "1.0.0",
+                        "installedAt": "2026-03-01T00:00:00Z",
+                        "lastUpdated": "2026-03-01T00:00:00Z",
+                        "gitCommitSha": "abc123"
+                    }
+                ]
+            }
+        });
+        fs::write(
+            native_dir.path().join("installed_plugins.json"),
+            serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+
+        // Read via the plugin source agents (with no import registry)
+        let repo = tempfile::tempdir().unwrap();
+        let agents = mgr
+            .read_plugin_source_agents(repo.path().to_str().unwrap())
+            .unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].agent_id, "helper");
+        assert_eq!(agents[0].name, "Helper");
+        assert_eq!(agents[0].description, "A helper agent");
+        assert_eq!(agents[0].model_override, Some("opus".to_string()));
+        assert_eq!(agents[0].system_prompt, "You help with things.");
+        assert_eq!(agents[0].source, Some("plugin:my-tool".to_string()));
+        assert_eq!(agents[0].read_only, Some(true));
+    }
+
+    #[test]
+    fn read_native_plugin_skills_discovers_installed_plugins() {
+        let native_dir = tempfile::tempdir().unwrap();
+        let plugins_dir = tempfile::tempdir().unwrap();
+        let library_dir = tempfile::tempdir().unwrap();
+        let mut mgr = PluginManager::new(
+            plugins_dir.path().to_path_buf(),
+            library_dir.path().to_path_buf(),
+        );
+        mgr.native_plugins_dir = Some(native_dir.path().to_path_buf());
+
+        // Create a plugin install directory with a skill
+        let install_path = native_dir.path().join("cache/marketplace/my-tool/1.0.0");
+        let skill_dir = install_path.join("skills/lint-check");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: Lint Check\ndescription: Run linting\n---\nLint the code.",
+        )
+        .unwrap();
+
+        // Write installed_plugins.json
+        let registry = serde_json::json!({
+            "version": 2,
+            "plugins": {
+                "my-tool@marketplace": [
+                    {
+                        "scope": "user",
+                        "installPath": install_path.to_string_lossy(),
+                        "version": "1.0.0",
+                        "installedAt": "2026-03-01T00:00:00Z",
+                        "lastUpdated": "2026-03-01T00:00:00Z",
+                        "gitCommitSha": "abc123"
+                    }
+                ]
+            }
+        });
+        fs::write(
+            native_dir.path().join("installed_plugins.json"),
+            serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+
+        let repo = tempfile::tempdir().unwrap();
+        let skills = mgr
+            .read_plugin_source_skills(repo.path().to_str().unwrap())
+            .unwrap();
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].skill_id, "lint-check");
+        assert_eq!(skills[0].name, "Lint Check");
+        assert_eq!(skills[0].source, Some("plugin:my-tool".to_string()));
+        assert_eq!(skills[0].read_only, Some(true));
+    }
+
+    #[test]
+    fn read_native_plugin_agents_skips_missing_install_path() {
+        let native_dir = tempfile::tempdir().unwrap();
+        let plugins_dir = tempfile::tempdir().unwrap();
+        let library_dir = tempfile::tempdir().unwrap();
+        let mut mgr = PluginManager::new(
+            plugins_dir.path().to_path_buf(),
+            library_dir.path().to_path_buf(),
+        );
+        mgr.native_plugins_dir = Some(native_dir.path().to_path_buf());
+
+        // Write installed_plugins.json pointing to a non-existent path
+        let registry = serde_json::json!({
+            "version": 2,
+            "plugins": {
+                "gone-plugin@marketplace": [
+                    {
+                        "scope": "user",
+                        "installPath": "/nonexistent/path",
+                        "version": "1.0.0",
+                        "installedAt": "2026-03-01T00:00:00Z",
+                        "lastUpdated": "2026-03-01T00:00:00Z",
+                        "gitCommitSha": "abc123"
+                    }
+                ]
+            }
+        });
+        fs::write(
+            native_dir.path().join("installed_plugins.json"),
+            serde_json::to_string_pretty(&registry).unwrap(),
+        )
+        .unwrap();
+
+        let repo = tempfile::tempdir().unwrap();
+        let agents = mgr
+            .read_plugin_source_agents(repo.path().to_str().unwrap())
+            .unwrap();
+        assert!(agents.is_empty());
     }
 }
