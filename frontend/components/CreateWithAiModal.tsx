@@ -31,7 +31,7 @@ function buildPrompt(entityType: AiEntityType, description: string): string {
         "",
         "   System prompt instructions go here...",
         "",
-        "4. The tools field is a comma-separated string. Choose from: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, TodoWrite, NotebookEdit, Agent. Omit the tools field entirely to grant access to all tools.",
+        "4. The tools field is a comma-separated string. Choose from: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, TodoWrite, NotebookEdit, Agent, CronCreate, CronList, CronDelete. Omit the tools field entirely to grant access to all tools.",
         "5. The model field is optional. Valid values: sonnet, opus, haiku. Omit to use the default model.",
         "6. Do NOT create a .meta.json sidecar file.",
         "7. Make the system prompt detailed, well-structured, and effective for the described use case.",
@@ -62,7 +62,7 @@ function buildPrompt(entityType: AiEntityType, description: string): string {
         "",
         "   Skill instructions go here in markdown...",
         "",
-        "4. Available tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, TodoWrite, NotebookEdit, Task.",
+        "4. Available tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, TodoWrite, NotebookEdit, Task, CronCreate, CronList, CronDelete.",
         "5. Write clear, detailed skill instructions below the frontmatter.",
       ].join("\n");
 
