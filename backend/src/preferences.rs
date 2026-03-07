@@ -8,12 +8,16 @@ pub struct AppPreferences {
     /// Default is 30 minutes.
     #[serde(default = "default_sync_interval")]
     pub plugin_sync_interval_minutes: u32,
+    /// Custom directory for exported config bundles. None = default app data dir.
+    #[serde(default)]
+    pub export_dir: Option<String>,
 }
 
 impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             plugin_sync_interval_minutes: 30,
+            export_dir: None,
         }
     }
 }
@@ -57,6 +61,16 @@ impl PreferencesManager {
         prefs.plugin_sync_interval_minutes = minutes;
         self.save(&prefs)
     }
+
+    pub fn get_export_dir(&self) -> Option<String> {
+        self.load().export_dir
+    }
+
+    pub fn set_export_dir(&self, dir: Option<String>) -> Result<(), String> {
+        let mut prefs = self.load();
+        prefs.export_dir = dir;
+        self.save(&prefs)
+    }
 }
 
 #[cfg(test)]
@@ -69,6 +83,7 @@ mod tests {
         let mgr = PreferencesManager::new(tmp.path());
         let prefs = mgr.load();
         assert_eq!(prefs.plugin_sync_interval_minutes, 30);
+        assert_eq!(prefs.export_dir, None);
     }
 
     #[test]
@@ -78,11 +93,13 @@ mod tests {
 
         let prefs = AppPreferences {
             plugin_sync_interval_minutes: 60,
+            export_dir: Some("/custom/path".to_string()),
         };
         mgr.save(&prefs).unwrap();
 
         let loaded = mgr.load();
         assert_eq!(loaded.plugin_sync_interval_minutes, 60);
+        assert_eq!(loaded.export_dir, Some("/custom/path".to_string()));
     }
 
     #[test]
@@ -104,6 +121,7 @@ mod tests {
 
         let prefs = AppPreferences {
             plugin_sync_interval_minutes: 15,
+            export_dir: None,
         };
         mgr.save(&prefs).unwrap();
 
@@ -120,12 +138,14 @@ mod tests {
     fn app_preferences_default() {
         let prefs = AppPreferences::default();
         assert_eq!(prefs.plugin_sync_interval_minutes, 30);
+        assert_eq!(prefs.export_dir, None);
     }
 
     #[test]
     fn app_preferences_serialization() {
         let prefs = AppPreferences {
             plugin_sync_interval_minutes: 45,
+            export_dir: Some("/tmp/exports".to_string()),
         };
         let json = serde_json::to_string(&prefs).unwrap();
         let deserialized: AppPreferences = serde_json::from_str(&json).unwrap();
@@ -133,12 +153,27 @@ mod tests {
             deserialized.plugin_sync_interval_minutes,
             prefs.plugin_sync_interval_minutes
         );
+        assert_eq!(deserialized.export_dir, prefs.export_dir);
     }
 
     #[test]
     fn default_sync_interval_is_30() {
         let prefs = AppPreferences::default();
         assert_eq!(prefs.plugin_sync_interval_minutes, 30);
+    }
+
+    #[test]
+    fn set_and_get_export_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mgr = PreferencesManager::new(tmp.path());
+
+        assert_eq!(mgr.get_export_dir(), None);
+
+        mgr.set_export_dir(Some("/custom/exports".to_string())).unwrap();
+        assert_eq!(mgr.get_export_dir(), Some("/custom/exports".to_string()));
+
+        mgr.set_export_dir(None).unwrap();
+        assert_eq!(mgr.get_export_dir(), None);
     }
 
     #[test]

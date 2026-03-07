@@ -157,6 +157,11 @@ pub fn run() {
             commands::plugin::read_import_registry,
             commands::plugin::set_plugin_sync_interval,
             commands::plugin::get_plugin_sync_interval,
+            commands::plugin::get_export_dir,
+            commands::plugin::set_export_dir,
+            // Plugin source entity discovery (read-only)
+            commands::plugin::read_plugin_source_agents,
+            commands::plugin::read_plugin_source_skills,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

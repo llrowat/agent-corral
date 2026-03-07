@@ -2071,6 +2071,19 @@ code {
   vertical-align: middle;
 }
 
+.badge-plugin {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
 .global-item {
   opacity: 0.75;
 }

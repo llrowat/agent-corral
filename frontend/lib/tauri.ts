@@ -232,6 +232,7 @@ export async function deleteMcpServer(
 
 export interface AppPreferences {
   plugin_sync_interval_minutes: number;
+  export_dir: string | null;
 }
 
 export async function getPreferences(): Promise<AppPreferences> {
@@ -345,17 +346,19 @@ export async function exportPlugin(
 
 export async function previewPluginImport(
   pluginDir: string,
-  repoPath: string
+  repoPath: string,
+  isGlobal: boolean = false
 ): Promise<PluginImportPreview> {
-  return invoke("preview_plugin_import", { pluginDir, repoPath });
+  return invoke("preview_plugin_import", { pluginDir, repoPath, isGlobal });
 }
 
 export async function importPlugin(
   pluginDir: string,
   repoPath: string,
-  mode: ImportMode
+  mode: ImportMode,
+  isGlobal: boolean = false
 ): Promise<void> {
-  return invoke("import_plugin", { pluginDir, repoPath, mode });
+  return invoke("import_plugin", { pluginDir, repoPath, mode, isGlobal });
 }
 
 export async function deletePlugin(pluginDir: string): Promise<void> {
@@ -456,6 +459,30 @@ export async function setPluginSyncInterval(
 
 export async function getPluginSyncInterval(): Promise<number> {
   return invoke("get_plugin_sync_interval");
+}
+
+export async function getExportDir(): Promise<string | null> {
+  return invoke("get_export_dir");
+}
+
+export async function setExportDir(
+  dir: string | null
+): Promise<void> {
+  return invoke("set_export_dir", { dir });
+}
+
+// -- Plugin source entity discovery (read-only) --
+
+export async function readPluginSourceAgents(
+  repoPath: string
+): Promise<Agent[]> {
+  return invoke("read_plugin_source_agents", { repoPath });
+}
+
+export async function readPluginSourceSkills(
+  repoPath: string
+): Promise<Skill[]> {
+  return invoke("read_plugin_source_skills", { repoPath });
 }
 
 // -- CLAUDE.md commands --

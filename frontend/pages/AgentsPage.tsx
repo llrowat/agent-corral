@@ -37,8 +37,10 @@ function newAgent(): Agent {
 export function AgentsPage({ scope, homePath }: Props) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [globalAgents, setGlobalAgents] = useState<Agent[]>([]);
+  const [pluginAgents, setPluginAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState<Agent | null>(null);
   const [selectedIsGlobal, setSelectedIsGlobal] = useState(false);
+  const [selectedIsPlugin, setSelectedIsPlugin] = useState(false);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [saving, setSaving] = useState(false);
   const [knownTools, setKnownTools] = useState<string[]>([]);
@@ -76,19 +78,34 @@ export function AgentsPage({ scope, homePath }: Props) {
     }
   }, [isProjectScope, homePath]);
 
+  const loadPluginAgents = useCallback(async () => {
+    if (!basePath) {
+      setPluginAgents([]);
+      return;
+    }
+    try {
+      const result = await api.readPluginSourceAgents(basePath);
+      setPluginAgents(result);
+    } catch {
+      setPluginAgents([]);
+    }
+  }, [basePath]);
+
   useEffect(() => {
     setSelected(null);
     setSelectedIsGlobal(false);
+    setSelectedIsPlugin(false);
     setEditing(null);
     loadAgents();
     loadGlobalAgents();
+    loadPluginAgents();
     if (basePath) {
       const isGlobal = scope?.type === "global";
       api.getKnownToolsWithMcp(basePath, isGlobal).then(setKnownTools);
     } else {
       api.getKnownTools().then(setKnownTools);
     }
-  }, [loadAgents, loadGlobalAgents, basePath, scope?.type]);
+  }, [loadAgents, loadGlobalAgents, loadPluginAgents, basePath, scope?.type]);
 
   if (!scope) {
     return (
@@ -230,6 +247,7 @@ export function AgentsPage({ scope, homePath }: Props) {
                   onClick={() => {
                     setSelected(agent);
                     setSelectedIsGlobal(false);
+                    setSelectedIsPlugin(false);
                     setEditing(null);
                   }}
                 >
@@ -302,6 +320,7 @@ export function AgentsPage({ scope, homePath }: Props) {
                       onClick={() => {
                         setSelected(agent);
                         setSelectedIsGlobal(true);
+                        setSelectedIsPlugin(false);
                         setEditing(null);
                       }}
                     >
@@ -309,6 +328,40 @@ export function AgentsPage({ scope, homePath }: Props) {
                         {agent.color && <span className="agent-color-dot" style={{ background: agent.color }} />}
                         {agent.name}
                         <span className="badge-global">global</span>
+                      </span>
+                      <span className="agent-id">{agent.agentId}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {pluginAgents.length > 0 && (
+            <>
+              <div className="global-section-header">
+                <span className="global-section-label">Plugins</span>
+              </div>
+              <ul className="agent-list">
+                {pluginAgents.map((agent) => (
+                  <li
+                    key={`plugin-${agent.source}-${agent.agentId}`}
+                    className={`agent-list-item global-item ${
+                      currentAgent?.agentId === agent.agentId && selectedIsPlugin ? "active" : ""
+                    }`}
+                  >
+                    <button
+                      className="agent-select"
+                      onClick={() => {
+                        setSelected(agent);
+                        setSelectedIsGlobal(false);
+                        setSelectedIsPlugin(true);
+                        setEditing(null);
+                      }}
+                    >
+                      <span className="agent-name">
+                        {agent.color && <span className="agent-color-dot" style={{ background: agent.color }} />}
+                        {agent.name}
+                        <span className="badge-plugin">plugin</span>
                       </span>
                       <span className="agent-id">{agent.agentId}</span>
                     </button>
@@ -373,10 +426,16 @@ export function AgentsPage({ scope, homePath }: Props) {
                 {selected!.color && <span className="agent-color-dot agent-color-dot-lg" style={{ background: selected!.color }} />}
                 {selected!.name}
                 {selectedIsGlobal && <span className="badge-global">global</span>}
+              {selectedIsPlugin && <span className="badge-plugin">plugin</span>}
               </h3>
               {selectedIsGlobal && (
                 <p className="global-readonly-hint">
                   This agent is defined in the global scope. Switch to Global Settings to edit it.
+                </p>
+              )}
+              {selectedIsPlugin && selected?.source && (
+                <p className="global-readonly-hint">
+                  This agent is from {selected.source.replace("plugin:", "plugin ")} and is read-only. Import the plugin to edit a local copy.
                 </p>
               )}
               <div className="detail-field">
@@ -457,7 +516,7 @@ export function AgentsPage({ scope, homePath }: Props) {
               </div>
 
               <div className="form-actions">
-                {!selectedIsGlobal && (
+                {!selectedIsGlobal && !selectedIsPlugin && (
                   <button
                     className="btn"
                     onClick={() => {
@@ -468,7 +527,7 @@ export function AgentsPage({ scope, homePath }: Props) {
                     Edit
                   </button>
                 )}
-                {!selectedIsGlobal && isProjectScope && homePath && (
+                {!selectedIsGlobal && !selectedIsPlugin && isProjectScope && homePath && (
                   <button
                     className="btn btn-sm"
                     onClick={() => handleCopyToGlobal(selected!)}
