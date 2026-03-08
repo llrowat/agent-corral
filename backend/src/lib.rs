@@ -1,6 +1,7 @@
 mod claude_adapter;
 #[cfg(feature = "tauri-app")]
 mod commands;
+mod history_analyzer;
 mod pack_manager;
 mod plugin_manager;
 mod preferences;
@@ -162,6 +163,10 @@ pub fn run() {
             // Plugin source entity discovery (read-only)
             commands::plugin::read_plugin_source_agents,
             commands::plugin::read_plugin_source_skills,
+            // History analysis commands
+            commands::history::analyze_conversation_history,
+            commands::history::apply_personalized_agent,
+            commands::history::apply_personalized_skill,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

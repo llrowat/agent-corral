@@ -1,4 +1,5 @@
 pub mod claude;
+pub mod history;
 pub mod hooks;
 pub mod mcp;
 pub mod pack;

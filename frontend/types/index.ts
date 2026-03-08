@@ -320,4 +320,34 @@ export type PageId =
   | "mcp"
   | "plugins"
   | "preferences"
-  | "history";
+  | "history"
+  | "personalize";
+
+// -- History Analysis --
+
+export interface ToolUsageEntry {
+  tool: string;
+  count: number;
+}
+
+export interface TopicCategory {
+  category: string;
+  count: number;
+  keywords: string[];
+}
+
+export interface PromptPattern {
+  pattern: string;
+  description: string;
+  frequency: number;
+}
+
+export interface HistoryAnalysis {
+  conversationCount: number;
+  messageCount: number;
+  toolUsage: ToolUsageEntry[];
+  topicCategories: TopicCategory[];
+  suggestedAgents: Agent[];
+  suggestedSkills: Skill[];
+  promptPatterns: PromptPattern[];
+}

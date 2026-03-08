@@ -22,6 +22,7 @@ import type {
   PluginSyncStatus,
   PluginImportRegistry,
   LintResult,
+  HistoryAnalysis,
 } from "@/types";
 
 // -- Repo commands --
@@ -711,4 +712,24 @@ export async function importConfigBundle(
   mode: string
 ): Promise<ImportBundleResult> {
   return invoke("import_config_bundle", { repoPath, isGlobal, bundleJson, mode });
+}
+
+// -- History analysis commands --
+
+export async function analyzeConversationHistory(): Promise<HistoryAnalysis> {
+  return invoke("analyze_conversation_history");
+}
+
+export async function applyPersonalizedAgent(
+  repoPath: string,
+  agent: Agent
+): Promise<void> {
+  return invoke("apply_personalized_agent", { repoPath, agent });
+}
+
+export async function applyPersonalizedSkill(
+  repoPath: string,
+  skill: Skill
+): Promise<void> {
+  return invoke("apply_personalized_skill", { repoPath, skill });
 }

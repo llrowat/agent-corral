@@ -32,6 +32,7 @@ const navGroups: NavGroup[] = [
       { path: "/memory", label: "Memory", icon: "database", countKey: "memoryStoreCount" },
       { path: "/skills", label: "Skills", icon: "skill", countKey: "skillCount" },
       { path: "/mcp", label: "MCP Servers", icon: "mcp", countKey: "mcpServerCount" },
+      { path: "/personalize", label: "Personalize", icon: "sparkle" },
     ],
   },
   {
@@ -122,6 +123,7 @@ package: "\u25A3",
     wrench: "\u2692",
     doc: "\u2263",
     history: "\u29D6",
+    sparkle: "\u2728",
   };
   return icons[name] ?? "\u25CF";
 }

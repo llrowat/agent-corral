@@ -18,6 +18,7 @@ import { PluginsPage } from "./pages/PluginsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ClaudeMdPage } from "./pages/ClaudeMdPage";
 import { HistoryPage } from "./pages/HistoryPage";
+import { PersonalizePage } from "./pages/PersonalizePage";
 import { useRepos } from "./hooks/useRepos";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { getClaudeHome, scanProjectConfig, readPluginSourceAgents, readPluginSourceSkills } from "./lib/tauri";
@@ -156,6 +157,10 @@ function App() {
             <Route
               path="/history"
               element={<HistoryPage key={scopeKey} scope={scope} />}
+            />
+            <Route
+              path="/personalize"
+              element={<PersonalizePage key={scopeKey} scope={scope} homePath={homePath} />}
             />
             <Route path="/packs" element={<PacksPage key={scopeKey} scope={scope} />} />
             <Route path="/plugins" element={<PluginsPage key={scopeKey} scope={scope} />} />
