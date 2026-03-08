@@ -1,18 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/test-utils";
 import { PersonalizePage } from "./PersonalizePage";
-import type { Scope, HistoryAnalysis } from "@/types";
+import type { Scope } from "@/types";
 
-const mockAnalyzeConversationHistory = vi.fn();
-const mockApplyPersonalizedAgent = vi.fn();
-const mockApplyPersonalizedSkill = vi.fn();
+const mockGetHistorySummary = vi.fn();
+const mockPrepareAiCommand = vi.fn();
+const mockLaunchTerminal = vi.fn();
+const mockIsProcessAlive = vi.fn();
 
 vi.mock("@/lib/tauri", () => ({
-  analyzeConversationHistory: (...args: unknown[]) => mockAnalyzeConversationHistory(...args),
-  applyPersonalizedAgent: (...args: unknown[]) => mockApplyPersonalizedAgent(...args),
-  applyPersonalizedSkill: (...args: unknown[]) => mockApplyPersonalizedSkill(...args),
+  getHistorySummary: (...args: unknown[]) => mockGetHistorySummary(...args),
+  prepareAiCommand: (...args: unknown[]) => mockPrepareAiCommand(...args),
+  launchTerminal: (...args: unknown[]) => mockLaunchTerminal(...args),
+  isProcessAlive: (...args: unknown[]) => mockIsProcessAlive(...args),
 }));
 
 const GLOBAL_SCOPE: Scope = {
@@ -31,54 +33,32 @@ const PROJECT_SCOPE: Scope = {
   },
 };
 
-const MOCK_ANALYSIS: HistoryAnalysis = {
-  conversationCount: 5,
-  messageCount: 42,
-  toolUsage: [
-    { tool: "Read", count: 100 },
-    { tool: "Edit", count: 50 },
-    { tool: "Bash", count: 30 },
-  ],
-  topicCategories: [
-    { category: "Bug Fixing", count: 10, keywords: ["fix", "bug"] },
-    { category: "Testing", count: 5, keywords: ["test"] },
-  ],
-  suggestedAgents: [
-    {
-      agentId: "personalized-debugger",
-      name: "Personalized Debugger",
-      description: "A debugger tailored to your frequent bug-fixing patterns",
-      systemPrompt: "You are a debugging specialist.",
-      tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
-      modelOverride: null,
-      memory: null,
-      color: null,
-      source: "personalized",
-    },
-  ],
-  suggestedSkills: [
-    {
-      skillId: "fix-and-test",
-      name: "Fix and Test",
-      description: "Fix the issue and generate a test to prevent regression",
-      userInvocable: true,
-      allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
-      content: "Fix the described issue and write a test.",
-      source: "personalized",
-    },
-  ],
-  promptPatterns: [
-    {
-      pattern: "Fix and Test",
-      description: "Frequently fixes bugs and asks for tests to verify",
-      frequency: 8,
-    },
-  ],
-};
+const MOCK_SUMMARY = `## Conversation History Summary
+
+- Projects with conversations: 5
+- Total conversation files: 12
+- Total user messages: 42
+
+### Tool Usage (by frequency)
+
+- Read: 100 uses
+- Edit: 50 uses
+- Bash: 30 uses
+
+### Sample User Prompts (representative selection)
+
+- fix the bug in the login handler
+- write a test for the user service
+`;
 
 describe("PersonalizePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("shows message when no scope selected", () => {
@@ -86,143 +66,141 @@ describe("PersonalizePage", () => {
     expect(screen.getByText(/Select a scope/i)).toBeInTheDocument();
   });
 
-  it("shows intro card with analyze button when no analysis yet", () => {
+  it("shows intro card with personalize button", () => {
     renderWithProviders(<PersonalizePage scope={GLOBAL_SCOPE} homePath="/home/user" />);
     expect(screen.getByText("How it works")).toBeInTheDocument();
-    expect(screen.getByText("Analyze My History")).toBeInTheDocument();
+    expect(screen.getByText("Personalize with AI")).toBeInTheDocument();
   });
 
-  it("calls analyzeConversationHistory on button click", async () => {
-    mockAnalyzeConversationHistory.mockResolvedValue(MOCK_ANALYSIS);
-    renderWithProviders(<PersonalizePage scope={GLOBAL_SCOPE} homePath="/home/user" />);
+  it("gathers history and launches terminal on button click", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockGetHistorySummary.mockResolvedValue(MOCK_SUMMARY);
+    mockPrepareAiCommand.mockResolvedValue("/tmp/ai-create.sh");
+    mockLaunchTerminal.mockResolvedValue(12345);
+    mockIsProcessAlive.mockResolvedValue(true);
 
-    await userEvent.click(screen.getByText("Analyze My History"));
-
-    expect(mockAnalyzeConversationHistory).toHaveBeenCalledOnce();
-  });
-
-  it("shows analysis results after successful analysis", async () => {
-    mockAnalyzeConversationHistory.mockResolvedValue(MOCK_ANALYSIS);
     renderWithProviders(<PersonalizePage scope={PROJECT_SCOPE} homePath="/home/user" />);
 
-    await userEvent.click(screen.getByText("Analyze My History"));
+    await user.click(screen.getByText("Personalize with AI"));
 
     await waitFor(() => {
-      expect(screen.getByText("5")).toBeInTheDocument(); // conversation count
-      expect(screen.getByText("42")).toBeInTheDocument(); // message count
+      expect(mockGetHistorySummary).toHaveBeenCalledOnce();
     });
 
-    expect(screen.getByText("Bug Fixing")).toBeInTheDocument();
-    expect(screen.getByText("Personalized Debugger")).toBeInTheDocument();
-    // "Fix and Test" appears in both patterns and skills sections
-    expect(screen.getAllByText("Fix and Test").length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("shows tool usage chart", async () => {
-    mockAnalyzeConversationHistory.mockResolvedValue(MOCK_ANALYSIS);
-    renderWithProviders(<PersonalizePage scope={GLOBAL_SCOPE} homePath="/home/user" />);
-
-    await userEvent.click(screen.getByText("Analyze My History"));
-
     await waitFor(() => {
-      expect(screen.getByText("Tool Usage")).toBeInTheDocument();
-      // "Read" appears in chart and tool chips; just check the chart section exists
-      expect(screen.getAllByText("Read").length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText("100")).toBeInTheDocument();
+      expect(mockPrepareAiCommand).toHaveBeenCalledWith(
+        "/home/user/my-project",
+        expect.stringContaining("Analyze the following Claude Code conversation history")
+      );
+      expect(mockLaunchTerminal).toHaveBeenCalledWith(
+        "/home/user/my-project",
+        "/tmp/ai-create.sh"
+      );
+    });
+
+    // Should show waiting state
+    await waitFor(() => {
+      expect(screen.getByText("Running")).toBeInTheDocument();
     });
   });
 
-  it("shows error message when analysis fails", async () => {
-    mockAnalyzeConversationHistory.mockRejectedValue(
+  it("shows done state when terminal process exits", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockGetHistorySummary.mockResolvedValue(MOCK_SUMMARY);
+    mockPrepareAiCommand.mockResolvedValue("/tmp/ai-create.sh");
+    mockLaunchTerminal.mockResolvedValue(12345);
+    mockIsProcessAlive.mockResolvedValue(false);
+
+    renderWithProviders(<PersonalizePage scope={PROJECT_SCOPE} homePath="/home/user" />);
+
+    await user.click(screen.getByText("Personalize with AI"));
+
+    // Wait for waiting state
+    await waitFor(() => {
+      expect(screen.getByText("Running")).toBeInTheDocument();
+    });
+
+    // Advance timer to trigger poll — process is already dead
+    await vi.advanceTimersByTimeAsync(2500);
+
+    await waitFor(() => {
+      expect(screen.getByText("Complete")).toBeInTheDocument();
+    });
+  });
+
+  it("shows error when history gathering fails", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockGetHistorySummary.mockRejectedValue(
       new Error("No conversation history found")
     );
+
     renderWithProviders(<PersonalizePage scope={GLOBAL_SCOPE} homePath="/home/user" />);
 
-    await userEvent.click(screen.getByText("Analyze My History"));
+    await user.click(screen.getByText("Personalize with AI"));
 
     await waitFor(() => {
       expect(screen.getByText("No conversation history found")).toBeInTheDocument();
     });
-    expect(screen.getByText("Retry")).toBeInTheDocument();
+    expect(screen.getByText("Back")).toBeInTheDocument();
   });
 
-  it("applies agent when apply button clicked", async () => {
-    mockAnalyzeConversationHistory.mockResolvedValue(MOCK_ANALYSIS);
-    mockApplyPersonalizedAgent.mockResolvedValue(undefined);
+  it("shows error when terminal launch fails", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockGetHistorySummary.mockResolvedValue(MOCK_SUMMARY);
+    mockPrepareAiCommand.mockRejectedValue(new Error("Failed to create script"));
+
     renderWithProviders(<PersonalizePage scope={PROJECT_SCOPE} homePath="/home/user" />);
 
-    await userEvent.click(screen.getByText("Analyze My History"));
+    await user.click(screen.getByText("Personalize with AI"));
 
     await waitFor(() => {
-      expect(screen.getByText("Personalized Debugger")).toBeInTheDocument();
-    });
-
-    // Click the individual "Apply" button for the agent
-    const applyButtons = screen.getAllByText("Apply");
-    await userEvent.click(applyButtons[0]);
-
-    await waitFor(() => {
-      expect(mockApplyPersonalizedAgent).toHaveBeenCalledWith(
-        "/home/user/my-project",
-        expect.objectContaining({
-          agentId: "personalized-debugger",
-          source: null,
-          readOnly: null,
-        })
-      );
+      expect(screen.getByText("Failed to create script")).toBeInTheDocument();
     });
   });
 
-  it("shows applied badge after applying", async () => {
-    mockAnalyzeConversationHistory.mockResolvedValue(MOCK_ANALYSIS);
-    mockApplyPersonalizedAgent.mockResolvedValue(undefined);
+  it("allows running again after completion", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockGetHistorySummary.mockResolvedValue(MOCK_SUMMARY);
+    mockPrepareAiCommand.mockResolvedValue("/tmp/ai-create.sh");
+    mockLaunchTerminal.mockResolvedValue(12345);
+    mockIsProcessAlive.mockResolvedValue(false);
+
     renderWithProviders(<PersonalizePage scope={PROJECT_SCOPE} homePath="/home/user" />);
 
-    await userEvent.click(screen.getByText("Analyze My History"));
+    await user.click(screen.getByText("Personalize with AI"));
+
+    // Process exits immediately
+    vi.advanceTimersByTime(2500);
 
     await waitFor(() => {
-      expect(screen.getByText("Personalized Debugger")).toBeInTheDocument();
+      expect(screen.getByText("Complete")).toBeInTheDocument();
     });
 
-    const applyButtons = screen.getAllByText("Apply");
-    await userEvent.click(applyButtons[0]);
+    await user.click(screen.getByText("Run Again"));
 
-    await waitFor(() => {
-      expect(screen.getByText("Applied")).toBeInTheDocument();
-    });
+    expect(screen.getByText("How it works")).toBeInTheDocument();
   });
 
-  it("applies selected agents and skills when Apply Selected clicked", async () => {
-    mockAnalyzeConversationHistory.mockResolvedValue(MOCK_ANALYSIS);
-    mockApplyPersonalizedAgent.mockResolvedValue(undefined);
-    mockApplyPersonalizedSkill.mockResolvedValue(undefined);
+  it("includes history summary in prompt sent to Claude Code", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    mockGetHistorySummary.mockResolvedValue(MOCK_SUMMARY);
+    mockPrepareAiCommand.mockResolvedValue("/tmp/ai-create.sh");
+    mockLaunchTerminal.mockResolvedValue(12345);
+    mockIsProcessAlive.mockResolvedValue(true);
+
     renderWithProviders(<PersonalizePage scope={PROJECT_SCOPE} homePath="/home/user" />);
 
-    await userEvent.click(screen.getByText("Analyze My History"));
+    await user.click(screen.getByText("Personalize with AI"));
 
     await waitFor(() => {
-      expect(screen.getByText("Personalized Debugger")).toBeInTheDocument();
-    });
-
-    // Both should be pre-selected, click "Apply Selected (2)"
-    const applySelectedBtn = screen.getByRole("button", { name: /Apply Selected/ });
-    await userEvent.click(applySelectedBtn);
-
-    await waitFor(() => {
-      expect(mockApplyPersonalizedAgent).toHaveBeenCalled();
-      expect(mockApplyPersonalizedSkill).toHaveBeenCalled();
-    });
-  });
-
-  it("shows prompt patterns section", async () => {
-    mockAnalyzeConversationHistory.mockResolvedValue(MOCK_ANALYSIS);
-    renderWithProviders(<PersonalizePage scope={GLOBAL_SCOPE} homePath="/home/user" />);
-
-    await userEvent.click(screen.getByText("Analyze My History"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Workflow Patterns")).toBeInTheDocument();
-      expect(screen.getByText("8x")).toBeInTheDocument();
+      const promptArg = mockPrepareAiCommand.mock.calls[0][1] as string;
+      // Should include the history summary content
+      expect(promptArg).toContain("Tool Usage (by frequency)");
+      expect(promptArg).toContain("Sample User Prompts");
+      // Should include agent creation instructions
+      expect(promptArg).toContain(".claude/agents/");
+      // Should include skill creation instructions
+      expect(promptArg).toContain(".claude/skills/");
     });
   });
 });

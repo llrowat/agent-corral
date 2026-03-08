@@ -7,6 +7,11 @@ pub fn analyze_conversation_history() -> Result<history_analyzer::HistoryAnalysi
 }
 
 #[tauri::command]
+pub fn get_history_summary() -> Result<String, String> {
+    history_analyzer::get_history_summary_text()
+}
+
+#[tauri::command]
 pub fn apply_personalized_agent(repo_path: String, agent: Agent) -> Result<(), String> {
     crate::claude_adapter::ClaudeRepoAdapter::write_agent(&repo_path, &agent)
         .map_err(|e| e.to_string())

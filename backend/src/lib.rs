@@ -165,6 +165,7 @@ pub fn run() {
             commands::plugin::read_plugin_source_skills,
             // History analysis commands
             commands::history::analyze_conversation_history,
+            commands::history::get_history_summary,
             commands::history::apply_personalized_agent,
             commands::history::apply_personalized_skill,
         ])

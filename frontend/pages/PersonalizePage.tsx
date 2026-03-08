@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import type { Scope, HistoryAnalysis, Agent, Skill } from "@/types";
+import { useState, useCallback, useRef, useEffect } from "react";
+import type { Scope } from "@/types";
 import * as api from "@/lib/tauri";
 import { useToast } from "@/components/Toast";
 
@@ -8,15 +8,73 @@ interface Props {
   homePath?: string | null;
 }
 
+const POLL_INTERVAL_MS = 2000;
+const TIMEOUT_MS = 300_000; // 5 minutes
+
+type PageState = "intro" | "gathering" | "waiting" | "done" | "error";
+
+function buildPersonalizePrompt(historySummary: string): string {
+  return [
+    "Analyze the following Claude Code conversation history summary and create personalized agents and skills based on the user's actual usage patterns.",
+    "",
+    historySummary,
+    "",
+    "Based on this history, create personalized agents and/or skills that match the user's workflow.",
+    "",
+    "Instructions for creating agents:",
+    "1. Create the .claude/agents/ directory if it doesn't exist.",
+    '2. Create markdown files at .claude/agents/<slug-id>.md with YAML frontmatter and system prompt body. Use descriptive slug IDs (lowercase, hyphens only, e.g. "my-debugger").',
+    "3. The file must have YAML frontmatter delimited by --- lines at the top, followed by the system prompt in markdown. Example structure:",
+    "   ---",
+    '   name: "Agent Display Name"',
+    '   description: "Brief description of what the agent does"',
+    '   tools: "Read, Write, Edit, Bash, Glob, Grep"',
+    "   ---",
+    "",
+    "   System prompt instructions go here...",
+    "",
+    "4. The tools field is a comma-separated string. Choose from: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, TodoWrite, NotebookEdit, Agent, CronCreate, CronList, CronDelete. Omit the tools field entirely to grant access to all tools.",
+    "5. The model field is optional. Valid values: sonnet, opus, haiku. Omit to use the default model.",
+    "6. Do NOT create .meta.json sidecar files.",
+    "",
+    "Instructions for creating skills:",
+    "1. Create the .claude/skills/ directory if it doesn't exist.",
+    "2. Create skill directories at .claude/skills/<slug-id>/ with a SKILL.md file inside each. Use descriptive slug IDs.",
+    "3. The SKILL.md file must have YAML frontmatter delimited by --- lines at the top, followed by the skill content in markdown. Example structure:",
+    "   ---",
+    '   name: "Skill Display Name"',
+    '   description: "Brief description of what the skill does"',
+    "   user_invocable: true",
+    "   allowed_tools:",
+    "     - Read",
+    "     - Write",
+    "     - Edit",
+    "     - Bash",
+    "     - Glob",
+    "     - Grep",
+    "   ---",
+    "",
+    "   Skill instructions go here in markdown...",
+    "",
+    "4. Available tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch, TodoWrite, NotebookEdit, Task, CronCreate, CronList, CronDelete.",
+    "",
+    "Guidelines:",
+    "- Create 2-4 agents that reflect the user's most common work patterns",
+    "- Create 1-3 skills for their most frequent workflows",
+    "- Make system prompts detailed, specific, and tailored to the patterns you see in the history",
+    "- Reference specific tools the user frequently uses",
+    "- Name agents and skills to reflect their actual purpose (not generic names like 'personalized-debugger')",
+    "- Each agent should have a focused, distinct purpose",
+  ].join("\n");
+}
+
 export function PersonalizePage({ scope, homePath }: Props) {
   const toast = useToast();
-  const [analysis, setAnalysis] = useState<HistoryAnalysis | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [appliedAgents, setAppliedAgents] = useState<Set<string>>(new Set());
-  const [appliedSkills, setAppliedSkills] = useState<Set<string>>(new Set());
-  const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
-  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
+  const [state, setState] = useState<PageState>("intro");
+  const [errorMsg, setErrorMsg] = useState("");
+  const pidRef = useRef<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const basePath =
     scope?.type === "global"
@@ -25,104 +83,63 @@ export function PersonalizePage({ scope, homePath }: Props) {
         ? scope.repo.path
         : null;
 
-  const handleAnalyze = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await api.analyzeConversationHistory();
-      setAnalysis(result);
-      // Pre-select all suggested agents and skills
-      setSelectedAgents(new Set(result.suggestedAgents.map((a) => a.agentId)));
-      setSelectedSkills(new Set(result.suggestedSkills.map((s) => s.skillId)));
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
-    } finally {
-      setLoading(false);
+  const cleanup = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
   }, []);
 
-  const handleApplyAgent = useCallback(
-    async (agent: Agent) => {
-      if (!basePath) return;
-      try {
-        // Strip the "personalized" source marker so it saves as a local agent
-        const localAgent = { ...agent, source: null, readOnly: null };
-        await api.applyPersonalizedAgent(basePath, localAgent);
-        setAppliedAgents((prev) => new Set([...prev, agent.agentId]));
-        toast.success(`Agent "${agent.name}" applied`);
-        window.dispatchEvent(new CustomEvent("sidebar-refresh"));
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        toast.error(`Failed to apply agent: ${msg}`);
-      }
-    },
-    [basePath, toast]
-  );
+  useEffect(() => cleanup, [cleanup]);
 
-  const handleApplySkill = useCallback(
-    async (skill: Skill) => {
-      if (!basePath) return;
-      try {
-        const localSkill = { ...skill, source: null, readOnly: null };
-        await api.applyPersonalizedSkill(basePath, localSkill);
-        setAppliedSkills((prev) => new Set([...prev, skill.skillId]));
-        toast.success(`Skill "${skill.name}" applied`);
-        window.dispatchEvent(new CustomEvent("sidebar-refresh"));
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        toast.error(`Failed to apply skill: ${msg}`);
-      }
-    },
-    [basePath, toast]
-  );
+  const handlePersonalize = useCallback(async () => {
+    if (!basePath) return;
 
-  const handleApplySelected = useCallback(async () => {
-    if (!basePath || !analysis) return;
-    let applied = 0;
-    for (const agent of analysis.suggestedAgents) {
-      if (selectedAgents.has(agent.agentId) && !appliedAgents.has(agent.agentId)) {
+    setState("gathering");
+    try {
+      // Step 1: Gather history summary from backend
+      const summary = await api.getHistorySummary();
+
+      // Step 2: Build prompt for Claude Code
+      const prompt = buildPersonalizePrompt(summary);
+
+      // Step 3: Launch Claude Code in terminal
+      const command = await api.prepareAiCommand(basePath, prompt);
+      const pid = await api.launchTerminal(basePath, command);
+      pidRef.current = pid;
+      setState("waiting");
+
+      // Poll process state until it exits
+      pollRef.current = setInterval(async () => {
+        if (pidRef.current === null) return;
         try {
-          const localAgent = { ...agent, source: null, readOnly: null };
-          await api.applyPersonalizedAgent(basePath, localAgent);
-          setAppliedAgents((prev) => new Set([...prev, agent.agentId]));
-          applied++;
-        } catch { /* skip failures */ }
-      }
-    }
-    for (const skill of analysis.suggestedSkills) {
-      if (selectedSkills.has(skill.skillId) && !appliedSkills.has(skill.skillId)) {
-        try {
-          const localSkill = { ...skill, source: null, readOnly: null };
-          await api.applyPersonalizedSkill(basePath, localSkill);
-          setAppliedSkills((prev) => new Set([...prev, skill.skillId]));
-          applied++;
-        } catch { /* skip failures */ }
-      }
-    }
-    if (applied > 0) {
-      toast.success(`Applied ${applied} personalized config(s)`);
-      window.dispatchEvent(new CustomEvent("sidebar-refresh"));
-    }
-  }, [basePath, analysis, selectedAgents, selectedSkills, appliedAgents, appliedSkills, toast]);
+          const alive = await api.isProcessAlive(pidRef.current);
+          if (!alive) {
+            cleanup();
+            setState("done");
+            window.dispatchEvent(new CustomEvent("sidebar-refresh"));
+          }
+        } catch {
+          // polling error, keep trying
+        }
+      }, POLL_INTERVAL_MS);
 
-  const toggleAgent = (id: string) => {
-    setSelectedAgents((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSkill = (id: string) => {
-    setSelectedSkills((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+      // Timeout after 5 minutes
+      timeoutRef.current = setTimeout(() => {
+        cleanup();
+        setState("done");
+        window.dispatchEvent(new CustomEvent("sidebar-refresh"));
+      }, TIMEOUT_MS);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErrorMsg(msg);
+      setState("error");
+    }
+  }, [basePath, cleanup]);
 
   if (!scope) {
     return (
@@ -135,315 +152,107 @@ export function PersonalizePage({ scope, homePath }: Props) {
     );
   }
 
-  const selectedCount =
-    (analysis
-      ? analysis.suggestedAgents.filter(
-          (a) => selectedAgents.has(a.agentId) && !appliedAgents.has(a.agentId)
-        ).length
-      : 0) +
-    (analysis
-      ? analysis.suggestedSkills.filter(
-          (s) => selectedSkills.has(s.skillId) && !appliedSkills.has(s.skillId)
-        ).length
-      : 0);
-
   return (
     <div className="page personalize-page">
       <div className="page-header">
         <h2>Personalize from History</h2>
         <p className="page-description">
-          Analyze your Claude Code conversation history to generate customized
-          agents and skills tailored to your workflow.
+          Use Claude Code to analyze your conversation history and create
+          customized agents and skills tailored to your workflow.
         </p>
       </div>
 
-      {!analysis && !loading && (
+      {state === "intro" && (
         <div className="personalize-intro">
           <div className="personalize-intro-card">
             <h3>How it works</h3>
             <ol>
               <li>
-                Scans your Claude Code conversation history at{" "}
+                Gathers a summary of your Claude Code conversation history from{" "}
                 <code>~/.claude/projects/</code>
               </li>
               <li>
-                Analyzes your prompts to identify common tasks, tools, and
-                patterns
+                Launches Claude Code in a terminal to analyze your usage
+                patterns (tool usage, common tasks, project types)
               </li>
               <li>
-                Generates personalized agents and skills based on your actual
-                usage
-              </li>
-              <li>
-                You choose which suggestions to apply to your current{" "}
+                Claude Code creates personalized agents and skills directly in
+                your{" "}
                 {scope.type === "global" ? "global" : "project"} scope
               </li>
             </ol>
+            <p className="text-muted" style={{ marginTop: 12 }}>
+              A terminal window will open where Claude Code will work. You can
+              watch and interact with it.
+            </p>
             <button
               className="btn btn-primary"
-              onClick={handleAnalyze}
-              disabled={loading}
+              onClick={handlePersonalize}
+              disabled={!basePath}
             >
-              Analyze My History
+              Personalize with AI
             </button>
           </div>
         </div>
       )}
 
-      {loading && (
+      {state === "gathering" && (
         <div className="personalize-loading">
           <div className="spinner" />
-          <p>Analyzing your conversation history...</p>
+          <p>Gathering conversation history...</p>
         </div>
       )}
 
-      {error && (
-        <div className="personalize-error">
-          <p>{error}</p>
-          <button className="btn btn-secondary" onClick={handleAnalyze}>
-            Retry
-          </button>
-        </div>
-      )}
-
-      {analysis && !loading && (
-        <div className="personalize-results">
-          {/* Stats summary */}
-          <div className="personalize-stats">
-            <div className="stat-card">
-              <span className="stat-value">{analysis.conversationCount}</span>
-              <span className="stat-label">Projects</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value">{analysis.messageCount}</span>
-              <span className="stat-label">Messages Analyzed</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value">
-                {analysis.topicCategories.length}
-              </span>
-              <span className="stat-label">Topic Categories</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value">
-                {analysis.promptPatterns.length}
-              </span>
-              <span className="stat-label">Patterns Found</span>
-            </div>
+      {state === "waiting" && (
+        <div className="personalize-waiting">
+          <div className="ai-create-progress">
+            <div className="ai-create-spinner" />
+            <span>Running</span>
           </div>
-
-          {/* Tool usage chart */}
-          {analysis.toolUsage.length > 0 && (
-            <section className="personalize-section">
-              <h3>Tool Usage</h3>
-              <div className="tool-usage-chart">
-                {analysis.toolUsage.slice(0, 10).map((entry) => {
-                  const maxCount = analysis.toolUsage[0]?.count || 1;
-                  const pct = Math.round((entry.count / maxCount) * 100);
-                  return (
-                    <div key={entry.tool} className="tool-bar-row">
-                      <span className="tool-bar-label">{entry.tool}</span>
-                      <div className="tool-bar-track">
-                        <div
-                          className="tool-bar-fill"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="tool-bar-count">{entry.count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Topic categories */}
-          {analysis.topicCategories.length > 0 && (
-            <section className="personalize-section">
-              <h3>Topic Categories</h3>
-              <div className="category-tags">
-                {analysis.topicCategories.map((cat) => (
-                  <span key={cat.category} className="category-tag">
-                    {cat.category}{" "}
-                    <span className="category-count">({cat.count})</span>
-                  </span>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Prompt patterns */}
-          {analysis.promptPatterns.length > 0 && (
-            <section className="personalize-section">
-              <h3>Workflow Patterns</h3>
-              <div className="pattern-list">
-                {analysis.promptPatterns.map((p) => (
-                  <div key={p.pattern} className="pattern-card">
-                    <strong>{p.pattern}</strong>
-                    <span className="pattern-freq">
-                      {p.frequency}x
-                    </span>
-                    <p>{p.description}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Suggested Agents */}
-          {analysis.suggestedAgents.length > 0 && (
-            <section className="personalize-section">
-              <h3>Suggested Agents</h3>
-              <p className="section-hint">
-                Select the agents you want to install, then click "Apply
-                Selected" below.
-              </p>
-              <div className="suggestion-list">
-                {analysis.suggestedAgents.map((agent) => {
-                  const isApplied = appliedAgents.has(agent.agentId);
-                  const isSelected = selectedAgents.has(agent.agentId);
-                  return (
-                    <div
-                      key={agent.agentId}
-                      className={`suggestion-card ${isApplied ? "applied" : ""} ${isSelected && !isApplied ? "selected" : ""}`}
-                    >
-                      <div className="suggestion-header">
-                        {!isApplied && (
-                          <label className="suggestion-check">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleAgent(agent.agentId)}
-                            />
-                          </label>
-                        )}
-                        <div className="suggestion-info">
-                          <strong>{agent.name}</strong>
-                          <span className="suggestion-id">{agent.agentId}</span>
-                        </div>
-                        <div className="suggestion-actions">
-                          {isApplied ? (
-                            <span className="badge badge-success">Applied</span>
-                          ) : (
-                            <button
-                              className="btn btn-small btn-secondary"
-                              onClick={() => handleApplyAgent(agent)}
-                              disabled={!basePath}
-                              title="Apply just this agent"
-                            >
-                              Apply
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <p className="suggestion-desc">{agent.description}</p>
-                      <div className="suggestion-tools">
-                        {agent.tools.map((t) => (
-                          <span key={t} className="tool-chip">
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                      <details className="suggestion-prompt-details">
-                        <summary>System prompt</summary>
-                        <pre className="suggestion-prompt">
-                          {agent.systemPrompt}
-                        </pre>
-                      </details>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Suggested Skills */}
-          {analysis.suggestedSkills.length > 0 && (
-            <section className="personalize-section">
-              <h3>Suggested Skills</h3>
-              <p className="section-hint">
-                Select the skills you want to install, then click "Apply
-                Selected" below.
-              </p>
-              <div className="suggestion-list">
-                {analysis.suggestedSkills.map((skill) => {
-                  const isApplied = appliedSkills.has(skill.skillId);
-                  const isSelected = selectedSkills.has(skill.skillId);
-                  return (
-                    <div
-                      key={skill.skillId}
-                      className={`suggestion-card ${isApplied ? "applied" : ""} ${isSelected && !isApplied ? "selected" : ""}`}
-                    >
-                      <div className="suggestion-header">
-                        {!isApplied && (
-                          <label className="suggestion-check">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleSkill(skill.skillId)}
-                            />
-                          </label>
-                        )}
-                        <div className="suggestion-info">
-                          <strong>{skill.name}</strong>
-                          <span className="suggestion-id">{skill.skillId}</span>
-                          {skill.userInvocable && (
-                            <span className="badge badge-info">
-                              /{skill.skillId}
-                            </span>
-                          )}
-                        </div>
-                        <div className="suggestion-actions">
-                          {isApplied ? (
-                            <span className="badge badge-success">Applied</span>
-                          ) : (
-                            <button
-                              className="btn btn-small btn-secondary"
-                              onClick={() => handleApplySkill(skill)}
-                              disabled={!basePath}
-                              title="Apply just this skill"
-                            >
-                              Apply
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <p className="suggestion-desc">
-                        {skill.description ?? ""}
-                      </p>
-                      <div className="suggestion-tools">
-                        {skill.allowedTools.map((t) => (
-                          <span key={t} className="tool-chip">
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                      <details className="suggestion-prompt-details">
-                        <summary>Skill content</summary>
-                        <pre className="suggestion-prompt">{skill.content}</pre>
-                      </details>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Apply all / Re-analyze buttons */}
-          <div className="personalize-actions">
-            {selectedCount > 0 && (
-              <button
-                className="btn btn-primary"
-                onClick={handleApplySelected}
-                disabled={!basePath}
-              >
-                Apply Selected ({selectedCount})
-              </button>
-            )}
-            <button className="btn btn-secondary" onClick={handleAnalyze}>
-              Re-analyze
+          <p className="text-muted" style={{ marginTop: 16 }}>
+            Claude Code is analyzing your history and creating personalized
+            agents and skills in a terminal window. This page will update
+            automatically when the process finishes.
+          </p>
+          <div className="form-actions" style={{ marginTop: 16 }}>
+            <button
+              className="btn"
+              onClick={() => {
+                cleanup();
+                setState("done");
+                window.dispatchEvent(new CustomEvent("sidebar-refresh"));
+              }}
+            >
+              Close &amp; Continue
             </button>
           </div>
+        </div>
+      )}
+
+      {state === "done" && (
+        <div className="personalize-done">
+          <h3>Complete</h3>
+          <p className="text-muted" style={{ marginBottom: 16 }}>
+            Claude Code has finished creating personalized agents and skills.
+            Check the Agents and Skills pages to see your new configurations.
+          </p>
+          <div className="form-actions">
+            <button
+              className="btn btn-primary"
+              onClick={() => setState("intro")}
+            >
+              Run Again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state === "error" && (
+        <div className="personalize-error">
+          <p>{errorMsg}</p>
+          <button className="btn btn-secondary" onClick={() => setState("intro")}>
+            Back
+          </button>
         </div>
       )}
     </div>

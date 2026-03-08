@@ -835,6 +835,101 @@ pub fn analyze_history() -> Result<HistoryAnalysis, String> {
     })
 }
 
+/// Collect a text summary of the user's conversation history for Claude Code to analyze.
+/// Returns a formatted string with user message samples, tool usage stats, and project info
+/// that can be used as context in a prompt to Claude Code.
+pub fn get_history_summary_text() -> Result<String, String> {
+    let conv_dirs = find_conversation_dirs();
+    if conv_dirs.is_empty() {
+        return Err("No Claude Code conversation history found at ~/.claude/projects/. Use Claude Code in some projects first to build up history.".to_string());
+    }
+
+    let jsonl_files = find_jsonl_files(&conv_dirs);
+    if jsonl_files.is_empty() {
+        return Err("No conversation files found in Claude Code history directories.".to_string());
+    }
+
+    // Collect user messages and tool usage
+    let mut all_messages: Vec<String> = Vec::new();
+    let mut all_tool_usage: HashMap<String, usize> = HashMap::new();
+
+    for file in &jsonl_files {
+        let messages = extract_user_messages(file);
+        all_messages.extend(messages);
+
+        let tools = extract_tool_usage(file);
+        for (tool, count) in tools {
+            *all_tool_usage.entry(tool).or_insert(0) += count;
+        }
+    }
+
+    // Sort tool usage by frequency
+    let mut tool_usage: Vec<(String, usize)> = all_tool_usage.into_iter().collect();
+    tool_usage.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Build formatted summary
+    let mut summary = String::new();
+
+    summary.push_str(&format!(
+        "## Conversation History Summary\n\n\
+        - Projects with conversations: {}\n\
+        - Total conversation files: {}\n\
+        - Total user messages: {}\n\n",
+        conv_dirs.len(),
+        jsonl_files.len(),
+        all_messages.len()
+    ));
+
+    // Tool usage
+    if !tool_usage.is_empty() {
+        summary.push_str("### Tool Usage (by frequency)\n\n");
+        for (tool, count) in tool_usage.iter().take(15) {
+            summary.push_str(&format!("- {}: {} uses\n", tool, count));
+        }
+        summary.push('\n');
+    }
+
+    // Sample user messages (take a representative sample, not all)
+    if !all_messages.is_empty() {
+        summary.push_str("### Sample User Prompts (representative selection)\n\n");
+        // Take every Nth message to get a spread, cap at 50 samples
+        let step = std::cmp::max(1, all_messages.len() / 50);
+        let mut sample_count = 0;
+        for (i, msg) in all_messages.iter().enumerate() {
+            if i % step != 0 {
+                continue;
+            }
+            // Truncate very long messages
+            let truncated = if msg.len() > 200 {
+                format!("{}...", &msg[..200])
+            } else {
+                msg.clone()
+            };
+            // Skip messages that are just file contents or very short
+            let trimmed = truncated.trim();
+            if trimmed.len() < 5 {
+                continue;
+            }
+            summary.push_str(&format!("- {}\n", trimmed));
+            sample_count += 1;
+            if sample_count >= 50 {
+                break;
+            }
+        }
+        summary.push('\n');
+    }
+
+    // Project directory names (can hint at project types)
+    summary.push_str("### Project Directories\n\n");
+    for dir in &conv_dirs {
+        if let Some(name) = dir.file_name().and_then(|n| n.to_str()) {
+            summary.push_str(&format!("- {}\n", name));
+        }
+    }
+
+    Ok(summary)
+}
+
 /// Analyze history for a specific project path (only conversations from that project)
 pub fn analyze_project_history(project_path: &str) -> Result<HistoryAnalysis, String> {
     // Claude Code hashes the project path for directory names, but we can also

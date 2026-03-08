@@ -720,6 +720,10 @@ export async function analyzeConversationHistory(): Promise<HistoryAnalysis> {
   return invoke("analyze_conversation_history");
 }
 
+export async function getHistorySummary(): Promise<string> {
+  return invoke("get_history_summary");
+}
+
 export async function applyPersonalizedAgent(
   repoPath: string,
   agent: Agent
