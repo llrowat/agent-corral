@@ -61,9 +61,10 @@ describe("PersonalizePage", () => {
     vi.useRealTimers();
   });
 
-  it("shows message when no scope selected", () => {
-    renderWithProviders(<PersonalizePage scope={null} />);
-    expect(screen.getByText(/Select a scope/i)).toBeInTheDocument();
+  it("shows intro card even when no scope selected if homePath provided", () => {
+    renderWithProviders(<PersonalizePage scope={null} homePath="/home/user" />);
+    expect(screen.getByText("How it works")).toBeInTheDocument();
+    expect(screen.getByText("Personalize with AI")).toBeInTheDocument();
   });
 
   it("shows intro card with personalize button", () => {
@@ -89,11 +90,11 @@ describe("PersonalizePage", () => {
 
     await waitFor(() => {
       expect(mockPrepareAiCommand).toHaveBeenCalledWith(
-        "/home/user/my-project",
+        "/home/user",
         expect.stringContaining("Analyze the following Claude Code conversation history")
       );
       expect(mockLaunchTerminal).toHaveBeenCalledWith(
-        "/home/user/my-project",
+        "/home/user",
         "/tmp/ai-create.sh"
       );
     });
