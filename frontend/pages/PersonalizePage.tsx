@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { Scope } from "@/types";
 import * as api from "@/lib/tauri";
-import { useToast } from "@/components/Toast";
 
 interface Props {
   scope: Scope | null;
@@ -69,7 +68,6 @@ function buildPersonalizePrompt(historySummary: string): string {
 }
 
 export function PersonalizePage({ scope, homePath }: Props) {
-  const toast = useToast();
   const [state, setState] = useState<PageState>("intro");
   const [errorMsg, setErrorMsg] = useState("");
   const pidRef = useRef<number | null>(null);
@@ -77,7 +75,7 @@ export function PersonalizePage({ scope, homePath }: Props) {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Personalize always operates at global scope
-  const basePath = homePath ?? scope?.homePath ?? null;
+  const basePath = homePath ?? (scope?.type === "global" ? scope.homePath : null);
 
   const cleanup = useCallback(() => {
     if (pollRef.current) {
