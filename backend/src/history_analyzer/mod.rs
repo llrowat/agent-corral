@@ -835,97 +835,100 @@ pub fn analyze_history() -> Result<HistoryAnalysis, String> {
     })
 }
 
-/// Collect a text summary of the user's conversation history for Claude Code to analyze.
-/// Returns a formatted string with user message samples, tool usage stats, and project info
-/// that can be used as context in a prompt to Claude Code.
+/// A single entry from ~/.claude/history.jsonl
+#[derive(Debug, Deserialize)]
+struct HistoryEntry {
+    display: String,
+    #[serde(default)]
+    project: Option<String>,
+}
+
+/// Collect a text summary of the user's prompt history for Claude Code to analyze.
+/// Reads from ~/.claude/history.jsonl which stores every prompt the user has sent.
 pub fn get_history_summary_text() -> Result<String, String> {
-    let conv_dirs = find_conversation_dirs();
-    if conv_dirs.is_empty() {
-        return Err("No Claude Code conversation history found at ~/.claude/projects/. Use Claude Code in some projects first to build up history.".to_string());
+    let home = dirs::home_dir()
+        .ok_or_else(|| "Could not determine home directory".to_string())?;
+    let history_path = home.join(".claude").join("history.jsonl");
+
+    if !history_path.exists() {
+        return Err(
+            "No Claude Code prompt history found at ~/.claude/history.jsonl. \
+             Use Claude Code first to build up history."
+                .to_string(),
+        );
     }
 
-    let jsonl_files = find_jsonl_files(&conv_dirs);
-    if jsonl_files.is_empty() {
-        return Err("No conversation files found in Claude Code history directories.".to_string());
-    }
+    let content = fs::read_to_string(&history_path)
+        .map_err(|e| format!("Failed to read history.jsonl: {}", e))?;
 
-    // Collect user messages and tool usage
-    let mut all_messages: Vec<String> = Vec::new();
-    let mut all_tool_usage: HashMap<String, usize> = HashMap::new();
+    let mut prompts: Vec<String> = Vec::new();
+    let mut projects: HashMap<String, usize> = HashMap::new();
 
-    for file in &jsonl_files {
-        let messages = extract_user_messages(file);
-        all_messages.extend(messages);
-
-        let tools = extract_tool_usage(file);
-        for (tool, count) in tools {
-            *all_tool_usage.entry(tool).or_insert(0) += count;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Ok(entry) = serde_json::from_str::<HistoryEntry>(line) {
+            let display = entry.display.trim().to_string();
+            if display.len() >= 5 {
+                prompts.push(display);
+            }
+            if let Some(proj) = entry.project {
+                if let Some(name) = Path::new(&proj).file_name().and_then(|n| n.to_str()) {
+                    *projects.entry(name.to_string()).or_insert(0) += 1;
+                }
+            }
         }
     }
 
-    // Sort tool usage by frequency
-    let mut tool_usage: Vec<(String, usize)> = all_tool_usage.into_iter().collect();
-    tool_usage.sort_by(|a, b| b.1.cmp(&a.1));
+    if prompts.is_empty() {
+        return Err("No prompts found in ~/.claude/history.jsonl.".to_string());
+    }
 
     // Build formatted summary
     let mut summary = String::new();
 
     summary.push_str(&format!(
-        "## Conversation History Summary\n\n\
-        - Projects with conversations: {}\n\
-        - Total conversation files: {}\n\
-        - Total user messages: {}\n\n",
-        conv_dirs.len(),
-        jsonl_files.len(),
-        all_messages.len()
+        "## Prompt History Summary\n\n\
+        - Total prompts: {}\n\
+        - Projects used: {}\n\n",
+        prompts.len(),
+        projects.len()
     ));
 
-    // Tool usage
-    if !tool_usage.is_empty() {
-        summary.push_str("### Tool Usage (by frequency)\n\n");
-        for (tool, count) in tool_usage.iter().take(15) {
-            summary.push_str(&format!("- {}: {} uses\n", tool, count));
+    // Project breakdown
+    if !projects.is_empty() {
+        let mut proj_list: Vec<(String, usize)> = projects.into_iter().collect();
+        proj_list.sort_by(|a, b| b.1.cmp(&a.1));
+
+        summary.push_str("### Projects (by prompt count)\n\n");
+        for (name, count) in proj_list.iter().take(20) {
+            summary.push_str(&format!("- {}: {} prompts\n", name, count));
         }
         summary.push('\n');
     }
 
-    // Sample user messages (take a representative sample, not all)
-    if !all_messages.is_empty() {
-        summary.push_str("### Sample User Prompts (representative selection)\n\n");
-        // Take every Nth message to get a spread, cap at 50 samples
-        let step = std::cmp::max(1, all_messages.len() / 50);
-        let mut sample_count = 0;
-        for (i, msg) in all_messages.iter().enumerate() {
-            if i % step != 0 {
-                continue;
-            }
-            // Truncate very long messages
-            let truncated = if msg.len() > 200 {
-                format!("{}...", &msg[..200])
-            } else {
-                msg.clone()
-            };
-            // Skip messages that are just file contents or very short
-            let trimmed = truncated.trim();
-            if trimmed.len() < 5 {
-                continue;
-            }
-            summary.push_str(&format!("- {}\n", trimmed));
-            sample_count += 1;
-            if sample_count >= 50 {
-                break;
-            }
+    // Sample prompts — take a representative spread, cap at 80
+    summary.push_str("### Sample Prompts (representative selection)\n\n");
+    let step = std::cmp::max(1, prompts.len() / 80);
+    let mut sample_count = 0;
+    for (i, prompt) in prompts.iter().enumerate() {
+        if i % step != 0 {
+            continue;
         }
-        summary.push('\n');
-    }
-
-    // Project directory names (can hint at project types)
-    summary.push_str("### Project Directories\n\n");
-    for dir in &conv_dirs {
-        if let Some(name) = dir.file_name().and_then(|n| n.to_str()) {
-            summary.push_str(&format!("- {}\n", name));
+        let truncated = if prompt.len() > 200 {
+            format!("{}...", &prompt[..200])
+        } else {
+            prompt.clone()
+        };
+        summary.push_str(&format!("- {}\n", truncated));
+        sample_count += 1;
+        if sample_count >= 80 {
+            break;
         }
     }
+    summary.push('\n');
 
     Ok(summary)
 }

@@ -168,6 +168,18 @@ body {
   pointer-events: none;
 }
 
+.sidebar-link--personalize {
+  color: #a78bca;
+}
+
+.sidebar-link--personalize:hover {
+  color: #bfa4db;
+}
+
+.sidebar-link--personalize.active {
+  color: #bfa4db;
+}
+
 .sidebar-icon {
   width: 20px;
   text-align: center;

@@ -80,7 +80,7 @@ export function Sidebar({ scope, counts }: SidebarProps) {
                   <NavLink
                     to={item.path}
                     className={({ isActive }) =>
-                      `sidebar-link ${isActive ? "active" : ""}`
+                      `sidebar-link ${isActive ? "active" : ""}${item.path === "/personalize" ? " sidebar-link--personalize" : ""}`
                     }
                   >
                     <span className="sidebar-icon">{getIcon(item.icon)}</span>
@@ -123,7 +123,7 @@ package: "\u25A3",
     wrench: "\u2692",
     doc: "\u2263",
     history: "\u29D6",
-    sparkle: "\u2728",
+    sparkle: "\u2727",
   };
   return icons[name] ?? "\u25CF";
 }

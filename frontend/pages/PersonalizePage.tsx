@@ -76,12 +76,8 @@ export function PersonalizePage({ scope, homePath }: Props) {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const basePath =
-    scope?.type === "global"
-      ? scope.homePath
-      : scope?.type === "project"
-        ? scope.repo.path
-        : null;
+  // Personalize always operates at global scope
+  const basePath = homePath ?? scope?.homePath ?? null;
 
   const cleanup = useCallback(() => {
     if (pollRef.current) {
@@ -141,24 +137,13 @@ export function PersonalizePage({ scope, homePath }: Props) {
     }
   }, [basePath, cleanup]);
 
-  if (!scope) {
-    return (
-      <div className="page personalize-page">
-        <div className="page-header">
-          <h2>Personalize from History</h2>
-        </div>
-        <p className="page-description">Select a scope to get started.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="page personalize-page">
       <div className="page-header">
         <h2>Personalize from History</h2>
         <p className="page-description">
-          Use Claude Code to analyze your conversation history and create
-          customized agents and skills tailored to your workflow.
+          Generate custom agents and skills based on how you actually use Claude
+          Code.
         </p>
       </div>
 
@@ -166,19 +151,27 @@ export function PersonalizePage({ scope, homePath }: Props) {
         <div className="personalize-intro">
           <div className="personalize-intro-card">
             <h3>How it works</h3>
+            <p className="text-muted" style={{ marginBottom: 12 }}>
+              Every time you send a prompt in Claude Code, it gets saved to a
+              history file at <code>~/.claude/history.jsonl</code>. This
+              feature reads that file and looks for patterns in how you
+              work — the types of tasks you run most often, the projects you
+              work on, and your common workflows — then generates agents and
+              skills tailored to you.
+            </p>
             <ol>
               <li>
-                Gathers a summary of your Claude Code conversation history from{" "}
-                <code>~/.claude/projects/</code>
+                Reads your prompt history from{" "}
+                <code>~/.claude/history.jsonl</code> and builds a summary of
+                your most common usage patterns
               </li>
               <li>
-                Launches Claude Code in a terminal to analyze your usage
-                patterns (tool usage, common tasks, project types)
+                Launches Claude Code in a terminal to analyze those patterns
+                and create matching agents and skills
               </li>
               <li>
-                Claude Code creates personalized agents and skills directly in
-                your{" "}
-                {scope.type === "global" ? "global" : "project"} scope
+                New agents and skills are written directly to your global{" "}
+                <code>~/.claude/</code> directory, ready to use
               </li>
             </ol>
             <p className="text-muted" style={{ marginTop: 12 }}>
