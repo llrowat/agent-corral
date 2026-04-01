@@ -160,3 +160,7 @@ AgentCorral is an independent, community-driven open source project. It is **not
 ## License
 
 [MIT](LICENSE)
+
+## Notes
+
+See my other work at: https://grayforgelabs.com/
